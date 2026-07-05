@@ -59,7 +59,7 @@ SpatialCanvas is a macOS desktop application for creating projection-mapped expe
 ## 3. Non-Functional Requirements
 
 - **NFR-1 Stability:** projection mode runs 4+ hours without crashes, memory growth, or playback stalls.
-- **NFR-2 Responsiveness:** editing interactions (dragging handles, changing properties) reflect in preview and projector output within one frame-ish latency; no beachballs during media import (thumbnailing is async).
+- **NFR-2 Responsiveness:** editing interactions (dragging handles, changing properties) reflect in preview and projector output by the next rendered frame (~16 ms at 60 Hz); no beachballs during media import (thumbnailing is async).
 - **NFR-3 Output quality:** projector output renders at the display's native resolution; video plays at native frame rate.
 - **NFR-4 Zero dependencies:** Apple frameworks only. No SPM/CocoaPods packages in the MVP.
 - **NFR-5 Sandboxed:** the app is sandboxed with user-selected-file and camera entitlements only.
