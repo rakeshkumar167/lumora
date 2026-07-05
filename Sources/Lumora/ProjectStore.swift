@@ -3,10 +3,18 @@ import Combine
 import LumoraKit
 import SwiftUI
 
+/// How mouse drags on the selected surface behave in the canvas.
+enum EditTool: String, CaseIterable, Identifiable {
+    case arrow   // drag corner handles to warp the surface
+    case hand    // drag anywhere inside to move the whole surface
+    var id: String { rawValue }
+}
+
 /// Owns the editable project state. All surface mutations flow through here.
 final class ProjectStore: ObservableObject {
     @Published var surfaces: [Surface]
     @Published var selectedID: Surface.ID?
+    @Published var tool: EditTool = .arrow
 
     let roomImage: NSImage
     let canvasSize: CGSize
@@ -67,9 +75,20 @@ final class ProjectStore: ObservableObject {
 
     func addSurface() {
         var surface = Surface.defaultRect(name: "Surface \(surfaces.count + 1)")
-        surface.media = .effect(.colorWash, .amber, .red)
+        surface.media = .effect(.grid, .cyan, RGBAColor(r: 0.05, g: 0.06, b: 0.09))
         surfaces.append(surface)
         selectedID = surface.id
+    }
+
+    // MARK: - Save / Open
+
+    /// The current editable state as a saveable document.
+    func makeProject() -> Project { Project(surfaces: surfaces) }
+
+    /// Replace all surfaces with those from a loaded project.
+    func load(_ project: Project) {
+        surfaces = project.surfaces
+        selectedID = surfaces.first?.id
     }
 
     func delete(_ id: Surface.ID) {
