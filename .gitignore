@@ -3,5 +3,8 @@
 .swiftpm/
 Package.resolved
 
+# Distributable app bundle output
+dist/
+
 # macOS
 .DS_Store
