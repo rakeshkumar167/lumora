@@ -10,7 +10,8 @@ let package = Package(
         // The macOS SwiftUI app.
         .executableTarget(
             name: "Lumora",
-            dependencies: ["LumoraKit"]
+            dependencies: ["LumoraKit"],
+            resources: [.process("Resources")]
         ),
         // Minimal tests — homography math only (the correctness-critical piece).
         .testTarget(

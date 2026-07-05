@@ -8,7 +8,7 @@ struct LumoraApp: App {
 
     var body: some Scene {
         WindowGroup("Lumora") {
-            WorkspaceView()
+            RootView()
                 .environmentObject(store)
                 .frame(minWidth: 1200, minHeight: 700)
         }
@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        if let icon = AppAssets.icon { NSApp.applicationIconImage = icon }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
