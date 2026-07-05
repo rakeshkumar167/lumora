@@ -25,6 +25,44 @@ struct PropertiesPanelView: View {
         Form {
             Section("Surface") {
                 TextField("Name", text: surface.name)
+
+                Picker("Shape", selection: Binding(
+                    get: { surface.wrappedValue.shape },
+                    set: { store.setShape(surface.wrappedValue.id, to: $0) }
+                )) {
+                    ForEach(SurfaceShape.allCases) { Text($0.displayName).tag($0) }
+                }
+
+                if surface.wrappedValue.shape == .polygon {
+                    Stepper(
+                        value: Binding(
+                            get: { surface.wrappedValue.points.count },
+                            set: { store.setPolygonSides(surface.wrappedValue.id, $0) }
+                        ),
+                        in: 3...12
+                    ) {
+                        Text("Sides: \(surface.wrappedValue.points.count)")
+                    }
+                }
+
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Rotation \(Int((surface.wrappedValue.rotation * 180 / .pi).rounded()))°")
+                            .font(.caption)
+                        Spacer()
+                        Button("Reset") { surface.rotation.wrappedValue = 0 }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { surface.wrappedValue.rotation * 180 / .pi },
+                            set: { surface.rotation.wrappedValue = $0 * .pi / 180 }
+                        ),
+                        in: -180...180
+                    )
+                }
+
                 Toggle("Visible", isOn: surface.isVisible)
                 VStack(alignment: .leading) {
                     Text("Opacity \(Int(surface.wrappedValue.opacity * 100))%")

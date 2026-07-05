@@ -13,17 +13,46 @@ struct SurfaceContentView: View {
     let time: Double
 
     var body: some View {
-        let quad = surface.quadPoints(in: canvasSize)
+        switch surface.shape {
+        case .quad:
+            quadBody
+        case .polygon, .ellipse:
+            clippedBody
+        }
+    }
+
+    /// A true quad: the media fills the canvas and is perspective-warped so the
+    /// canvas corners land on the surface's four corners.
+    private var quadBody: some View {
+        let quad = surface.displayQuadPoints(in: canvasSize)
         let transform = Homography.transform(
             from: CGRect(origin: .zero, size: canvasSize),
             to: quad
         )
 
-        mediaContent
+        return mediaContent
             .frame(width: canvasSize.width, height: canvasSize.height, alignment: .topLeading)
             .clipped()
             .opacity(surface.opacity)
             .projectionEffect(ProjectionTransform(transform))
+            .allowsHitTesting(false)
+    }
+
+    /// A polygon or ellipse: the media fills the shape's bounding box and is
+    /// clipped to the outline (no perspective warp).
+    private var clippedBody: some View {
+        let pts = surface.quadPoints(in: canvasSize)
+        let bb = Surface.bounds(of: pts)
+        let w = max(bb.width, 1)
+        let h = max(bb.height, 1)
+        let local = pts.map { CGPoint(x: $0.x - bb.minX, y: $0.y - bb.minY) }
+
+        return mediaContent
+            .frame(width: w, height: h, alignment: .topLeading)
+            .clipShape(SurfaceMask(localPoints: local, isEllipse: surface.shape == .ellipse))
+            .rotationEffect(.radians(surface.rotation))
+            .opacity(surface.opacity)
+            .position(x: bb.midX, y: bb.midY)
             .allowsHitTesting(false)
     }
 
@@ -888,6 +917,23 @@ private struct EffectView: View {
     private func hash01(_ i: Int, _ salt: Int) -> CGFloat {
         let v = sin(Double(i) * 12.9898 + Double(salt) * 78.233) * 43758.5453
         return CGFloat(v - floor(v))
+    }
+}
+
+/// Clips media to a polygon (given as local, box-relative points) or to an
+/// ellipse inscribed in the media's bounding box.
+private struct SurfaceMask: Shape {
+    let localPoints: [CGPoint]
+    let isEllipse: Bool
+
+    func path(in rect: CGRect) -> Path {
+        if isEllipse { return Path(ellipseIn: rect) }
+        var p = Path()
+        guard let first = localPoints.first else { return p }
+        p.move(to: first)
+        for pt in localPoints.dropFirst() { p.addLine(to: pt) }
+        p.closeSubpath()
+        return p
     }
 }
 

@@ -91,6 +91,29 @@ final class ProjectStore: ObservableObject {
         selectedID = surfaces.first?.id
     }
 
+    /// Change a surface's shape, preserving its location/size (bounding box).
+    func setShape(_ id: Surface.ID, to shape: SurfaceShape, sides: Int = 6) {
+        update(id) { s in
+            let b = Surface.bounds(of: s.points)
+            switch shape {
+            case .quad, .ellipse:
+                s.points = Surface.rectCorners(b)
+            case .polygon:
+                s.points = Surface.polygonCorners(b, sides: sides)
+            }
+            s.shape = shape
+        }
+    }
+
+    /// Rebuild a polygon surface with a new vertex count (regular polygon in
+    /// its current bounds).
+    func setPolygonSides(_ id: Surface.ID, _ sides: Int) {
+        update(id) { s in
+            let b = Surface.bounds(of: s.points)
+            s.points = Surface.polygonCorners(b, sides: min(max(sides, 3), 12))
+        }
+    }
+
     func delete(_ id: Surface.ID) {
         surfaces.removeAll { $0.id == id }
         if selectedID == id { selectedID = surfaces.first?.id }
