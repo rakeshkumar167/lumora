@@ -1,5 +1,7 @@
+import CoreImage
 import LumoraKit
 import SwiftUI
+import Vision
 
 /// Renders one surface's media, perspective-warped onto its quad.
 ///
@@ -69,6 +71,10 @@ struct SurfaceContentView: View {
             ImageContent(url: url)
         case .video(let url):
             VideoContent(url: url)
+        case .laserTrace(let url, let c, let speed):
+            LaserTraceContent(url: url, color: c, speed: speed, time: time)
+        case .contourTrace(let url, let c, let speed):
+            ContourTraceContent(url: url, color: c, speed: speed, time: time)
         }
     }
 }
@@ -1275,5 +1281,398 @@ private struct ImageContent: View {
                     .foregroundStyle(.white)
             }
         }
+    }
+}
+
+/// One detected edge sample in normalized coords (origin top-left, y down),
+/// with edge brightness.
+private struct LaserEdgePoint {
+    let x: CGFloat
+    let y: CGFloat
+    let b: CGFloat
+}
+
+/// Runs `CIEdges` on the source image once (off the main thread) and caches the
+/// resulting normalized edge points. The animated `LaserTraceContent` only reads
+/// this cached point set per frame — no per-frame image work.
+private final class LaserTraceModel: ObservableObject {
+    @Published var points: [LaserEdgePoint] = []
+    private var loadedURL: URL?
+
+    // Process-wide cache so edges survive view churn / repeated selection.
+    private static var cache: [URL: [LaserEdgePoint]] = [:]
+    private static let cacheQueue = DispatchQueue(label: "lumora.laserTrace.cache")
+
+    func load(_ url: URL) {
+        guard url != loadedURL else { return }
+        loadedURL = url
+        if let cached = Self.cacheQueue.sync(execute: { Self.cache[url] }) {
+            points = cached
+            return
+        }
+        points = []
+        DispatchQueue.global(qos: .userInitiated).async {
+            let pts = Self.extractEdges(from: url)
+            Self.cacheQueue.sync { Self.cache[url] = pts }
+            DispatchQueue.main.async {
+                if self.loadedURL == url { self.points = pts }
+            }
+        }
+    }
+
+    private static func extractEdges(from url: URL) -> [LaserEdgePoint] {
+        guard let nsImage = NSImage(contentsOf: url),
+              let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return [] }
+
+        // GPU edge-detect, once.
+        let ci = CIImage(cgImage: cg)
+        let edges = ci.applyingFilter("CIEdges", parameters: [kCIInputIntensityKey: 6.0])
+        let ciContext = CIContext(options: nil)
+        guard let edgeCG = ciContext.createCGImage(edges, from: ci.extent) else { return [] }
+
+        // Downsample into a bitmap we can read pixel-by-pixel. The context CTM is
+        // flipped so buffer row 0 is the TOP of the image (top-left origin).
+        let targetW = 480
+        let scale = Double(targetW) / Double(max(edgeCG.width, 1))
+        let w = targetW
+        let h = max(1, Int(Double(edgeCG.height) * scale))
+        var buffer = [UInt8](repeating: 0, count: w * h * 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let bmp = CGContext(
+            data: &buffer, width: w, height: h,
+            bitsPerComponent: 8, bytesPerRow: w * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return [] }
+        bmp.translateBy(x: 0, y: CGFloat(h))
+        bmp.scaleBy(x: 1, y: -1)
+        bmp.draw(edgeCG, in: CGRect(x: 0, y: 0, width: w, height: h))
+
+        // Collect bright pixels; stride up if edges are very dense so the point
+        // count stays bounded.
+        let threshold = 0.16
+        let maxPoints = 6000
+        var stride = 1
+        while true {
+            var pts: [LaserEdgePoint] = []
+            pts.reserveCapacity(maxPoints)
+            var overflow = false
+            var yy = 0
+            rows: while yy < h {
+                var xx = 0
+                while xx < w {
+                    let i = (yy * w + xx) * 4
+                    let lum = (0.299 * Double(buffer[i]) + 0.587 * Double(buffer[i + 1]) + 0.114 * Double(buffer[i + 2])) / 255.0
+                    if lum > threshold {
+                        pts.append(LaserEdgePoint(
+                            x: CGFloat(xx) / CGFloat(w - 1),
+                            y: 1 - CGFloat(yy) / CGFloat(max(h - 1, 1)),   // 0 = top (buffer rows are bottom-up)
+                            b: CGFloat(min(1.0, lum))))
+                        if pts.count > maxPoints { overflow = true; break rows }
+                    }
+                    xx += stride
+                }
+                yy += stride
+            }
+            if overflow { stride += 1; continue }
+            return pts
+        }
+    }
+}
+
+/// Laser edge-trace: a bright bar sweeps bottom→top; edges light up in the laser
+/// color as it passes and persist, forming the full outline, which then holds and
+/// fades before the sweep repeats. A `Canvas` so it warps with the surface.
+private struct LaserTraceContent: View {
+    let url: URL
+    let color: RGBAColor
+    let speed: Double
+    let time: Double
+
+    @StateObject private var model = LaserTraceModel()
+
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+            let pts = model.points
+            guard !pts.isEmpty else { return }
+
+            let sweepDur = 6.0 / max(speed, 0.02), holdDur = 1.5, fadeDur = 1.5
+            let period = sweepDur + holdDur + fadeDur
+            let localT = time.truncatingRemainder(dividingBy: period)
+            let sweepP = min(localT / sweepDur, 1)
+            let scan = CGFloat(1 - sweepP)                 // 1 (bottom) → 0 (top)
+            ctx.opacity = localT < sweepDur + holdDur
+                ? 1
+                : max(0, 1 - (localT - (sweepDur + holdDur)) / fadeDur)
+
+            let laser = color.color
+            let w = size.width, h = size.height
+            let r: CGFloat = 1.1
+            let hotBand: CGFloat = 0.02
+
+            var traced = Path()
+            var hot = Path()
+            for p in pts where p.y >= scan {                // already passed by the bar
+                let rect = CGRect(x: p.x * w - r, y: p.y * h - r, width: 2 * r, height: 2 * r)
+                if p.y - scan < hotBand { hot.addEllipse(in: rect) } else { traced.addEllipse(in: rect) }
+            }
+
+            // Traced edges: soft glow + solid core.
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 3))
+                layer.fill(traced, with: .color(laser.opacity(0.55)))
+            }
+            ctx.fill(traced, with: .color(laser))
+
+            // Edges under the beam right now: white-hot, stronger glow.
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 4))
+                layer.fill(hot, with: .color(.white.opacity(0.9)))
+            }
+            ctx.fill(hot, with: .color(.white))
+
+            // The sweeping laser bar.
+            if sweepP < 1 {
+                let y = scan * h
+                var bar = Path()
+                bar.move(to: CGPoint(x: 0, y: y))
+                bar.addLine(to: CGPoint(x: w, y: y))
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 6))
+                    layer.stroke(bar, with: .color(laser.opacity(0.8)), lineWidth: 4)
+                }
+                ctx.stroke(bar, with: .color(.white.opacity(0.9)), lineWidth: 1.5)
+            }
+        }
+        .task(id: url) { model.load(url) }
+    }
+}
+
+/// One detected contour as an ordered, closed polyline in normalized coords
+/// (origin top-left), with cumulative arc length for pen-position lookup.
+private struct ContourPolyline {
+    let points: [CGPoint]
+    let lengths: [CGFloat]        // lengths[0] == 0, lengths[i] = arc length to points[i]
+    var total: CGFloat { lengths.last ?? 0 }
+}
+
+/// Extracts image contours once (via Vision `VNDetectContoursRequest`), ordered
+/// bottom→top, and caches them. `ContourTraceContent` animates a single pen along
+/// the cached polylines — no per-frame vision work.
+private final class ContourTraceModel: ObservableObject {
+    @Published var contours: [ContourPolyline] = []
+    @Published var totalLength: CGFloat = 0
+    private var loadedURL: URL?
+
+    private static var cache: [URL: [ContourPolyline]] = [:]
+    private static let cacheQueue = DispatchQueue(label: "lumora.contourTrace.cache")
+
+    func load(_ url: URL) {
+        guard url != loadedURL else { return }
+        loadedURL = url
+        if let cached = Self.cacheQueue.sync(execute: { Self.cache[url] }) {
+            apply(cached)
+            return
+        }
+        contours = []; totalLength = 0
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Self.extractContours(from: url)
+            Self.cacheQueue.sync { Self.cache[url] = result }
+            DispatchQueue.main.async {
+                if self.loadedURL == url { self.apply(result) }
+            }
+        }
+    }
+
+    private func apply(_ c: [ContourPolyline]) {
+        contours = c
+        totalLength = c.reduce(0) { $0 + $1.total }
+    }
+
+    private static func extractContours(from url: URL) -> [ContourPolyline] {
+        guard let nsImage = NSImage(contentsOf: url),
+              let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return [] }
+
+        let request = VNDetectContoursRequest()
+        request.contrastAdjustment = 2.0
+        request.detectsDarkOnLight = true
+        request.maximumImageDimension = 512
+
+        let handler = VNImageRequestHandler(cgImage: cg, options: [:])
+        do { try handler.perform([request]) } catch { return [] }
+        guard let obs = request.results?.first as? VNContoursObservation else { return [] }
+
+        var polylines: [ContourPolyline] = []
+        for i in 0..<obs.contourCount {
+            guard let contour = try? obs.contour(at: i) else { continue }
+            // Simplify each contour to a polygon: sheds pixel-noise jitter and
+            // tightens the traced line.
+            let simplified = (try? contour.polygonApproximation(epsilon: 0.003)) ?? contour
+            let raw = simplified.normalizedPoints            // origin bottom-left, 0…1
+            if raw.count < 2 { continue }
+            var pts: [CGPoint] = []
+            pts.reserveCapacity(raw.count + 1)
+            for p in raw { pts.append(CGPoint(x: CGFloat(p.x), y: 1 - CGFloat(p.y))) }  // flip y → top-left
+            if let first = pts.first { pts.append(first) }   // close the loop
+
+            var lens: [CGFloat] = [0]
+            var acc: CGFloat = 0
+            for k in 1..<pts.count {
+                acc += hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y)
+                lens.append(acc)
+            }
+            if acc < 0.03 { continue }                       // drop small / noise contours
+            polylines.append(ContourPolyline(points: pts, lengths: lens))
+        }
+        return orderAsWalk(dedupe(polylines))
+    }
+
+    /// Drops near-duplicate contours — e.g. the inner + outer boundary Vision
+    /// returns for a thin shape, which otherwise trace as doubled parallel lines.
+    private static func dedupe(_ contours: [ContourPolyline]) -> [ContourPolyline] {
+        func centroid(_ c: ContourPolyline) -> CGPoint {
+            var sx: CGFloat = 0, sy: CGFloat = 0
+            for p in c.points { sx += p.x; sy += p.y }
+            let n = CGFloat(max(c.points.count, 1))
+            return CGPoint(x: sx / n, y: sy / n)
+        }
+        var kept: [ContourPolyline] = []
+        var cents: [CGPoint] = []
+        for c in contours {
+            let cc = centroid(c)
+            var dup = false
+            for (i, k) in kept.enumerated() {
+                if abs(k.total - c.total) < 0.05 * max(k.total, c.total),
+                   hypot(cents[i].x - cc.x, cents[i].y - cc.y) < 0.012 {
+                    dup = true; break
+                }
+            }
+            if !dup { kept.append(c); cents.append(cc) }
+        }
+        return kept
+    }
+
+    /// Orders contours into a continuous pen walk: start at the bottom-most
+    /// contour, then always hop to the nearest remaining one (proximity, not
+    /// height), so the pen navigates across the edges.
+    private static func orderAsWalk(_ contours: [ContourPolyline]) -> [ContourPolyline] {
+        guard !contours.isEmpty else { return [] }
+        var remaining = contours
+        var startIdx = 0
+        var bestY: CGFloat = -1
+        for (i, c) in remaining.enumerated() {
+            let my = c.points.map(\.y).max() ?? 0
+            if my > bestY { bestY = my; startIdx = i }
+        }
+        var ordered: [ContourPolyline] = []
+        var current = remaining.remove(at: startIdx)
+        ordered.append(current)
+        var pen = current.points.last ?? current.points[0]
+        while !remaining.isEmpty {
+            var bi = 0
+            var bd = CGFloat.greatestFiniteMagnitude
+            for (i, c) in remaining.enumerated() {
+                var dmin = CGFloat.greatestFiniteMagnitude
+                for p in c.points {
+                    let d = hypot(p.x - pen.x, p.y - pen.y)
+                    if d < dmin { dmin = d }
+                }
+                if dmin < bd { bd = dmin; bi = i }
+            }
+            current = remaining.remove(at: bi)
+            ordered.append(current)
+            pen = current.points.last ?? current.points[0]
+        }
+        return ordered
+    }
+}
+
+/// Contour trace: a single glowing pen tip draws detected contours one at a time
+/// (bottom→top); drawn strokes persist into the full outline, which holds and
+/// fades before repeating. A `Canvas` so it warps with the surface.
+private struct ContourTraceContent: View {
+    let url: URL
+    let color: RGBAColor
+    let speed: Double
+    let time: Double
+
+    @StateObject private var model = ContourTraceModel()
+
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+            let contours = model.contours
+            let total = model.totalLength
+            guard !contours.isEmpty, total > 0 else { return }
+
+            let sweepDur = 6.0 / max(speed, 0.02), holdDur = 1.5, fadeDur = 1.5
+            let period = sweepDur + holdDur + fadeDur
+            let localT = time.truncatingRemainder(dividingBy: period)
+            let sweepP = min(localT / sweepDur, 1)
+            ctx.opacity = localT < sweepDur + holdDur
+                ? 1
+                : max(0, 1 - (localT - (sweepDur + holdDur)) / fadeDur)
+
+            let laser = color.color
+            let w = size.width, h = size.height
+            let drawn = CGFloat(sweepP) * total
+            func sp(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * w, y: p.y * h) }
+
+            var acc: CGFloat = 0
+            var full = Path()          // fully-drawn contours
+            var partial = Path()       // the contour currently under the pen
+            var penTip: CGPoint?
+            for c in contours {
+                if drawn >= acc + c.total {
+                    full.move(to: sp(c.points[0]))
+                    for k in 1..<c.points.count { full.addLine(to: sp(c.points[k])) }
+                    acc += c.total
+                } else if drawn > acc {
+                    let target = drawn - acc
+                    partial.move(to: sp(c.points[0]))
+                    var tip = c.points[0]
+                    for k in 1..<c.points.count {
+                        if c.lengths[k] <= target {
+                            partial.addLine(to: sp(c.points[k])); tip = c.points[k]
+                        } else {
+                            let seg = max(c.lengths[k] - c.lengths[k - 1], 0.0001)
+                            let f = (target - c.lengths[k - 1]) / seg
+                            let a = c.points[k - 1], b = c.points[k]
+                            tip = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+                            partial.addLine(to: sp(tip))
+                            break
+                        }
+                    }
+                    penTip = sp(tip)
+                    break
+                } else {
+                    break
+                }
+            }
+
+            // Glow underlay + solid core for both drawn portions.
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 3))
+                layer.stroke(full, with: .color(laser.opacity(0.5)), lineWidth: 2.6)
+                layer.stroke(partial, with: .color(laser.opacity(0.5)), lineWidth: 2.6)
+            }
+            ctx.stroke(full, with: .color(laser), lineWidth: 1.6)
+            ctx.stroke(partial, with: .color(laser), lineWidth: 1.6)
+
+            // The bright pen tip (only while still drawing).
+            if let tip = penTip, sweepP < 1 {
+                let r: CGFloat = 4
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 5))
+                    layer.fill(Path(ellipseIn: CGRect(x: tip.x - r, y: tip.y - r, width: 2 * r, height: 2 * r)),
+                               with: .color(.white.opacity(0.9)))
+                }
+                ctx.fill(Path(ellipseIn: CGRect(x: tip.x - 2, y: tip.y - 2, width: 4, height: 4)), with: .color(.white))
+            }
+        }
+        .task(id: url) { model.load(url) }
     }
 }

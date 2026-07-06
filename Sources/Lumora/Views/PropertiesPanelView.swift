@@ -84,9 +84,15 @@ private struct MediaEditor: View {
     @Binding var media: MediaAssignment
 
     private enum Kind: String, CaseIterable, Identifiable {
-        case none, color, effect, image, video
+        case none, color, effect, image, video, laserTrace, contourTrace
         var id: String { rawValue }
-        var label: String { rawValue.capitalized }
+        var label: String {
+            switch self {
+            case .laserTrace: return "Laser Trace"
+            case .contourTrace: return "Contour Trace"
+            default: return rawValue.capitalized
+            }
+        }
     }
 
     private var kind: Kind {
@@ -96,6 +102,8 @@ private struct MediaEditor: View {
         case .effect: return .effect
         case .image: return .image
         case .video: return .video
+        case .laserTrace: return .laserTrace
+        case .contourTrace: return .contourTrace
         }
     }
 
@@ -137,6 +145,28 @@ private struct MediaEditor: View {
         case .video(let url):
             LabeledContent("File", value: url.lastPathComponent)
             Button("Choose Video…") { chooseVideo() }
+
+        case .laserTrace(let url, let laserColor, let speed):
+            LabeledContent("File", value: url.lastPathComponent)
+            Button("Choose Image…") { chooseLaserImage(keeping: laserColor) }
+            Text("Laser Color").font(.caption).foregroundStyle(.secondary)
+            colorControls(current: laserColor) { media = .laserTrace(url, $0, speed) }
+            Text("Trace Speed").font(.caption).foregroundStyle(.secondary)
+            Slider(
+                value: Binding(get: { speed }, set: { media = .laserTrace(url, laserColor, $0) }),
+                in: 0.05...4
+            )
+
+        case .contourTrace(let url, let penColor, let speed):
+            LabeledContent("File", value: url.lastPathComponent)
+            Button("Choose Image…") { chooseContourImage(keeping: penColor) }
+            Text("Pen Color").font(.caption).foregroundStyle(.secondary)
+            colorControls(current: penColor) { media = .contourTrace(url, $0, speed) }
+            Text("Trace Speed").font(.caption).foregroundStyle(.secondary)
+            Slider(
+                value: Binding(get: { speed }, set: { media = .contourTrace(url, penColor, $0) }),
+                in: 0.05...4
+            )
         }
     }
 
@@ -147,6 +177,8 @@ private struct MediaEditor: View {
         case .effect: media = .effect(.colorWash, .amber, .red)
         case .image: chooseImage()
         case .video: chooseVideo()
+        case .laserTrace: chooseLaserImage()
+        case .contourTrace: chooseContourImage()
         }
     }
 
@@ -193,6 +225,24 @@ private struct MediaEditor: View {
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             media = .video(url)
+        }
+    }
+
+    private func chooseLaserImage(keeping color: RGBAColor = .green) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            media = .laserTrace(url, color, 1.0)
+        }
+    }
+
+    private func chooseContourImage(keeping color: RGBAColor = .green) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            media = .contourTrace(url, color, 1.0)
         }
     }
 }

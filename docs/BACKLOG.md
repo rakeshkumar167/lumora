@@ -45,6 +45,22 @@ set. Both are feasible; not yet built.
   GLSL/Shadertoy shaders port over fairly mechanically. Best route if the real
   goal is shader-style visuals rather than JS specifically.
 
+## Image-trace media types — DONE ✅ (2026-07-07)
+
+Two image-input media types added alongside `.image`/`.video`:
+- **Laser Trace** (`.laserTrace(URL, RGBAColor, Double)`) — `CIEdges` edge
+  points, a laser bar sweeps bottom→top revealing edges that persist, then
+  hold/fade/repeat. Selectable color + trace speed (0.05×–4×).
+- **Contour Trace** (`.contourTrace(URL, RGBAColor, Double)`) — Vision
+  `VNDetectContoursRequest` contours, a single pen navigates edge-to-edge
+  (nearest-neighbour walk), with polygon-simplify + dedup to tighten. Selectable
+  color + trace speed.
+
+Both are stateless `Canvas` views (`LaserTraceContent`/`ContourTraceContent`)
+with edge extraction cached off-thread. Vision/CoreImage use bottom-left origin —
+y is flipped to top-left. Open follow-up: **skeletonization (thinning)** for
+true single-line centrelines (thick strokes still trace as boundary loops).
+
 ## Other pending features
 
 - **Per-surface playback settings** — loop toggle, mute/volume, speed, fill mode
