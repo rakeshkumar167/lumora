@@ -43,13 +43,15 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case dvdBounce
     case kaleidoscope
     case marqueeText
+    case prismFalls
+    case liquidSlosh
 
     public var id: String { rawValue }
 
     /// Whether the effect uses the surface's primary color.
     public var usesColor: Bool {
         switch self {
-        case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic:
+        case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls:
             return false
         default:
             return true
@@ -63,7 +65,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .plasma, .strobe, .barberStripes, .equalizer, .neonGrid, .vortex,
              .halftoneDots, .truchet, .concentricPolygons, .fire, .lightning,
              .bubbles, .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
-             .kaleidoscope, .marqueeText:
+             .kaleidoscope, .marqueeText, .liquidSlosh:
             return true
         default:
             return false
@@ -113,6 +115,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .dvdBounce: return "DVD Bounce"
         case .kaleidoscope: return "Kaleidoscope"
         case .marqueeText: return "Marquee Text"
+        case .prismFalls: return "Prism Falls"
+        case .liquidSlosh: return "Liquid Slosh"
         }
     }
 }

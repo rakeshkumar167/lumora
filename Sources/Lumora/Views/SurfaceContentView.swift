@@ -887,6 +887,110 @@ private struct EffectView: View {
                     x += textWidth
                 }
             }
+
+        case .prismFalls:
+            // Horizontal colour bands falling continuously through the full bright
+            // spectrum, each with a wavy liquid leading edge. Bands are indexed by an
+            // absolute band number `k`, so each keeps a FIXED hue for its whole life and
+            // its screen position `(s - k)·bandH` grows smoothly downward — no snap or
+            // colour reshuffle at period boundaries.
+            Canvas { ctx, size in
+                let bandH = max(size.height * 0.4, 1)
+                let speed = size.height / 3.5                     // px/sec downward
+                let s = (time * speed) / Double(bandH)            // continuous scroll, in bands
+                let newest = floor(s)
+                let amp = bandH * 0.12
+                // Background is the incoming band's hue, so any sliver above the topmost
+                // wave crest bleeds in as the new colour instead of flashing to black.
+                let incomingHue = fract((newest + 1) * 0.11)
+                ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                         with: .color(Color(hue: incomingHue, saturation: 0.9, brightness: 1.0)))
+                let dx = max(size.width / 40, 4)
+                let visible = 4
+                func edgeY(_ x: CGFloat, _ base: CGFloat, _ phase: Double) -> CGFloat {
+                    base + amp * CGFloat(sin(Double(x) * 0.012 + time * 0.8 + phase))
+                }
+                // Oldest first (bottom), newest last (top) so the incoming wave laps over.
+                // n = -1 is the band still entering above the top edge (fills the top gap).
+                for n in stride(from: visible, through: -1, by: -1) {
+                    let k = newest - Double(n)                    // absolute band index
+                    let topBase = CGFloat(s - k) * bandH          // grows downward, continuous
+                    let botBase = topBase + bandH + amp           // slight overlap onto band below
+                    let phaseTop = k * 1.7
+                    let phaseBot = (k - 1) * 1.7
+                    var path = Path()
+                    path.move(to: CGPoint(x: 0, y: edgeY(0, topBase, phaseTop)))
+                    var x: CGFloat = 0
+                    while x <= size.width { path.addLine(to: CGPoint(x: x, y: edgeY(x, topBase, phaseTop))); x += dx }
+                    path.addLine(to: CGPoint(x: size.width, y: edgeY(size.width, botBase, phaseBot)))
+                    x = size.width
+                    while x >= 0 { path.addLine(to: CGPoint(x: x, y: edgeY(x, botBase, phaseBot))); x -= dx }
+                    path.closeSubpath()
+                    let hue = fract(k * 0.11)
+                    ctx.fill(path, with: .color(Color(hue: hue, saturation: 0.9, brightness: 1.0)))
+                    // sheen along the leading (top) wavy edge
+                    var edge = Path()
+                    edge.move(to: CGPoint(x: 0, y: edgeY(0, topBase, phaseTop)))
+                    x = 0
+                    while x <= size.width { edge.addLine(to: CGPoint(x: x, y: edgeY(x, topBase, phaseTop))); x += dx }
+                    ctx.stroke(edge, with: .color(.white.opacity(0.15)), lineWidth: 2)
+                }
+            }
+
+        case .liquidSlosh:
+            // Liquid ~60%-filling a box with a gently sloshing surface. Motion is the
+            // physical tank-slosh mode `cos(π·u)` (liquid piles at one wall while it dips
+            // at the other, level at the centre) plus a smaller 2nd mode and a tiny
+            // travelling ripple. Body is lit near the surface and darkens with depth.
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
+                let w = size.width, h = size.height
+                let baseLevel = h * 0.42
+                let dx = max(w / 80, 2)
+                func surfaceY(_ x: CGFloat) -> CGFloat {
+                    let u = Double(x / max(w, 1))
+                    let s1 = 0.055 * Double(h) * cos(.pi * u) * sin(time * 1.1)          // fundamental slosh
+                    let s2 = 0.022 * Double(h) * cos(2 * .pi * u) * sin(time * 1.7 + 0.6) // 2nd mode
+                    let ripple = 0.010 * Double(h) * sin(5 * .pi * u - time * 2.2)        // fine ripple
+                    return baseLevel + CGFloat(s1 + s2 + ripple)
+                }
+                // Sample the surface once and reuse for every layer.
+                var pts: [CGPoint] = []
+                var x: CGFloat = 0
+                while x <= w { pts.append(CGPoint(x: x, y: surfaceY(x))); x += dx }
+                if (pts.last?.x ?? 0) < w { pts.append(CGPoint(x: w, y: surfaceY(w))) }
+
+                // Liquid body.
+                var body = Path()
+                body.move(to: pts[0])
+                for p in pts { body.addLine(to: p) }
+                body.addLine(to: CGPoint(x: w, y: h))
+                body.addLine(to: CGPoint(x: 0, y: h))
+                body.closeSubpath()
+                ctx.fill(body, with: .color(color.color))
+                // Depth shading: lit just under the surface, darker toward the bottom.
+                ctx.fill(body, with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: .white.opacity(0.22), location: 0.0),
+                        .init(color: .clear,               location: 0.22),
+                        .init(color: .black.opacity(0.05), location: 0.55),
+                        .init(color: .black.opacity(0.42), location: 1.0),
+                    ]),
+                    startPoint: CGPoint(x: 0, y: baseLevel - 0.06 * h),
+                    endPoint: CGPoint(x: 0, y: h)))
+                // Sunlit near-surface layer (thin lighter ribbon hugging the surface).
+                var ribbon = Path()
+                ribbon.move(to: pts[0])
+                for p in pts { ribbon.addLine(to: p) }
+                for p in pts.reversed() { ribbon.addLine(to: CGPoint(x: p.x, y: p.y + 10)) }
+                ribbon.closeSubpath()
+                ctx.fill(ribbon, with: .color(.white.opacity(0.14)))
+                // Bright specular waterline.
+                var surf = Path()
+                surf.move(to: pts[0])
+                for p in pts { surf.addLine(to: p) }
+                ctx.stroke(surf, with: .color(.white.opacity(0.55)), lineWidth: 1.5)
+            }
         }
     }
 
