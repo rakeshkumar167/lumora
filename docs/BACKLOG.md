@@ -7,7 +7,10 @@ Requirements captured for future sessions.
 All 20 previously-planned effects are now implemented (2026-07-06), plus a new
 `grid` alignment effect used as the new-surface default, plus `prismFalls`
 (continuous multi-colour spectrum waterfall) and `liquidSlosh` (confined-box
-tank-slosh liquid) added 2026-07-06. Total: **43 effects**.
+tank-slosh liquid) added 2026-07-06, plus 4 generative fractals
+(`fractalTree`, `barnsleyFern`, `kochSnowflake`, `sierpinskiTriangle` — each a
+~2-min generate→hold→vanish cycle re-seeded per cycle) added 2026-07-07.
+Total: **47 effects**.
 They follow the `EffectKind` (`LumoraKit`) + `EffectView`
 (`Sources/Lumora/Views/SurfaceContentView.swift`) pattern: a `Canvas`/gradient
 driven by `time`, warpable, with primary/accent color support via

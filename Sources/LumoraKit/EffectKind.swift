@@ -45,13 +45,18 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case marqueeText
     case prismFalls
     case liquidSlosh
+    case fractalTree
+    case barnsleyFern
+    case kochSnowflake
+    case sierpinskiTriangle
 
     public var id: String { rawValue }
 
     /// Whether the effect uses the surface's primary color.
     public var usesColor: Bool {
         switch self {
-        case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls:
+        case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
+             .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
             return false
         default:
             return true
@@ -117,6 +122,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .marqueeText: return "Marquee Text"
         case .prismFalls: return "Prism Falls"
         case .liquidSlosh: return "Liquid Slosh"
+        case .fractalTree: return "Fractal Tree"
+        case .barnsleyFern: return "Barnsley Fern"
+        case .kochSnowflake: return "Koch Snowflake"
+        case .sierpinskiTriangle: return "Sierpinski Triangle"
         }
     }
 }

@@ -94,6 +94,8 @@ private struct EffectView: View {
             motionEffects
         case .tvStatic, .crtScanlines, .matrixRain, .glitch, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
+        case .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
+            fractalEffects
         }
     }
 
@@ -1034,6 +1036,163 @@ private struct EffectView: View {
         }
     }
 
+    @ViewBuilder private var fractalEffects: some View {
+        switch kind {
+        case .fractalTree:
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
+                ctx.opacity = op
+                let maxDepth = 11
+                let cur = g * Double(maxDepth)
+                let branchAngle = 0.35 + Double(hash01(cycle, 1)) * 0.35
+                let ratio = 0.68 + Double(hash01(cycle, 2)) * 0.10
+                let lean = (Double(hash01(cycle, 3)) - 0.5) * 0.4
+                let baseX = Double(size.width) * (0.4 + Double(hash01(cycle, 4)) * 0.2)
+                let startLen = Double(size.height) * 0.28
+                func draw(_ x: Double, _ y: Double, _ angle: Double, _ len: Double, _ depth: Int) {
+                    let reveal = cur - Double(depth)
+                    if reveal <= 0 { return }
+                    let frac = min(reveal, 1)
+                    let x2 = x + cos(angle) * len * frac
+                    let y2 = y + sin(angle) * len * frac
+                    let t = Double(depth) / Double(maxDepth)
+                    let col = Color(red: 0.40 + 0.55 * t, green: 0.26 + 0.44 * t, blue: 0.13 + 0.05 * t)
+                    var p = Path()
+                    p.move(to: CGPoint(x: x, y: y))
+                    p.addLine(to: CGPoint(x: x2, y: y2))
+                    ctx.stroke(p, with: .color(col), lineWidth: max(1.0, Double(maxDepth - depth) * 0.6))
+                    if frac >= 1 && depth < maxDepth {
+                        draw(x2, y2, angle - branchAngle, len * ratio, depth + 1)
+                        draw(x2, y2, angle + branchAngle, len * ratio, depth + 1)
+                    }
+                }
+                draw(baseX, Double(size.height) * 0.96, -Double.pi / 2 + lean, startLen, 0)
+            }
+
+        case .barnsleyFern:
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
+                ctx.opacity = op
+                let maxPoints = 4000
+                let n = Int(g * Double(maxPoints))
+                let salt = cycle * 4 + 11
+                let mirror = Double(hash01(cycle, 1)) < 0.5 ? -1.0 : 1.0
+                let scale = 0.9 + Double(hash01(cycle, 2)) * 0.25
+                let fw = Double(size.width) * 0.42 * scale
+                let fh = Double(size.height) * 0.92 * scale
+                var x = 0.0, y = 0.0
+                var lowPath = Path(), highPath = Path()
+                for i in 0..<n {
+                    let r = Double(hash01(i, salt))
+                    let nx: Double, ny: Double
+                    if r < 0.01 { nx = 0; ny = 0.16 * y }
+                    else if r < 0.86 { nx = 0.85 * x + 0.04 * y; ny = -0.04 * x + 0.85 * y + 1.6 }
+                    else if r < 0.93 { nx = 0.20 * x - 0.26 * y; ny = 0.23 * x + 0.22 * y + 1.6 }
+                    else { nx = -0.15 * x + 0.28 * y; ny = 0.26 * x + 0.24 * y + 0.44 }
+                    x = nx; y = ny
+                    if i < 20 { continue }
+                    let px = Double(size.width) * 0.5 + mirror * (x / 2.75) * fw
+                    let py = Double(size.height) * 0.98 - (y / 10.4) * fh
+                    let rect = CGRect(x: px - 0.7, y: py - 0.7, width: 1.4, height: 1.4)
+                    if y < 4 { lowPath.addRect(rect) } else { highPath.addRect(rect) }
+                }
+                ctx.fill(lowPath, with: .color(Color(red: 0.10, green: 0.40, blue: 0.12)))
+                ctx.fill(highPath, with: .color(Color(red: 0.30, green: 0.75, blue: 0.22)))
+            }
+
+        case .kochSnowflake:
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
+                ctx.opacity = op
+                let maxIter = 5
+                let iterF = g * Double(maxIter)
+                let full = Int(floor(iterF))
+                let grow = iterF - Double(full)
+                let rot = Double(hash01(cycle, 1)) * 2 * .pi
+                let hueJit = 0.55 + Double(hash01(cycle, 2)) * 0.10
+                let R = Double(min(size.width, size.height)) * (0.30 + Double(hash01(cycle, 3)) * 0.05)
+                let cx = Double(size.width) / 2, cy = Double(size.height) / 2
+                func vert(_ k: Int) -> CGPoint {
+                    let a = rot - .pi / 2 + Double(k) * 2 * .pi / 3
+                    return CGPoint(x: cx + R * cos(a), y: cy + R * sin(a))
+                }
+                var pts: [CGPoint] = []
+                func koch(_ a: CGPoint, _ b: CGPoint, _ level: Int) {
+                    if level == 0 { pts.append(a); return }
+                    let ax = Double(a.x), ay = Double(a.y), bx = Double(b.x), by = Double(b.y)
+                    let p2 = CGPoint(x: ax + (bx - ax) / 3, y: ay + (by - ay) / 3)
+                    let p4 = CGPoint(x: ax + 2 * (bx - ax) / 3, y: ay + 2 * (by - ay) / 3)
+                    let mx = (Double(p2.x) + Double(p4.x)) / 2, my = (Double(p2.y) + Double(p4.y)) / 2
+                    let dx = Double(p4.x) - Double(p2.x), dy = Double(p4.y) - Double(p2.y)
+                    let ang = -Double.pi / 3   // outward bump; flip sign if bumps point inward
+                    let apexFull = CGPoint(x: Double(p2.x) + dx * cos(ang) - dy * sin(ang),
+                                           y: Double(p2.y) + dx * sin(ang) + dy * cos(ang))
+                    let gg = (level == 1) ? grow : 1.0
+                    let apex = CGPoint(x: mx + (Double(apexFull.x) - mx) * gg,
+                                       y: my + (Double(apexFull.y) - my) * gg)
+                    koch(a, p2, level - 1)
+                    koch(p2, apex, level - 1)
+                    koch(apex, p4, level - 1)
+                    koch(p4, b, level - 1)
+                }
+                let level = full + (grow > 0 ? 1 : 0)
+                let v = [vert(0), vert(1), vert(2)]
+                koch(v[0], v[1], level); koch(v[1], v[2], level); koch(v[2], v[0], level)
+                pts.append(v[0])
+                var path = Path()
+                path.move(to: pts[0])
+                for p in pts.dropFirst() { path.addLine(to: p) }
+                path.closeSubpath()
+                ctx.fill(path, with: .color(Color(hue: hueJit, saturation: 0.6, brightness: 0.5).opacity(0.25)))
+                ctx.stroke(path, with: .color(Color(hue: hueJit, saturation: 0.5, brightness: 1.0)), lineWidth: 1.5)
+            }
+
+        case .sierpinskiTriangle:
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
+                ctx.opacity = op
+                let maxDepth = 6
+                let depthF = g * Double(maxDepth)
+                let D = Int(floor(depthF))
+                let frac = depthF - Double(D)
+                let rot = Double(hash01(cycle, 1)) * 2 * .pi
+                let hue = fract(Double(hash01(cycle, 2)))
+                let R = Double(min(size.width, size.height)) * 0.42
+                let cx = Double(size.width) / 2, cy = Double(size.height) / 2 + R * 0.15
+                func vert(_ k: Int) -> CGPoint {
+                    let a = rot - .pi / 2 + Double(k) * 2 * .pi / 3
+                    return CGPoint(x: cx + R * cos(a), y: cy + R * sin(a))
+                }
+                func mid(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2) }
+                func tri(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> Path {
+                    var p = Path(); p.move(to: a); p.addLine(to: b); p.addLine(to: c); p.closeSubpath(); return p
+                }
+                let col = Color(hue: hue, saturation: 0.7, brightness: 0.95)
+                func sierp(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ depth: Int) {
+                    if depth == 0 { ctx.fill(tri(a, b, c), with: .color(col)); return }
+                    let ab = mid(a, b), bc = mid(b, c), ca = mid(c, a)
+                    sierp(a, ab, ca, depth - 1); sierp(ab, b, bc, depth - 1); sierp(ca, bc, c, depth - 1)
+                }
+                let A = vert(0), B = vert(1), C = vert(2)
+                sierp(A, B, C, D)
+                if frac > 0 && D < maxDepth {
+                    func holes(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ depth: Int) {
+                        let ab = mid(a, b), bc = mid(b, c), ca = mid(c, a)
+                        if depth == 0 { ctx.fill(tri(ab, bc, ca), with: .color(.black.opacity(frac))); return }
+                        holes(a, ab, ca, depth - 1); holes(ab, b, bc, depth - 1); holes(ca, bc, c, depth - 1)
+                    }
+                    holes(A, B, C, D)
+                }
+            }
+
+        default: EmptyView()
+        }
+    }
+
     private func polygonPath(center: CGPoint, radius: CGFloat, sides: Int, rotation: Double) -> Path {
         var path = Path()
         for i in 0...sides {
@@ -1061,6 +1220,25 @@ private struct EffectView: View {
     private func hash01(_ i: Int, _ salt: Int) -> CGFloat {
         let v = sin(Double(i) * 12.9898 + Double(salt) * 78.233) * 43758.5453
         return CGFloat(v - floor(v))
+    }
+
+    /// Progress `g` (0…1 during build), integer cycle index, and an opacity
+    /// envelope for a generate → hold → vanish fractal loop of period `P` seconds.
+    private func fractalCycle(period P: Double, build: Double, hold: Double) -> (g: Double, cycle: Int, opacity: Double) {
+        let localT = time.truncatingRemainder(dividingBy: P)
+        let cycle = Int(floor(time / P))
+        let g = min(localT / build, 1)
+        let fadeIn = 2.0
+        let fade = P - build - hold
+        let opacity: Double
+        if localT < fadeIn {
+            opacity = localT / fadeIn
+        } else if localT < build + hold {
+            opacity = 1
+        } else {
+            opacity = max(0, 1 - (localT - (build + hold)) / max(fade, 0.001))
+        }
+        return (g, cycle, opacity)
     }
 }
 
