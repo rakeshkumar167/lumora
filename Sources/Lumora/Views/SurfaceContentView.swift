@@ -104,6 +104,8 @@ private struct EffectView: View {
             fractalEffects
         case .voronoi, .metaballs, .hexGrid, .flowField:
             fieldEffects
+        case .lissajous, .orbits, .vectorGrid, .particleMesh:
+            geometryEffects
         }
     }
 
@@ -1219,6 +1221,24 @@ private struct EffectView: View {
         }
     }
 
+    @ViewBuilder private var geometryEffects: some View {
+        switch kind {
+        case .lissajous:
+            Canvas { ctx, size in drawLissajous(ctx: ctx, size: size) }
+
+        case .orbits:
+            Canvas { ctx, size in drawOrbits(ctx: ctx, size: size) }
+
+        case .vectorGrid:
+            Canvas { ctx, size in drawVectorGrid(ctx: ctx, size: size) }
+
+        case .particleMesh:
+            Canvas { ctx, size in drawParticleMesh(ctx: ctx, size: size) }
+
+        default: EmptyView()
+        }
+    }
+
     private func drawVoronoi(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
         let siteCount = 20
@@ -1388,6 +1408,140 @@ private struct EffectView: View {
             if ny < 0 { ny += h }; if ny > h { ny -= h }
         }
         return (nx, ny)
+    }
+
+    private func drawLissajous(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hue: 0, saturation: 0, brightness: 0.02)))
+        let w = Double(size.width), h = Double(size.height)
+        let cx = w / 2, cy = h / 2
+        let r = min(w, h) * 0.4
+        let a = 3 + sin(time * 0.2) * 2
+        let b = 4 + cos(time * 0.15) * 2
+        let dph = time * 0.5
+        let steps = 600
+        var path = Path()
+        for i in 0...steps {
+            let u = Double(i) / Double(steps) * 2 * .pi
+            let px = cx + sin(a * u + dph) * r
+            let py = cy + sin(b * u) * r
+            let pt = CGPoint(x: px, y: py)
+            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+        }
+        let hue = fract(time * 40 / 360)
+        ctx.stroke(path, with: .color(Color(hue: hue, saturation: 1, brightness: 0.65)), lineWidth: 1.5)
+    }
+
+    private func drawOrbits(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hue: 0, saturation: 0, brightness: 0.02)))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let startRadius = min(size.width, size.height) * 0.35
+        drawOrbitLevel(ctx: ctx, center: center, radius: startRadius, angle: 0, depth: 3)
+    }
+
+    private func drawOrbitLevel(ctx: GraphicsContext, center: CGPoint, radius: Double, angle: Double, depth: Int) {
+        guard depth > 0 else { return }
+        for i in 0..<5 {
+            let a = angle + time * (0.5 + Double(depth) * 0.2) + Double(i) / 5 * 2 * .pi
+            let p = CGPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius)
+
+            let orbitHue = fract((Double(depth) * 80 + time * 30 + Double(i) * 20) / 360)
+            let orbitRect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+            ctx.stroke(
+                Path(ellipseIn: orbitRect),
+                with: .color(Color(hue: orbitHue, saturation: 1, brightness: 0.65).opacity(0.4)),
+                lineWidth: 1
+            )
+
+            let planetHue = fract((Double(depth) * 80 + Double(i) * 30 + time * 30) / 360)
+            let planetR = Double(depth) * 4
+            let planetRect = CGRect(x: p.x - planetR, y: p.y - planetR, width: planetR * 2, height: planetR * 2)
+            ctx.fill(Path(ellipseIn: planetRect), with: .color(Color(hue: planetHue, saturation: 1, brightness: 0.65)))
+
+            drawOrbitLevel(ctx: ctx, center: p, radius: radius * 0.45, angle: a * 2, depth: depth - 1)
+        }
+    }
+
+    private func drawVectorGrid(ctx: GraphicsContext, size: CGSize) {
+        let w = Double(size.width), h = Double(size.height)
+
+        // Synthwave sky: deep purple → magenta band at mid-height → near-black lower half.
+        ctx.fill(
+            Path(CGRect(origin: .zero, size: size)),
+            with: .linearGradient(
+                Gradient(stops: [
+                    .init(color: Color(red: 0x1a / 255.0, green: 0.0, blue: 0x2a / 255.0), location: 0.0),
+                    .init(color: Color(red: 1.0, green: 0x2a / 255.0, blue: 0x6d / 255.0), location: 0.5),
+                    .init(color: Color(red: 0x05 / 255.0, green: 0.0, blue: 0x14 / 255.0), location: 0.51),
+                    .init(color: Color(red: 0x05 / 255.0, green: 0.0, blue: 0x14 / 255.0), location: 1.0),
+                ]),
+                startPoint: .zero,
+                endPoint: CGPoint(x: 0, y: size.height)
+            )
+        )
+
+        // Sun disc.
+        let sunRadius = min(w, h) * 0.15
+        let sunCenter = CGPoint(x: w / 2, y: h * 0.5 - 40)
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: sunCenter.x - sunRadius, y: sunCenter.y - sunRadius, width: sunRadius * 2, height: sunRadius * 2)),
+            with: .color(Color(red: 1.0, green: 0xd1 / 255.0, blue: 0x66 / 255.0))
+        )
+
+        // Perspective grid.
+        let horizon = h * 0.55
+        let gridColor = Color(red: 0.0, green: 0xf0 / 255.0, blue: 1.0)
+
+        for i in -24...24 {
+            let fi = Double(i)
+            var path = Path()
+            path.move(to: CGPoint(x: w / 2, y: horizon))
+            path.addLine(to: CGPoint(x: w / 2 + (fi / 24) * w * 3, y: h))
+            ctx.stroke(path, with: .color(gridColor), lineWidth: 1.5)
+        }
+
+        for i in 0..<18 {
+            let p = fract(Double(i) / 18 + time * 0.25)
+            let y = horizon + p * p * (h - horizon)
+            var path = Path()
+            path.move(to: CGPoint(x: 0, y: y))
+            path.addLine(to: CGPoint(x: w, y: y))
+            ctx.stroke(path, with: .color(gridColor.opacity(1 - p)), lineWidth: 1.5)
+        }
+    }
+
+    private func drawParticleMesh(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hue: 0, saturation: 0, brightness: 0.02)))
+        let w = Double(size.width), h = Double(size.height)
+        let nodeCount = 80
+        let maxD = 180.0
+
+        var nodes: [CGPoint] = []
+        nodes.reserveCapacity(nodeCount)
+        for i in 0..<nodeCount {
+            let fi = Double(i)
+            let bx = fract(sin(fi * 127.1) * 43758.5453)
+            let by = fract(sin(fi * 311.7) * 43758.5453)
+            let x = bx * w + sin(time * 0.15 + fi) * (w * 0.05) + sin(time + bx * 10) * 20
+            let y = by * h + cos(time * 0.15 + fi * 1.3) * (h * 0.05) + cos(time + by * 10) * 20
+            nodes.append(CGPoint(x: x, y: y))
+        }
+
+        for i in 0..<nodeCount {
+            for j in (i + 1)..<nodeCount {
+                let dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y
+                let d = sqrt(dx * dx + dy * dy)
+                guard d < maxD else { continue }
+                var path = Path()
+                path.move(to: nodes[i])
+                path.addLine(to: nodes[j])
+                ctx.stroke(path, with: .color(accent.color.opacity((1 - d / maxD) * 0.6)), lineWidth: 1)
+            }
+        }
+
+        let r: CGFloat = 2.2
+        for n in nodes {
+            ctx.fill(Path(ellipseIn: CGRect(x: n.x - r, y: n.y - r, width: r * 2, height: r * 2)), with: .color(color.color))
+        }
     }
 
     private func polygonPath(center: CGPoint, radius: CGFloat, sides: Int, rotation: Double) -> Path {

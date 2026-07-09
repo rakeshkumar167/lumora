@@ -30,7 +30,7 @@ open the package folder in Xcode and hit Run.
 ### Media
 Each surface can display:
 - **Solid color**
-- **51 built-in generative effects**, each animated and warp-aware, with
+- **55 built-in generative effects**, each animated and warp-aware, with
   primary + accent color controls. They're organized into categories:
   - *Gradients & washes* — Grid, Color Wash, Gradient Sweep, Breathing Glow,
     Rainbow Sweep, Radial Pulse, Aurora, Plasma, Strobe
@@ -49,6 +49,8 @@ Each surface can display:
   - *Fields* — Voronoi Cells (drifting Worley shatter), Metaballs (blobby
     merge), Hex Grid (pulsing honeycomb), Flow Field (perlin-ish particle
     streams)
+  - *Geometry* — Lissajous (harmonograph curve), Orbits (nested planets),
+    Vector Grid (80s synthwave plane), Particle Mesh (drifting constellation)
 - **Imported still image**
 - **Looping muted video**
 - **Laser Trace** — takes an image, edge-detects it (Core Image `CIEdges`), and a

@@ -12,8 +12,10 @@ tank-slosh liquid) added 2026-07-06, plus 4 generative fractals
 ~2-min generate→hold→vanish cycle re-seeded per cycle) added 2026-07-07,
 plus 4 field effects ported from the lovable-projection-effects reference
 (`voronoi`, `metaballs`, `hexGrid`, `flowField` — grouped in a new
-`fieldEffects` builder) added 2026-07-09.
-Total: **51 effects**.
+`fieldEffects` builder) added 2026-07-09, plus 4 geometry effects from the same
+reference (`lissajous`, `orbits`, `vectorGrid`, `particleMesh` — grouped in a
+new `geometryEffects` builder) added 2026-07-10.
+Total: **55 effects**.
 They follow the `EffectKind` (`LumoraKit`) + `EffectView`
 (`Sources/Lumora/Views/SurfaceContentView.swift`) pattern: a `Canvas`/gradient
 driven by `time`, warpable, with primary/accent color support via

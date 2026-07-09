@@ -53,6 +53,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case metaballs
     case hexGrid
     case flowField
+    case lissajous
+    case orbits
+    case vectorGrid
+    case particleMesh
 
     public var id: String { rawValue }
 
@@ -60,7 +64,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesColor: Bool {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
-             .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle, .voronoi, .flowField:
+             .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle, .voronoi, .flowField,
+             .lissajous, .orbits, .vectorGrid:
             return false
         default:
             return true
@@ -74,7 +79,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .plasma, .strobe, .barberStripes, .equalizer, .neonGrid, .vortex,
              .halftoneDots, .truchet, .concentricPolygons, .fire, .lightning,
              .bubbles, .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
-             .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid:
+             .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh:
             return true
         default:
             return false
@@ -134,6 +139,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .metaballs: return "Metaballs"
         case .hexGrid: return "Hex Grid"
         case .flowField: return "Flow Field"
+        case .lissajous: return "Lissajous"
+        case .orbits: return "Orbits"
+        case .vectorGrid: return "Vector Grid"
+        case .particleMesh: return "Particle Mesh"
         }
     }
 }
