@@ -9,8 +9,11 @@ All 20 previously-planned effects are now implemented (2026-07-06), plus a new
 (continuous multi-colour spectrum waterfall) and `liquidSlosh` (confined-box
 tank-slosh liquid) added 2026-07-06, plus 4 generative fractals
 (`fractalTree`, `barnsleyFern`, `kochSnowflake`, `sierpinskiTriangle` — each a
-~2-min generate→hold→vanish cycle re-seeded per cycle) added 2026-07-07.
-Total: **47 effects**.
+~2-min generate→hold→vanish cycle re-seeded per cycle) added 2026-07-07,
+plus 4 field effects ported from the lovable-projection-effects reference
+(`voronoi`, `metaballs`, `hexGrid`, `flowField` — grouped in a new
+`fieldEffects` builder) added 2026-07-09.
+Total: **51 effects**.
 They follow the `EffectKind` (`LumoraKit`) + `EffectView`
 (`Sources/Lumora/Views/SurfaceContentView.swift`) pattern: a `Canvas`/gradient
 driven by `time`, warpable, with primary/accent color support via

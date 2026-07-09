@@ -102,6 +102,8 @@ private struct EffectView: View {
             retroEffects
         case .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
             fractalEffects
+        case .voronoi, .metaballs, .hexGrid, .flowField:
+            fieldEffects
         }
     }
 
@@ -1197,6 +1199,195 @@ private struct EffectView: View {
 
         default: EmptyView()
         }
+    }
+
+    @ViewBuilder private var fieldEffects: some View {
+        switch kind {
+        case .voronoi:
+            Canvas { ctx, size in drawVoronoi(ctx: ctx, size: size) }
+
+        case .metaballs:
+            Canvas { ctx, size in drawMetaballs(ctx: ctx, size: size) }
+
+        case .hexGrid:
+            Canvas { ctx, size in drawHexGrid(ctx: ctx, size: size) }
+
+        case .flowField:
+            Canvas { ctx, size in drawFlowField(ctx: ctx, size: size) }
+
+        default: EmptyView()
+        }
+    }
+
+    private func drawVoronoi(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let siteCount = 20
+        var sites: [(x: Double, y: Double, hue: Double)] = []
+        sites.reserveCapacity(siteCount)
+        for i in 0..<siteCount {
+            let fi = Double(i)
+            let baseX = fract(sin(fi * 12.9898) * 43758.5453)
+            let baseY = fract(sin(fi * 78.233) * 43758.5453)
+            let hue = fract(sin(fi * 45.164) * 43758.5453)
+            let x = (baseX + sin(time * 0.4 + fi) * 0.1) * Double(size.width)
+            let y = (baseY + cos(time * 0.5 + fi * 1.3) * 0.1) * Double(size.height)
+            sites.append((x, y, hue))
+        }
+        let cell: CGFloat = 12
+        var y: CGFloat = 0
+        while y < size.height {
+            var x: CGFloat = 0
+            while x < size.width {
+                let cx = Double(x + cell / 2), cy = Double(y + cell / 2)
+                var nearest = Double.greatestFiniteMagnitude
+                var second = Double.greatestFiniteMagnitude
+                var nearestHue = 0.0
+                for s in sites {
+                    let dx = s.x - cx, dy = s.y - cy
+                    let d2 = dx * dx + dy * dy
+                    if d2 < nearest {
+                        second = nearest
+                        nearest = d2
+                        nearestHue = s.hue
+                    } else if d2 < second {
+                        second = d2
+                    }
+                }
+                let rect = CGRect(x: x, y: y, width: cell, height: cell)
+                let edge = sqrt(second) - sqrt(nearest)
+                if edge < Double(cell) * 1.5 {
+                    ctx.fill(Path(rect), with: .color(Color(red: 0.05, green: 0.05, blue: 0.05)))
+                } else {
+                    let hue = fract(nearestHue + time * 0.05)
+                    let bright = 0.45 + 0.15 * min(edge / Double(cell), 1.0)
+                    ctx.fill(Path(rect), with: .color(Color(hue: hue, saturation: 0.8, brightness: bright)))
+                }
+                x += cell
+            }
+            y += cell
+        }
+    }
+
+    private func drawMetaballs(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
+        let ballCount = 6
+        var balls: [(x: Double, y: Double, r: Double)] = []
+        balls.reserveCapacity(ballCount)
+        for i in 0..<ballCount {
+            let fi = Double(i)
+            let bx = Double(size.width) / 2 + cos(time * (0.6 + fi * 0.1) + fi) * Double(size.width) * 0.35
+            let by = Double(size.height) / 2 + sin(time * (0.5 + fi * 0.13) + fi * 1.3) * Double(size.height) * 0.35
+            let br = 18.0 + fi * 3
+            balls.append((bx, by, br))
+        }
+        let cell: CGFloat = 10
+        var y: CGFloat = 0
+        while y < size.height {
+            var x: CGFloat = 0
+            while x < size.width {
+                let cx = Double(x + cell / 2), cy = Double(y + cell / 2)
+                var sum = 0.0
+                for b in balls {
+                    let dx = b.x - cx, dy = b.y - cy
+                    sum += (b.r * b.r) / (dx * dx + dy * dy + 1)
+                }
+                if sum > 1 {
+                    let t = min((sum - 1) / 2, 1.0)
+                    let r = color.r + (1 - color.r) * t
+                    let g = color.g + (1 - color.g) * t
+                    let b = color.b + (1 - color.b) * t
+                    let rect = CGRect(x: x, y: y, width: cell, height: cell)
+                    ctx.fill(Path(rect), with: .color(Color(red: r, green: g, blue: b)))
+                }
+                x += cell
+            }
+            y += cell
+        }
+    }
+
+    private func drawHexGrid(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
+        let hexSize = 34.0
+        let hw = sqrt(3.0) * hexSize
+        let hh = 1.5 * hexSize
+        let w = Double(size.width), h = Double(size.height)
+        var row = -1
+        while Double(row) * hh < h + hh {
+            var col = -1
+            while Double(col) * hw < w + hw {
+                let x = Double(col) * hw + (row % 2 != 0 ? hw / 2 : 0)
+                let y = Double(row) * hh
+                let dx = x - w / 2, dy = y - h / 2
+                let dist = sqrt(dx * dx + dy * dy)
+                let wave = sin(dist * 0.02 - time * 3)
+                let s = hexSize * (0.6 + wave * 0.35)
+                ctx.fill(hexPath(x: x, y: y, radius: s * 0.55), with: .color(hexColor(wave: wave)))
+                col += 1
+            }
+            row += 1
+        }
+    }
+
+    private func hexPath(x: Double, y: Double, radius: Double) -> Path {
+        var path = Path()
+        for i in 0..<6 {
+            let a = Double(i) / 6 * 2 * .pi + .pi / 6
+            let px = x + cos(a) * radius
+            let py = y + sin(a) * radius
+            if i == 0 { path.move(to: CGPoint(x: px, y: py)) } else { path.addLine(to: CGPoint(x: px, y: py)) }
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func hexColor(wave: Double) -> Color {
+        let t = (wave + 1) / 2
+        let r = accent.r + (color.r - accent.r) * t
+        let g = accent.g + (color.g - accent.g) * t
+        let b = accent.b + (color.b - accent.b) * t
+        return Color(red: r, green: g, blue: b)
+    }
+
+    private func drawFlowField(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0.02, green: 0.02, blue: 0.04)))
+        let particleCount = 450
+        let warmupSteps = 60
+        let streakLen = 7
+        let stepLen = 4.0
+        let speed = 0.12
+        let w = Double(size.width), h = Double(size.height)
+        for i in 0..<particleCount {
+            let fi = Double(i)
+            let seed = fract(sin(fi * 74.7) * 43758.5453)
+            let hueSeed = fract(sin(fi * 91.3) * 43758.5453)
+            var pos = (
+                x: fract(sin(fi * 127.1) * 43758.5453) * w,
+                y: fract(sin(fi * 311.7) * 43758.5453) * h
+            )
+            let warm = Int(fract(time * speed + seed) * Double(warmupSteps))
+            for _ in 0..<warm { pos = flowStep(pos, w: w, h: h, stepLen: stepLen, wrap: true) }
+
+            var path = Path()
+            path.move(to: CGPoint(x: pos.x, y: pos.y))
+            for _ in 0..<streakLen {
+                pos = flowStep(pos, w: w, h: h, stepLen: stepLen, wrap: false)
+                path.addLine(to: CGPoint(x: pos.x, y: pos.y))
+            }
+
+            let hue = fract(hueSeed + time * 0.05)
+            ctx.stroke(path, with: .color(Color(hue: hue, saturation: 1, brightness: 0.65).opacity(0.6)), lineWidth: 1.2)
+        }
+    }
+
+    private func flowStep(_ p: (x: Double, y: Double), w: Double, h: Double, stepLen: Double, wrap: Bool) -> (x: Double, y: Double) {
+        let ang = sin(p.x * 0.005 + time * 0.4) * .pi + cos(p.y * 0.005 - time * 0.3) * .pi
+        var nx = p.x + cos(ang) * stepLen
+        var ny = p.y + sin(ang) * stepLen
+        if wrap {
+            if nx < 0 { nx += w }; if nx > w { nx -= w }
+            if ny < 0 { ny += h }; if ny > h { ny -= h }
+        }
+        return (nx, ny)
     }
 
     private func polygonPath(center: CGPoint, radius: CGFloat, sides: Int, rotation: Double) -> Path {

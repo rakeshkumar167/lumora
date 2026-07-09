@@ -30,7 +30,7 @@ open the package folder in Xcode and hit Run.
 ### Media
 Each surface can display:
 - **Solid color**
-- **47 built-in generative effects**, each animated and warp-aware, with
+- **51 built-in generative effects**, each animated and warp-aware, with
   primary + accent color controls. They're organized into categories:
   - *Gradients & washes* — Grid, Color Wash, Gradient Sweep, Breathing Glow,
     Rainbow Sweep, Radial Pulse, Aurora, Plasma, Strobe
@@ -46,6 +46,9 @@ Each surface can display:
   - *Fractals* — Fractal Tree, Barnsley Fern, Koch Snowflake, Sierpinski
     Triangle. Each runs a ~2-minute **generate → hold → vanish** cycle, re-seeded
     each cycle so it restarts from a different starting point.
+  - *Fields* — Voronoi Cells (drifting Worley shatter), Metaballs (blobby
+    merge), Hex Grid (pulsing honeycomb), Flow Field (perlin-ish particle
+    streams)
 - **Imported still image**
 - **Looping muted video**
 - **Laser Trace** — takes an image, edge-detects it (Core Image `CIEdges`), and a

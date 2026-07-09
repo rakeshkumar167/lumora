@@ -49,6 +49,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case barnsleyFern
     case kochSnowflake
     case sierpinskiTriangle
+    case voronoi
+    case metaballs
+    case hexGrid
+    case flowField
 
     public var id: String { rawValue }
 
@@ -56,7 +60,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesColor: Bool {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
-             .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
+             .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle, .voronoi, .flowField:
             return false
         default:
             return true
@@ -70,7 +74,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .plasma, .strobe, .barberStripes, .equalizer, .neonGrid, .vortex,
              .halftoneDots, .truchet, .concentricPolygons, .fire, .lightning,
              .bubbles, .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
-             .kaleidoscope, .marqueeText, .liquidSlosh:
+             .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid:
             return true
         default:
             return false
@@ -126,6 +130,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .barnsleyFern: return "Barnsley Fern"
         case .kochSnowflake: return "Koch Snowflake"
         case .sierpinskiTriangle: return "Sierpinski Triangle"
+        case .voronoi: return "Voronoi Cells"
+        case .metaballs: return "Metaballs"
+        case .hexGrid: return "Hex Grid"
+        case .flowField: return "Flow Field"
         }
     }
 }
