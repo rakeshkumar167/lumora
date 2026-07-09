@@ -14,8 +14,12 @@ plus 4 field effects ported from the lovable-projection-effects reference
 (`voronoi`, `metaballs`, `hexGrid`, `flowField` — grouped in a new
 `fieldEffects` builder) added 2026-07-09, plus 4 geometry effects from the same
 reference (`lissajous`, `orbits`, `vectorGrid`, `particleMesh` — grouped in a
-new `geometryEffects` builder) added 2026-07-10.
-Total: **55 effects**.
+new `geometryEffects` builder) added 2026-07-10, plus 2 original ambient/illusion
+effects (`livingTexture` glowing nebula flow-field ribbons, `depthBreaker`
+trompe-l'œil perspective well with floating shapes + fake shadows — grouped in a
+new `ambientEffects` builder; both use fixed cinematic palettes and blur-layer
+glow) added 2026-07-10.
+Total: **57 effects**.
 They follow the `EffectKind` (`LumoraKit`) + `EffectView`
 (`Sources/Lumora/Views/SurfaceContentView.swift`) pattern: a `Canvas`/gradient
 driven by `time`, warpable, with primary/accent color support via

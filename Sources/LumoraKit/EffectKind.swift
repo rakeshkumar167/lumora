@@ -57,6 +57,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case orbits
     case vectorGrid
     case particleMesh
+    case livingTexture
+    case depthBreaker
 
     public var id: String { rawValue }
 
@@ -65,7 +67,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
              .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle, .voronoi, .flowField,
-             .lissajous, .orbits, .vectorGrid:
+             .lissajous, .orbits, .vectorGrid, .livingTexture, .depthBreaker:
             return false
         default:
             return true
@@ -143,6 +145,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .orbits: return "Orbits"
         case .vectorGrid: return "Vector Grid"
         case .particleMesh: return "Particle Mesh"
+        case .livingTexture: return "Living Texture"
+        case .depthBreaker: return "Depth Breaker"
         }
     }
 }

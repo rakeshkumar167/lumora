@@ -106,6 +106,8 @@ private struct EffectView: View {
             fieldEffects
         case .lissajous, .orbits, .vectorGrid, .particleMesh:
             geometryEffects
+        case .livingTexture, .depthBreaker:
+            ambientEffects
         }
     }
 
@@ -1239,6 +1241,18 @@ private struct EffectView: View {
         }
     }
 
+    @ViewBuilder private var ambientEffects: some View {
+        switch kind {
+        case .livingTexture:
+            Canvas { ctx, size in drawLivingTexture(ctx: ctx, size: size) }
+
+        case .depthBreaker:
+            Canvas { ctx, size in drawDepthBreaker(ctx: ctx, size: size) }
+
+        default: EmptyView()
+        }
+    }
+
     private func drawVoronoi(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
         let siteCount = 20
@@ -1542,6 +1556,195 @@ private struct EffectView: View {
         for n in nodes {
             ctx.fill(Path(ellipseIn: CGRect(x: n.x - r, y: n.y - r, width: r * 2, height: r * 2)), with: .color(color.color))
         }
+    }
+
+    // MARK: Ambient / illusion effects
+
+    /// Multi-octave (fBm-ish) flow-field angle for Living Texture. Smooth and organic.
+    private func livingFieldAngle(_ x: Double, _ y: Double) -> Double {
+        (sin(x * 0.004 + time * 0.3)
+            + sin(y * 0.005 - time * 0.23)
+            + 0.5 * sin((x + y) * 0.003 + time * 0.4)) * .pi
+    }
+
+    /// Nebula palette: magenta → cyan → violet, cyclic. `p` wraps.
+    private func nebulaColor(_ p: Double) -> Color {
+        let stops: [(Double, Double, Double)] = [
+            (1.00, 0.18, 0.58),   // magenta
+            (0.13, 0.88, 1.00),   // cyan
+            (0.54, 0.17, 0.89),   // violet
+        ]
+        let n = stops.count
+        let x = fract(p) * Double(n)
+        let i = Int(floor(x)) % n
+        let j = (i + 1) % n
+        let f = x - floor(x)
+        let a = stops[i], b = stops[j]
+        return Color(red: a.0 + (b.0 - a.0) * f,
+                     green: a.1 + (b.1 - a.1) * f,
+                     blue: a.2 + (b.2 - a.2) * f)
+    }
+
+    private func drawLivingTexture(ctx: GraphicsContext, size: CGSize) {
+        let w = Double(size.width), h = Double(size.height)
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .color(Color(red: 0.03, green: 0.0, blue: 0.06)))
+
+        let ribbonCount = 90
+        let steps = 40
+        let stepLen = 5.0
+
+        var ribbons: [(path: Path, color: Color)] = []
+        ribbons.reserveCapacity(ribbonCount)
+        for k in 0..<ribbonCount {
+            let fk = Double(k)
+            var x = fract(sin(fk * 12.9898) * 43758.5453) * w
+            var y = fract(sin(fk * 78.233) * 43758.5453) * h
+            let colorPhase = fract(sin(fk * 45.164) * 43758.5453)
+            // Advance the seed along the field so ribbons drift and recycle (stateless).
+            let warm = Int(fract(time * 0.05 + colorPhase) * 40)
+            for _ in 0..<warm {
+                let ang = livingFieldAngle(x, y)
+                x += cos(ang) * stepLen; y += sin(ang) * stepLen
+                if x < 0 { x += w } else if x > w { x -= w }
+                if y < 0 { y += h } else if y > h { y -= h }
+            }
+            var path = Path()
+            path.move(to: CGPoint(x: x, y: y))
+            for _ in 0..<steps {
+                let ang = livingFieldAngle(x, y)
+                x += cos(ang) * stepLen; y += sin(ang) * stepLen
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+            ribbons.append((path, nebulaColor(colorPhase + time * 0.03)))
+        }
+
+        // Soft glow pass: fat, blurred, additive.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 6))
+            layer.blendMode = .plusLighter
+            for r in ribbons {
+                layer.stroke(r.path, with: .color(r.color.opacity(0.35)),
+                             style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+            }
+        }
+        // Bright core pass: thin, additive.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for r in ribbons {
+                layer.stroke(r.path, with: .color(r.color.opacity(0.9)),
+                             style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            }
+        }
+    }
+
+    /// Project a well cross-section point (u,v ∈ −1…1) at depth d (0 front … 1 back)
+    /// toward the centered vanishing point.
+    private func dbProject(_ u: Double, _ v: Double, _ d: Double, _ size: CGSize) -> CGPoint {
+        let scaleD = CGFloat(1 - d * 0.58)
+        return CGPoint(x: size.width / 2 + CGFloat(u) * (size.width / 2) * scaleD,
+                       y: size.height / 2 + CGFloat(v) * (size.height / 2) * scaleD)
+    }
+
+    private func drawDepthBreaker(ctx: GraphicsContext, size: CGSize) {
+        let backDark = Color(red: 0.02, green: 0.024, blue: 0.04)
+        let frontLit = Color(red: 0.10, green: 0.12, blue: 0.17)
+        let cyan = Color(red: 0.13, green: 0.88, blue: 1.0)
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(backDark))
+
+        // Four receding walls, each a trapezoid front-edge → back-edge, depth-shaded.
+        let edges: [((Double, Double), (Double, Double))] = [
+            ((-1, -1), (1, -1)), ((1, 1), (-1, 1)), ((-1, 1), (-1, -1)), ((1, -1), (1, 1)),
+        ]
+        for e in edges {
+            let f0 = dbProject(e.0.0, e.0.1, 0, size)
+            let f1 = dbProject(e.1.0, e.1.1, 0, size)
+            let b1 = dbProject(e.1.0, e.1.1, 1, size)
+            let b0 = dbProject(e.0.0, e.0.1, 1, size)
+            var p = Path()
+            p.move(to: f0); p.addLine(to: f1); p.addLine(to: b1); p.addLine(to: b0); p.closeSubpath()
+            let frontMid = CGPoint(x: (f0.x + f1.x) / 2, y: (f0.y + f1.y) / 2)
+            let backMid = CGPoint(x: (b0.x + b1.x) / 2, y: (b0.y + b1.y) / 2)
+            ctx.fill(p, with: .linearGradient(Gradient(colors: [frontLit, backDark]),
+                                              startPoint: frontMid, endPoint: backMid))
+        }
+
+        // Neon depth rings (fade toward the back).
+        var d = 0.0
+        while d <= 1.0001 {
+            let c0 = dbProject(-1, -1, d, size), c1 = dbProject(1, -1, d, size)
+            let c2 = dbProject(1, 1, d, size), c3 = dbProject(-1, 1, d, size)
+            var ring = Path()
+            ring.move(to: c0); ring.addLine(to: c1); ring.addLine(to: c2); ring.addLine(to: c3); ring.closeSubpath()
+            ctx.stroke(ring, with: .color(cyan.opacity(0.10 + 0.20 * (1 - d))), lineWidth: 1)
+            d += 0.2
+        }
+        // Four receding corner edges.
+        for c in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+            var line = Path()
+            line.move(to: dbProject(c.0, c.1, 0, size))
+            line.addLine(to: dbProject(c.0, c.1, 1, size))
+            ctx.stroke(line, with: .color(cyan.opacity(0.35)), lineWidth: 1)
+        }
+        // Magenta frame around the opening.
+        ctx.stroke(Path(CGRect(origin: .zero, size: size).insetBy(dx: 1.5, dy: 1.5)),
+                   with: .color(Color(red: 1.0, green: 0.18, blue: 0.58).opacity(0.6)), lineWidth: 2)
+
+        // Floating shapes: (u, v, z, kind, color); kind 0 = sphere, 1 = torus.
+        let defs: [(uAmp: Double, vAmp: Double, uSpd: Double, vSpd: Double, zSpd: Double, phase: Double, kind: Int, color: Color)] = [
+            (0.50, 0.40, 0.30, 0.24, 0.50, 0.0, 0, Color(red: 0.13, green: 0.88, blue: 1.0)),
+            (0.45, 0.50, 0.27, 0.31, 0.60, 2.1, 0, Color(red: 1.0, green: 0.30, blue: 0.72)),
+            (0.55, 0.35, 0.22, 0.28, 0.40, 4.0, 1, Color(red: 1.0, green: 0.80, blue: 0.35)),
+            (0.38, 0.55, 0.34, 0.20, 0.55, 1.0, 0, Color(red: 0.55, green: 0.45, blue: 1.0)),
+            (0.60, 0.45, 0.19, 0.33, 0.45, 3.2, 1, Color(red: 0.30, green: 1.0, blue: 0.65)),
+        ]
+        var shapes: [(u: Double, v: Double, z: Double, kind: Int, color: Color)] = []
+        for def in defs {
+            let u = def.uAmp * sin(time * def.uSpd + def.phase)
+            let v = def.vAmp * cos(time * def.vSpd + def.phase * 1.3)
+            let z = 0.5 + 0.4 * sin(time * def.zSpd + def.phase)
+            shapes.append((u, v, z, def.kind, def.color))
+        }
+
+        // Soft fake shadows cast on the back wall (drawn behind the shapes).
+        let baseR = Double(min(size.width, size.height)) * 0.12
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 8))
+            for s in shapes {
+                let c = dbProject(s.u + 0.07, s.v + 0.10, 1.0, size)
+                let r = CGFloat(baseR * (1 - s.z * 0.58))
+                let rect = CGRect(x: c.x - r, y: c.y - r * 0.45, width: r * 2, height: r * 0.9)
+                layer.fill(Path(ellipseIn: rect), with: .color(.black.opacity(0.4 * (0.3 + 0.7 * s.z))))
+            }
+        }
+
+        // Shapes, far (high z) first.
+        for s in shapes.sorted(by: { $0.z > $1.z }) {
+            let center = dbProject(s.u, s.v, s.z, size)
+            let radius = baseR * (1 - s.z * 0.58)
+            if s.kind == 0 {
+                drawDBSphere(ctx: ctx, center: center, radius: radius, color: s.color)
+            } else {
+                drawDBTorus(ctx: ctx, center: center, radius: radius, color: s.color)
+            }
+        }
+    }
+
+    private func drawDBSphere(ctx: GraphicsContext, center: CGPoint, radius: Double, color: Color) {
+        let r = CGFloat(radius)
+        let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+        let highlight = CGPoint(x: center.x - r * 0.35, y: center.y - r * 0.35)
+        ctx.fill(Path(ellipseIn: rect),
+                 with: .radialGradient(Gradient(colors: [.white, color, color.opacity(0.12)]),
+                                       center: highlight, startRadius: 0, endRadius: r * 1.3))
+    }
+
+    private func drawDBTorus(ctx: GraphicsContext, center: CGPoint, radius: Double, color: Color) {
+        let rw = CGFloat(radius), rh = CGFloat(radius * 0.5)
+        let rect = CGRect(x: center.x - rw, y: center.y - rh, width: rw * 2, height: rh * 2)
+        let tube = CGFloat(radius * 0.28)
+        ctx.stroke(Path(ellipseIn: rect), with: .color(color), lineWidth: tube)
+        ctx.stroke(Path(ellipseIn: rect), with: .color(.black.opacity(0.35)), lineWidth: tube * 0.35)
     }
 
     private func polygonPath(center: CGPoint, radius: CGFloat, sides: Int, rotation: Double) -> Path {
