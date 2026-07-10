@@ -31,7 +31,8 @@ open the package folder in Xcode and hit Run.
 Each surface can display:
 - **Solid color**
 - **58 built-in generative effects**, each animated and warp-aware, with
-  primary + accent color controls. They're organized into categories:
+  primary + accent color controls. Chosen via a two-step **Category → Effect**
+  picker; they're organized into these categories:
   - *Gradients & washes* — Grid, Color Wash, Gradient Sweep, Breathing Glow,
     Rainbow Sweep, Radial Pulse, Aurora, Plasma, Strobe
   - *Patterns & geometry* — Checkerboard, Barber Stripes, Color Bars, Neon Grid,
@@ -49,7 +50,7 @@ Each surface can display:
   - *Fields* — Voronoi Cells (drifting Worley shatter), Metaballs (blobby
     merge), Hex Grid (pulsing honeycomb), Flow Field (perlin-ish particle
     streams)
-  - *Geometry* — Lissajous (harmonograph curve), Orbits (nested planets),
+  - *Curves & Grids* — Lissajous (harmonograph curve), Orbits (nested planets),
     Vector Grid (80s synthwave plane), Particle Mesh (drifting constellation)
   - *Ambient & illusion* — Living Texture (glowing nebula/silk ribbons through
     an organic noise field), Depth Breaker (trompe-l'œil "hole in the wall"

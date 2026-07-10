@@ -123,11 +123,20 @@ private struct MediaEditor: View {
             colorControls(current: c) { media = .color($0) }
 
         case .effect(let effectKind, let primary, let accent):
+            Picker("Category", selection: Binding(
+                get: { effectKind.category },
+                set: { newCategory in
+                    let first = newCategory.effects.first ?? effectKind
+                    media = .effect(first, primary, accent)
+                }
+            )) {
+                ForEach(EffectCategory.allCases) { Text($0.displayName).tag($0) }
+            }
             Picker("Effect", selection: Binding(
                 get: { effectKind },
                 set: { media = .effect($0, primary, accent) }
             )) {
-                ForEach(EffectKind.allCases) { Text($0.displayName).tag($0) }
+                ForEach(effectKind.category.effects) { Text($0.displayName).tag($0) }
             }
             if effectKind.usesColor {
                 Text("Color").font(.caption).foregroundStyle(.secondary)

@@ -152,4 +152,72 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .outlineGlow: return "Outline Glow"
         }
     }
+
+    /// The category this effect belongs to, used to group the picker.
+    public var category: EffectCategory {
+        switch self {
+        case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep,
+             .radialPulse, .aurora, .plasma, .strobe:
+            return .gradients
+        case .checkerboard, .barberStripes, .colorBars, .neonGrid, .halftoneDots,
+             .moire, .truchet, .concentricPolygons, .spirograph:
+            return .patterns
+        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
+             .lightning, .bubbles, .fallingLeaves:
+            return .nature
+        case .waves, .equalizer, .vortex, .tunnel, .pendulumWave, .kaleidoscope,
+             .prismFalls, .liquidSlosh:
+            return .motion
+        case .tvStatic, .crtScanlines, .matrixRain, .glitch, .pixelDissolve,
+             .dvdBounce, .marqueeText:
+            return .retro
+        case .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
+            return .fractals
+        case .voronoi, .metaballs, .hexGrid, .flowField:
+            return .fields
+        case .lissajous, .orbits, .vectorGrid, .particleMesh:
+            return .curvesGrids
+        case .livingTexture, .depthBreaker:
+            return .ambient
+        case .outlineGlow:
+            return .edge
+        }
+    }
+}
+
+/// A grouping of related effects, used to make the effect picker a two-step
+/// Category → Effect selection. Cases mirror the per-category renderer groups.
+public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
+    case gradients
+    case patterns
+    case nature
+    case motion
+    case retro
+    case fractals
+    case fields
+    case curvesGrids
+    case ambient
+    case edge
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .gradients: return "Gradients & Washes"
+        case .patterns: return "Patterns & Geometry"
+        case .nature: return "Particles & Nature"
+        case .motion: return "Waves & Motion"
+        case .retro: return "Retro & Digital"
+        case .fractals: return "Fractals"
+        case .fields: return "Fields"
+        case .curvesGrids: return "Curves & Grids"
+        case .ambient: return "Ambient & Illusion"
+        case .edge: return "Edge"
+        }
+    }
+
+    /// Effects in this category, in canonical `EffectKind` order.
+    public var effects: [EffectKind] {
+        EffectKind.allCases.filter { $0.category == self }
+    }
 }
