@@ -18,8 +18,11 @@ new `geometryEffects` builder) added 2026-07-10, plus 2 original ambient/illusio
 effects (`livingTexture` glowing nebula flow-field ribbons, `depthBreaker`
 trompe-l'œil perspective well with floating shapes + fake shadows — grouped in a
 new `ambientEffects` builder; both use fixed cinematic palettes and blur-layer
-glow) added 2026-07-10.
-Total: **57 effects**.
+glow) added 2026-07-10, plus `outlineGlow` (a running light that traces the
+chosen surface's true outline — quad/polygon/ellipse — accumulating a glow then
+breathing; introduced the `EffectOutline` plumbing so effects can read the
+surface shape, and a new `edgeEffects` builder) added 2026-07-10.
+Total: **58 effects**.
 They follow the `EffectKind` (`LumoraKit`) + `EffectView`
 (`Sources/Lumora/Views/SurfaceContentView.swift`) pattern: a `Canvas`/gradient
 driven by `time`, warpable, with primary/accent color support via

@@ -59,6 +59,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case particleMesh
     case livingTexture
     case depthBreaker
+    case outlineGlow
 
     public var id: String { rawValue }
 
@@ -81,7 +82,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .plasma, .strobe, .barberStripes, .equalizer, .neonGrid, .vortex,
              .halftoneDots, .truchet, .concentricPolygons, .fire, .lightning,
              .bubbles, .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
-             .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh:
+             .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
+             .outlineGlow:
             return true
         default:
             return false
@@ -147,6 +149,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .particleMesh: return "Particle Mesh"
         case .livingTexture: return "Living Texture"
         case .depthBreaker: return "Depth Breaker"
+        case .outlineGlow: return "Outline Glow"
         }
     }
 }

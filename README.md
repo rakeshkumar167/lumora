@@ -30,7 +30,7 @@ open the package folder in Xcode and hit Run.
 ### Media
 Each surface can display:
 - **Solid color**
-- **57 built-in generative effects**, each animated and warp-aware, with
+- **58 built-in generative effects**, each animated and warp-aware, with
   primary + accent color controls. They're organized into categories:
   - *Gradients & washes* — Grid, Color Wash, Gradient Sweep, Breathing Glow,
     Rainbow Sweep, Radial Pulse, Aurora, Plasma, Strobe
@@ -54,6 +54,9 @@ Each surface can display:
   - *Ambient & illusion* — Living Texture (glowing nebula/silk ribbons through
     an organic noise field), Depth Breaker (trompe-l'œil "hole in the wall"
     with floating shapes casting fake shadows)
+  - *Edge* — Outline Glow (a running light traces the chosen surface's true
+    outline — quad, polygon, or ellipse — leaving an accumulating glow, then
+    the completed outline gently breathes)
 - **Imported still image**
 - **Looping muted video**
 - **Laser Trace** — takes an image, edge-detects it (Core Image `CIEdges`), and a

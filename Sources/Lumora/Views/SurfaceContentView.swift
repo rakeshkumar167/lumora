@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -76,6 +76,187 @@ struct SurfaceContentView: View {
         case .contourTrace(let url, let c, let speed):
             ContourTraceContent(url: url, color: c, speed: speed, time: time)
         }
+    }
+
+    /// The surface's outline in the effect Canvas's coordinate space, used by
+    /// edge effects (e.g. Outline Glow). Quads draw a rect that is warped onto
+    /// the real quad; polygon/ellipse fill their bounding box.
+    private var effectOutline: EffectOutline {
+        switch surface.shape {
+        case .quad:
+            return .rect
+        case .ellipse:
+            return .ellipse
+        case .polygon:
+            let pts = surface.quadPoints(in: canvasSize)
+            let bb = Surface.bounds(of: pts)
+            let w = max(bb.width, 1), h = max(bb.height, 1)
+            return .polygon(pts.map { CGPoint(x: ($0.x - bb.minX) / w, y: ($0.y - bb.minY) / h) })
+        }
+    }
+}
+
+/// Describes a surface outline for edge effects, in the effect Canvas's space.
+/// Polygon points are normalized to 0…1 against the drawing box.
+enum EffectOutline {
+    case rect
+    case polygon([CGPoint])
+    case ellipse
+}
+
+/// Traces a glowing light around the surface's outline once — starting when the
+/// effect appears — then holds the completed outline with a gentle breathing
+/// pulse. Because the effect clock is global, "fill once then stay" needs a
+/// per-view start time (`startRef`, captured on appear); the fill does NOT loop.
+private struct OutlineGlowView: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+    var outline: EffectOutline = .rect
+
+    @State private var startRef: Double?
+
+    private let fillDur = 3.5
+
+    var body: some View {
+        Canvas { ctx, size in
+            let elapsed = startRef.map { max(0, time - $0) } ?? 0
+            draw(ctx: ctx, size: size, elapsed: elapsed)
+        }
+        .onAppear { if startRef == nil { startRef = Date().timeIntervalSinceReferenceDate } }
+    }
+
+    private func draw(ctx: GraphicsContext, size: CGSize, elapsed: Double) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let pts = outlinePolyline(size)
+        guard pts.count >= 2 else { return }
+        let (cum, total) = closedLengths(pts)
+        guard total > 0 else { return }
+
+        // Fill once from appearance, then hold forever (no loop).
+        let headFrac = min(elapsed / fillDur, 1.0)
+        let inHold = elapsed >= fillDur
+        let pulse = inHold ? (0.8 + 0.2 * sin(time * 1.5)) : 1.0
+        let litLen = CGFloat(headFrac) * total
+
+        let glow = color.color
+        let full = closedPath(pts)
+        let lit = subPath(pts, cum, upTo: litLen)
+
+        // Dim base — always present so the outline never goes fully dark.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 10))
+            layer.blendMode = .plusLighter
+            layer.stroke(full, with: .color(glow.opacity(0.22)),
+                         style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+        }
+        // Lit portion — soft wide glow + brighter mid glow + crisp core.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 16))
+            layer.blendMode = .plusLighter
+            layer.stroke(lit, with: .color(glow.opacity(0.5 * pulse)),
+                         style: StrokeStyle(lineWidth: 22, lineCap: .round, lineJoin: .round))
+        }
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 7))
+            layer.blendMode = .plusLighter
+            layer.stroke(lit, with: .color(glow.opacity(0.6 * pulse)),
+                         style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+        }
+        ctx.stroke(lit, with: .color(glow.opacity(0.95 * pulse)),
+                   style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+        // Bright running head — only while the outline is still filling.
+        if !inHold {
+            let head = pointAt(pts, cum, length: litLen)
+            let r: CGFloat = 9
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 6))
+                layer.blendMode = .plusLighter
+                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                           with: .color(accent.color))
+            }
+            ctx.fill(Path(ellipseIn: CGRect(x: head.x - 3.5, y: head.y - 3.5, width: 7, height: 7)),
+                     with: .color(.white))
+        }
+    }
+
+    /// The surface outline as a closed polyline in Canvas coordinates.
+    private func outlinePolyline(_ size: CGSize) -> [CGPoint] {
+        let w = size.width, h = size.height
+        switch outline {
+        case .rect:
+            return [CGPoint(x: 0, y: 0), CGPoint(x: w, y: 0),
+                    CGPoint(x: w, y: h), CGPoint(x: 0, y: h)]
+        case .polygon(let norm):
+            return norm.map { CGPoint(x: $0.x * w, y: $0.y * h) }
+        case .ellipse:
+            let n = 120
+            let cx = w / 2, cy = h / 2, rx = w / 2, ry = h / 2
+            return (0..<n).map { i in
+                let a = Double(i) / Double(n) * 2 * .pi
+                return CGPoint(x: cx + rx * CGFloat(cos(a)), y: cy + ry * CGFloat(sin(a)))
+            }
+        }
+    }
+
+    /// Cumulative arc length at each vertex of the closed loop; `cum[i]` is the
+    /// length from vertex 0 to vertex i, and `cum[count]` is the full perimeter.
+    private func closedLengths(_ pts: [CGPoint]) -> (cum: [CGFloat], total: CGFloat) {
+        var cum: [CGFloat] = [0]
+        var total: CGFloat = 0
+        for i in 0..<pts.count {
+            let a = pts[i], b = pts[(i + 1) % pts.count]
+            total += hypot(b.x - a.x, b.y - a.y)
+            cum.append(total)
+        }
+        return (cum, total)
+    }
+
+    private func closedPath(_ pts: [CGPoint]) -> Path {
+        var p = Path()
+        guard let first = pts.first else { return p }
+        p.move(to: first)
+        for pt in pts.dropFirst() { p.addLine(to: pt) }
+        p.closeSubpath()
+        return p
+    }
+
+    /// Path along the closed loop from vertex 0 up to arc length `length`.
+    private func subPath(_ pts: [CGPoint], _ cum: [CGFloat], upTo length: CGFloat) -> Path {
+        var path = Path()
+        guard let first = pts.first else { return path }
+        path.move(to: first)
+        for i in 0..<pts.count {
+            let a = pts[i], b = pts[(i + 1) % pts.count]
+            let segEnd = cum[i + 1]
+            if segEnd <= length {
+                path.addLine(to: b)
+            } else {
+                let segStart = cum[i]
+                let segLen = segEnd - segStart
+                let f = segLen > 0 ? (length - segStart) / segLen : 0
+                path.addLine(to: CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f))
+                break
+            }
+        }
+        return path
+    }
+
+    /// The point on the closed loop at arc length `length`.
+    private func pointAt(_ pts: [CGPoint], _ cum: [CGFloat], length: CGFloat) -> CGPoint {
+        guard let first = pts.first else { return .zero }
+        for i in 0..<pts.count {
+            let segEnd = cum[i + 1]
+            if segEnd >= length {
+                let a = pts[i], b = pts[(i + 1) % pts.count]
+                let segStart = cum[i]
+                let segLen = segEnd - segStart
+                let f = segLen > 0 ? (length - segStart) / segLen : 0
+                return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+            }
+        }
+        return first
     }
 }
 
@@ -87,6 +268,7 @@ private struct EffectView: View {
     let accent: RGBAColor
     let time: Double
     var name: String = ""
+    var outline: EffectOutline = .rect
 
     var body: some View {
         switch kind {
@@ -108,6 +290,8 @@ private struct EffectView: View {
             geometryEffects
         case .livingTexture, .depthBreaker:
             ambientEffects
+        case .outlineGlow:
+            edgeEffects
         }
     }
 
@@ -1248,6 +1432,15 @@ private struct EffectView: View {
 
         case .depthBreaker:
             Canvas { ctx, size in drawDepthBreaker(ctx: ctx, size: size) }
+
+        default: EmptyView()
+        }
+    }
+
+    @ViewBuilder private var edgeEffects: some View {
+        switch kind {
+        case .outlineGlow:
+            OutlineGlowView(color: color, accent: accent, time: time, outline: outline)
 
         default: EmptyView()
         }
