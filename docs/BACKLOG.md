@@ -25,10 +25,12 @@ surface shape, and a new `edgeEffects` builder) added 2026-07-10, plus a
 **Christmas Lights** set (new `.christmas` category + `christmasEffects` group)
 added 2026-07-11: `christmasTree` (bundled tree image with twinkle glints
 confined to an on-tree luminance+saturation+silhouette mask —
-`ChristmasTreeAsset`), and three sagging-strand string lights `chasingLights`,
-`multiColorLights`, `twinklingLights` (shared `ChristmasLights.strands(in:)`
-geometry in LumoraKit; fixed festive palette; no user color config).
-Total: **62 effects**.
+`ChristmasTreeAsset`), and four single sagging-strand string lights `chasingLights`,
+`multiColorLights`, `twinklingLights`, `warmBulbs` (shared
+`ChristmasLights.strands(in:)` geometry in LumoraKit; bulbs drawn as capped oval
+mini-lights or round warm globes with glow + highlight; fixed festive palette /
+warm amber; no user color config).
+Total: **63 effects**.
 They follow the `EffectKind` (`LumoraKit`) + `EffectView`
 (`Sources/Lumora/Views/SurfaceContentView.swift`) pattern: a `Canvas`/gradient
 driven by `time`, warpable, with primary/accent color support via
