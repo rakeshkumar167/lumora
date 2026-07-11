@@ -17,8 +17,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case colorBars
     case equalizer
     case starfieldWarp
-    case neonGrid
-    case vortex
     case aurora
     case fireflies
     case snow
@@ -27,39 +25,31 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case moire
     case truchet
     case concentricPolygons
-    case spirograph
     case fire
     case rain
     case lightning
     case bubbles
     case fallingLeaves
+    case fireworks
     case tvStatic
     case crtScanlines
     case matrixRain
-    case glitch
     case pixelDissolve
     case tunnel
-    case pendulumWave
     case dvdBounce
     case kaleidoscope
     case marqueeText
     case prismFalls
     case liquidSlosh
-    case fractalTree
-    case barnsleyFern
-    case kochSnowflake
-    case sierpinskiTriangle
     case voronoi
     case metaballs
     case hexGrid
-    case flowField
-    case lissajous
-    case orbits
     case vectorGrid
     case particleMesh
     case livingTexture
-    case depthBreaker
     case outlineGlow
+    case analogClock
+    case digitalClock
 
     public var id: String { rawValue }
 
@@ -67,8 +57,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesColor: Bool {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
-             .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle, .voronoi, .flowField,
-             .lissajous, .orbits, .vectorGrid, .livingTexture, .depthBreaker:
+             .voronoi, .vectorGrid, .livingTexture, .fire, .bubbles, .fireworks:
             return false
         default:
             return true
@@ -79,11 +68,11 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesAccent: Bool {
         switch self {
         case .grid, .gradientSweep, .breathingGlow, .radialPulse, .checkerboard, .waves,
-             .plasma, .strobe, .barberStripes, .equalizer, .neonGrid, .vortex,
-             .halftoneDots, .truchet, .concentricPolygons, .fire, .lightning,
-             .bubbles, .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
+             .plasma, .strobe, .barberStripes, .equalizer,
+             .halftoneDots, .truchet, .concentricPolygons, .lightning,
+             .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
-             .outlineGlow:
+             .outlineGlow, .analogClock, .digitalClock:
             return true
         default:
             return false
@@ -107,8 +96,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .colorBars: return "Color Bars"
         case .equalizer: return "Equalizer Bars"
         case .starfieldWarp: return "Starfield Warp"
-        case .neonGrid: return "Neon Grid"
-        case .vortex: return "Vortex"
         case .aurora: return "Aurora"
         case .fireflies: return "Fireflies"
         case .snow: return "Snow"
@@ -117,39 +104,31 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .moire: return "Moiré"
         case .truchet: return "Truchet Tiles"
         case .concentricPolygons: return "Concentric Polygons"
-        case .spirograph: return "Spirograph"
         case .fire: return "Fire"
         case .rain: return "Rain"
         case .lightning: return "Lightning"
         case .bubbles: return "Bubbles"
         case .fallingLeaves: return "Falling Leaves"
+        case .fireworks: return "Fireworks"
         case .tvStatic: return "TV Static"
         case .crtScanlines: return "CRT Scanlines"
         case .matrixRain: return "Matrix Rain"
-        case .glitch: return "Glitch"
         case .pixelDissolve: return "Pixel Dissolve"
         case .tunnel: return "Tunnel"
-        case .pendulumWave: return "Pendulum Wave"
         case .dvdBounce: return "DVD Bounce"
         case .kaleidoscope: return "Kaleidoscope"
         case .marqueeText: return "Marquee Text"
         case .prismFalls: return "Prism Falls"
         case .liquidSlosh: return "Liquid Slosh"
-        case .fractalTree: return "Fractal Tree"
-        case .barnsleyFern: return "Barnsley Fern"
-        case .kochSnowflake: return "Koch Snowflake"
-        case .sierpinskiTriangle: return "Sierpinski Triangle"
         case .voronoi: return "Voronoi Cells"
         case .metaballs: return "Metaballs"
         case .hexGrid: return "Hex Grid"
-        case .flowField: return "Flow Field"
-        case .lissajous: return "Lissajous"
-        case .orbits: return "Orbits"
         case .vectorGrid: return "Vector Grid"
         case .particleMesh: return "Particle Mesh"
         case .livingTexture: return "Living Texture"
-        case .depthBreaker: return "Depth Breaker"
         case .outlineGlow: return "Outline Glow"
+        case .analogClock: return "Analog Clock"
+        case .digitalClock: return "Digital Clock & Weather"
         }
     }
 
@@ -159,28 +138,28 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep,
              .radialPulse, .aurora, .plasma, .strobe:
             return .gradients
-        case .checkerboard, .barberStripes, .colorBars, .neonGrid, .halftoneDots,
-             .moire, .truchet, .concentricPolygons, .spirograph:
+        case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
+             .moire, .truchet, .concentricPolygons:
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
-             .lightning, .bubbles, .fallingLeaves:
+             .lightning, .bubbles, .fallingLeaves, .fireworks:
             return .nature
-        case .waves, .equalizer, .vortex, .tunnel, .pendulumWave, .kaleidoscope,
+        case .waves, .equalizer, .tunnel, .kaleidoscope,
              .prismFalls, .liquidSlosh:
             return .motion
-        case .tvStatic, .crtScanlines, .matrixRain, .glitch, .pixelDissolve,
+        case .tvStatic, .crtScanlines, .matrixRain, .pixelDissolve,
              .dvdBounce, .marqueeText:
             return .retro
-        case .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
-            return .fractals
-        case .voronoi, .metaballs, .hexGrid, .flowField:
+        case .voronoi, .metaballs, .hexGrid:
             return .fields
-        case .lissajous, .orbits, .vectorGrid, .particleMesh:
+        case .vectorGrid, .particleMesh:
             return .curvesGrids
-        case .livingTexture, .depthBreaker:
+        case .livingTexture:
             return .ambient
         case .outlineGlow:
             return .edge
+        case .analogClock, .digitalClock:
+            return .clocks
         }
     }
 }
@@ -193,11 +172,11 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case nature
     case motion
     case retro
-    case fractals
     case fields
     case curvesGrids
     case ambient
     case edge
+    case clocks
 
     public var id: String { rawValue }
 
@@ -208,11 +187,11 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .nature: return "Particles & Nature"
         case .motion: return "Waves & Motion"
         case .retro: return "Retro & Digital"
-        case .fractals: return "Fractals"
         case .fields: return "Fields"
         case .curvesGrids: return "Curves & Grids"
         case .ambient: return "Ambient & Illusion"
         case .edge: return "Edge"
+        case .clocks: return "Clocks & Info"
         }
     }
 
