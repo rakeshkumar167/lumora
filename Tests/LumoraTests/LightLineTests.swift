@@ -97,4 +97,34 @@ final class LightLineTests: XCTestCase {
         let decoded = try JSONDecoder().decode(LightLine.self, from: data)
         XCTAssertEqual(decoded, original)
     }
+
+    func testCycleClosingEdgeStaysDarkAtFullFill() {
+        // Documents the accepted trade-off: in a symmetric loop, the closing edge
+        // never lights because its nearer endpoint is already at maxDistance.
+        let a = UUID(), b = UUID(), c = UUID()
+        // Equilateral-ish triangle: A(0,0) source, B(1,0), C(0.5, 0.866)
+        // with edges A–B, A–C, B–C.
+        let l = line(
+            joints: [
+                (a, CGPoint(x: 0, y: 0)),
+                (b, CGPoint(x: 1, y: 0)),
+                (c, CGPoint(x: 0.5, y: 0.866))
+            ],
+            edges: [(a, b), (a, c), (b, c)],
+            source: a
+        )
+        let d = l.distancesFromSource()
+        let maxD = l.maxDistance()
+
+        // Verify distances: A at source (0), B and C each ~1.0 (direct edge lengths).
+        XCTAssertEqual(d[a]!, 0, accuracy: 1e-9)
+        XCTAssertEqual(d[b]!, 1.0, accuracy: 1e-3)
+        XCTAssertEqual(d[c]!, hypot(0.5, 0.866), accuracy: 1e-3)
+
+        // The B–C segment (closing edge) is at segments[2] (added third).
+        let bc = l.segments[2]
+        // Even at full fill (front == maxD), the closing edge stays essentially dark
+        // (lit fraction ~ 0) because its nearer endpoint is already at maxDistance.
+        XCTAssertEqual(l.litFraction(of: bc, front: maxD, distances: d), 0, accuracy: 1e-4)
+    }
 }

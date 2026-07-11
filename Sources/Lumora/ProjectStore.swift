@@ -80,7 +80,7 @@ final class ProjectStore: ObservableObject {
         var surface = Surface.defaultRect(name: "Surface \(surfaces.count + 1)")
         surface.media = .effect(.grid, .cyan, RGBAColor(r: 0.05, g: 0.06, b: 0.09))
         surfaces.append(surface)
-        selectedID = surface.id
+        selectSurface(surface.id)
     }
 
     // MARK: - Save / Open
@@ -211,6 +211,9 @@ final class ProjectStore: ObservableObject {
     func connectJoint(to lineID: LightLine.ID, existing jointID: UUID, from lastJointID: UUID?) {
         guard let last = lastJointID, last != jointID else { return }
         updateLine(lineID) { line in
+            // Verify both joints belong to this line before connecting them.
+            guard line.joints.contains(where: { $0.id == last }),
+                  line.joints.contains(where: { $0.id == jointID }) else { return }
             // Avoid duplicate segments between the same pair.
             let exists = line.segments.contains {
                 ($0.a == last && $0.b == jointID) || ($0.a == jointID && $0.b == last)
