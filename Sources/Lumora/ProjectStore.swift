@@ -198,7 +198,7 @@ final class ProjectStore: ObservableObject {
         let joint = LightLine.Joint(point: point)
         updateLine(lineID) { line in
             line.joints.append(joint)
-            if let last = lastJointID, last != joint.id {
+            if let last = lastJointID, last != joint.id, line.joints.contains(where: { $0.id == last }) {
                 line.segments.append(LightLine.Segment(a: last, b: joint.id))
             }
             if line.sourceJointID == nil { line.sourceJointID = joint.id }

@@ -30,6 +30,7 @@ struct RoomCanvasView: View {
 
                 if let selectedLine = store.selectedLine {
                     LightLineHandlesOverlay(line: selectedLine, canvasSize: size)
+                        .id(selectedLine.id)
                 } else if let selected = store.selected {
                     HandlesOverlay(surface: selected, canvasSize: size)
                 }
