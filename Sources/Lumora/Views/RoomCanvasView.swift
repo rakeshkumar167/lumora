@@ -22,6 +22,12 @@ struct RoomCanvasView: View {
                     }
                 }
 
+                ForEach(store.lightLines) { line in
+                    if line.isVisible {
+                        LightLineView(line: line, canvasSize: size, time: t)
+                    }
+                }
+
                 if let selected = store.selected {
                     HandlesOverlay(surface: selected, canvasSize: size)
                 }

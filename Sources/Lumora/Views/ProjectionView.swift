@@ -21,6 +21,12 @@ struct ProjectionRootView: View {
                                 SurfaceContentView(surface: surface, canvasSize: size, time: t)
                             }
                         }
+
+                        ForEach(store.lightLines) { line in
+                            if line.isVisible {
+                                LightLineView(line: line, canvasSize: size, time: t)
+                            }
+                        }
                     }
                     .frame(width: size.width, height: size.height)
                     .scaleEffect(scale)
