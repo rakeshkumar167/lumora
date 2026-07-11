@@ -419,8 +419,8 @@ private struct EffectView: View {
         // Glass body dangling below the cap. Globes are round; the others are
         // C7/C9-style flame bulbs — a wide rounded shoulder near the cap
         // tapering to a pointed tip.
-        let halfH: CGFloat = round ? r : r * 1.5
-        let halfW: CGFloat = round ? r : r * 0.85
+        let halfH: CGFloat = round ? r : r * 1.6
+        let halfW: CGFloat = round ? r : r * 0.82
         let cy = p.y + capH * 0.5 + halfH
         let center = CGPoint(x: p.x, y: cy)
 
@@ -447,24 +447,30 @@ private struct EffectView: View {
                  with: .color(.white.opacity(0.55 * max(0.4, brightness))))
     }
 
-    /// A C7/C9 "flame" bulb outline: a rounded, wide shoulder near the top (cap
-    /// side) tapering down to a pointed tip. `center` is the body center.
+    /// A C7/C9 "flame" bulb outline: a rounded egg-shaped shoulder near the top
+    /// (cap side) with a long smooth taper to a blunt rounded tip at the bottom.
+    /// `center` is the body center.
     private func flameBulbPath(center: CGPoint, halfW: CGFloat, halfH: CGFloat) -> Path {
         let cx = center.x
-        let ty = center.y - halfH          // top (cap side)
-        let by = center.y + halfH          // pointed tip
-        let shoulderY = center.y - halfH * 0.40   // widest, ~30% down from top
+        let ty = center.y - halfH                  // top (cap side)
+        let by = center.y + halfH                  // tip
+        let shoulderY = center.y - halfH * 0.45    // widest, ~27% down from top
+        let tipHalf = halfW * 0.16                 // half-width of the blunt tip
         var p = Path()
-        p.move(to: CGPoint(x: cx - halfW, y: shoulderY))
-        // Rounded dome over the top toward the cap.
+        // Blunt rounded bottom tip.
+        p.move(to: CGPoint(x: cx - tipHalf, y: by))
+        p.addQuadCurve(to: CGPoint(x: cx + tipHalf, y: by),
+                       control: CGPoint(x: cx, y: by + halfH * 0.06))
+        // Up the right side, curving out to the widest shoulder.
         p.addQuadCurve(to: CGPoint(x: cx + halfW, y: shoulderY),
-                       control: CGPoint(x: cx, y: ty - halfH * 0.05))
-        // Right shoulder tapering to the tip.
-        p.addQuadCurve(to: CGPoint(x: cx, y: by),
-                       control: CGPoint(x: cx + halfW * 0.95, y: center.y + halfH * 0.4))
-        // Tip back up the left side.
-        p.addQuadCurve(to: CGPoint(x: cx - halfW, y: shoulderY),
-                       control: CGPoint(x: cx - halfW * 0.95, y: center.y + halfH * 0.4))
+                       control: CGPoint(x: cx + halfW * 0.92, y: by - halfH * 0.55))
+        // Rounded egg dome over the top to the left shoulder.
+        p.addCurve(to: CGPoint(x: cx - halfW, y: shoulderY),
+                   control1: CGPoint(x: cx + halfW, y: ty),
+                   control2: CGPoint(x: cx - halfW, y: ty))
+        // Down the left side back to the tip.
+        p.addQuadCurve(to: CGPoint(x: cx - tipHalf, y: by),
+                       control: CGPoint(x: cx - halfW * 0.92, y: by - halfH * 0.55))
         p.closeSubpath()
         return p
     }

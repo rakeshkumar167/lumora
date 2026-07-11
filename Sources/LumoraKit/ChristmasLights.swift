@@ -21,7 +21,7 @@ public enum ChristmasLights {
         public init(bulbs: [CGPoint]) { self.bulbs = bulbs }
     }
 
-    private static let bulbSpacing: CGFloat = 69   // ~25% wider than before → fewer, more-spaced bulbs
+    private static let bulbSpacing: CGFloat = 86   // wider spacing → fewer, more-spaced bulbs
     private static let insetFraction: CGFloat = 0.06
 
     /// A single horizontal strand hung across the surface, sagging in the
