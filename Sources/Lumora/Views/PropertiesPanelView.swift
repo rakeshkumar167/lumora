@@ -82,6 +82,7 @@ struct PropertiesPanelView: View {
 /// Picks the media kind and its parameters for a surface.
 private struct MediaEditor: View {
     @Binding var media: MediaAssignment
+    @ObservedObject private var weather = WeatherStore.shared
 
     private enum Kind: String, CaseIterable, Identifiable {
         case none, color, effect, image, video, laserTrace, contourTrace
@@ -131,6 +132,14 @@ private struct MediaEditor: View {
                     Section(category.displayName) {
                         ForEach(category.effects) { Text($0.displayName).tag($0) }
                     }
+                }
+            }
+            if effectKind == .digitalClock {
+                Picker("City", selection: Binding(
+                    get: { weather.selectedCity },
+                    set: { weather.selectedCity = $0 }
+                )) {
+                    ForEach(Cities.all) { Text($0.name).tag($0) }
                 }
             }
             if effectKind.usesColor {

@@ -274,24 +274,24 @@ private struct EffectView: View {
         switch kind {
         case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep, .radialPulse, .aurora, .plasma, .strobe:
             gradientEffects
-        case .checkerboard, .barberStripes, .colorBars, .neonGrid, .halftoneDots, .moire, .truchet, .concentricPolygons, .spirograph:
+        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .moire, .truchet, .concentricPolygons:
             patternEffects
-        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves:
+        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks:
             natureEffects
-        case .waves, .equalizer, .vortex, .tunnel, .pendulumWave, .kaleidoscope, .prismFalls, .liquidSlosh:
+        case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh:
             motionEffects
-        case .tvStatic, .crtScanlines, .matrixRain, .glitch, .pixelDissolve, .dvdBounce, .marqueeText:
+        case .tvStatic, .crtScanlines, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
-        case .fractalTree, .barnsleyFern, .kochSnowflake, .sierpinskiTriangle:
-            fractalEffects
-        case .voronoi, .metaballs, .hexGrid, .flowField:
+        case .voronoi, .metaballs, .hexGrid:
             fieldEffects
-        case .lissajous, .orbits, .vectorGrid, .particleMesh:
+        case .vectorGrid, .particleMesh:
             geometryEffects
-        case .livingTexture, .depthBreaker:
+        case .livingTexture:
             ambientEffects
         case .outlineGlow:
             edgeEffects
+        case .analogClock, .digitalClock:
+            clockEffects
         }
     }
 
@@ -538,35 +538,6 @@ private struct EffectView: View {
                 }
             }
 
-        case .neonGrid:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
-                let horizon = size.height * 0.45
-                let vanishing = CGPoint(x: size.width / 2, y: horizon)
-                let cols = 12
-                for i in 0...cols {
-                    let x = size.width * CGFloat(i) / CGFloat(cols)
-                    var p = Path()
-                    p.move(to: CGPoint(x: x, y: size.height))
-                    p.addLine(to: vanishing)
-                    ctx.stroke(p, with: .color(color.color.opacity(0.55)), lineWidth: 1)
-                }
-                let rows = 12
-                let scroll = fract(time * 0.6)
-                for i in 0..<rows {
-                    let f = (Double(i) + scroll) / Double(rows)
-                    let y = horizon + (size.height - horizon) * CGFloat(f * f)
-                    var p = Path()
-                    p.move(to: CGPoint(x: 0, y: y))
-                    p.addLine(to: CGPoint(x: size.width, y: y))
-                    ctx.stroke(p, with: .color(color.color.opacity(0.55)), lineWidth: 1)
-                }
-                var glow = Path()
-                glow.move(to: CGPoint(x: 0, y: horizon))
-                glow.addLine(to: CGPoint(x: size.width, y: horizon))
-                ctx.stroke(glow, with: .color(accent.color), lineWidth: 2)
-            }
-
         case .halftoneDots:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
@@ -656,27 +627,6 @@ private struct EffectView: View {
                     ctx.stroke(path, with: .color(c), lineWidth: 3)
                 }
             }
-        case .spirograph:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let R = 140.0, r = 60.0, d = 100.0
-                var path = Path()
-                var first = true
-                let rotation = time * 0.1
-                var t = 0.0
-                while t <= .pi * 2 * 6 {
-                    let px = (R - r) * cos(t) + d * cos((R - r) / r * t)
-                    let py = (R - r) * sin(t) - d * sin((R - r) / r * t)
-                    let angle = atan2(py, px) + rotation
-                    let radius = hypot(px, py)
-                    let pt = point(center, angle, radius)
-                    if first { path.move(to: pt); first = false } else { path.addLine(to: pt) }
-                    t += 0.1
-                }
-                ctx.stroke(path, with: .color(color.color), lineWidth: 2)
-            }
-
         default: EmptyView()
         }
     }
@@ -760,24 +710,7 @@ private struct EffectView: View {
                 }
             }
         case .fire:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
-                ctx.drawLayer { layer in
-                    layer.addFilter(.blur(radius: 12))
-                    for i in 0..<28 {
-                        let baseX = Double(hash01(i, 1)) * Double(size.width)
-                        let speed = 0.6 + Double(hash01(i, 2)) * 0.8
-                        let riseT = fract(Double(hash01(i, 3)) + time * speed)
-                        let y = Double(size.height) * (1 - riseT)
-                        let sway = sin(time * 2 + Double(i)) * 16
-                        let x = baseX + sway
-                        let r = 14.0 + 24.0 * (1 - riseT)
-                        let rect = CGRect(x: CGFloat(x - r / 2), y: CGFloat(y - r / 2), width: CGFloat(r), height: CGFloat(r))
-                        let tint = riseT < 0.55 ? color.color : accent.color
-                        layer.fill(Path(ellipseIn: rect), with: .color(tint.opacity(1 - riseT * 0.7)))
-                    }
-                }
-            }
+            Canvas { ctx, size in drawFire(ctx: ctx, size: size) }
         case .rain:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
@@ -818,21 +751,7 @@ private struct EffectView: View {
                 }
             }
         case .bubbles:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.05)))
-                for i in 0..<36 {
-                    let speed = 0.15 + Double(hash01(i, 1)) * 0.3
-                    let riseT = fract(Double(hash01(i, 2)) + time * speed)
-                    let y = Double(size.height) * (1 - riseT)
-                    let baseX = Double(hash01(i, 3)) * Double(size.width)
-                    let wobble = sin(time * 1.3 + Double(i) * 2.1) * 14
-                    let x = baseX + wobble
-                    let r = 6.0 + Double(hash01(i, 4)) * 16.0
-                    let rect = CGRect(x: CGFloat(x - r), y: CGFloat(y - r), width: CGFloat(r * 2), height: CGFloat(r * 2))
-                    let tint = i % 2 == 0 ? color.color : accent.color
-                    ctx.stroke(Path(ellipseIn: rect), with: .color(tint.opacity(0.6)), lineWidth: 2)
-                }
-            }
+            Canvas { ctx, size in drawBubbles(ctx: ctx, size: size) }
 
         case .fallingLeaves:
             Canvas { ctx, size in
@@ -855,6 +774,8 @@ private struct EffectView: View {
                     }
                 }
             }
+        case .fireworks:
+            Canvas { ctx, size in drawFireworks(ctx: ctx, size: size) }
         default: EmptyView()
         }
     }
@@ -899,27 +820,6 @@ private struct EffectView: View {
                 }
             }
 
-        case .vortex:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color.opacity(0.12)))
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let maxR = Double(hypot(size.width, size.height)) / 2
-                let arms = 5
-                for a in 0..<arms {
-                    var p = Path()
-                    let base = Double(a) / Double(arms) * 2 * .pi + time * 0.8
-                    var r = 0.0
-                    var first = true
-                    while r < maxR {
-                        let pt = point(center, base + r * 0.02, r)
-                        if first { p.move(to: pt); first = false } else { p.addLine(to: pt) }
-                        r += 6
-                    }
-                    let armColor = a % 2 == 0 ? color.color : accent.color
-                    ctx.stroke(p, with: .color(armColor), lineWidth: 6)
-                }
-            }
-
         case .tunnel:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
@@ -935,28 +835,6 @@ private struct EffectView: View {
                     ctx.stroke(Path(ellipseIn: rect), with: .color(c.opacity(0.2 + 0.8 * f)), lineWidth: CGFloat(4 + f * 10))
                 }
             }
-        case .pendulumWave:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
-                let count = 20
-                let originY = size.height * 0.15
-                let length = size.height * 0.6
-                for i in 0..<count {
-                    let x = size.width * (CGFloat(i) + 0.5) / CGFloat(count)
-                    let period = 1.4 + Double(i) * 0.05
-                    let angle = sin(time * 2 * .pi / period) * 0.5
-                    let dotX = x + CGFloat(sin(angle)) * 50
-                    let dotY = originY + length * CGFloat(cos(angle))
-                    var line = Path()
-                    line.move(to: CGPoint(x: x, y: originY))
-                    line.addLine(to: CGPoint(x: dotX, y: dotY))
-                    ctx.stroke(line, with: .color(color.color.opacity(0.3)), lineWidth: 1)
-                    let r: CGFloat = 8
-                    ctx.fill(Path(ellipseIn: CGRect(x: dotX - r, y: dotY - r, width: r * 2, height: r * 2)),
-                             with: .color(color.color))
-                }
-            }
-
         case .kaleidoscope:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
@@ -992,18 +870,18 @@ private struct EffectView: View {
             // its screen position `(s - k)·bandH` grows smoothly downward — no snap or
             // colour reshuffle at period boundaries.
             Canvas { ctx, size in
-                let bandH = max(size.height * 0.4, 1)
+                let bandH = max(size.height * 0.18, 1)           // thinner bands → less gap between waves
                 let speed = size.height / 3.5                     // px/sec downward
                 let s = (time * speed) / Double(bandH)            // continuous scroll, in bands
                 let newest = floor(s)
-                let amp = bandH * 0.12
+                let amp = bandH * 0.2
                 // Background is the incoming band's hue, so any sliver above the topmost
                 // wave crest bleeds in as the new colour instead of flashing to black.
                 let incomingHue = fract((newest + 1) * 0.11)
                 ctx.fill(Path(CGRect(origin: .zero, size: size)),
                          with: .color(Color(hue: incomingHue, saturation: 0.9, brightness: 1.0)))
                 let dx = max(size.width / 40, 4)
-                let visible = 4
+                let visible = 9
                 func edgeY(_ x: CGFloat, _ base: CGFloat, _ phase: Double) -> CGFloat {
                     base + amp * CGFloat(sin(Double(x) * 0.012 + time * 0.8 + phase))
                 }
@@ -1152,26 +1030,6 @@ private struct EffectView: View {
                 }
             }
 
-        case .glitch:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
-                let sliceH: CGFloat = 16
-                var y: CGFloat = 0
-                var i = 0
-                let epoch = Int(time * 8)
-                while y < size.height {
-                    let jitter = (hash01(i, epoch) - 0.5) * 60
-                    let rect = CGRect(x: jitter, y: y, width: size.width, height: sliceH)
-                    if hash01(i, epoch + 500) > 0.8 {
-                        ctx.fill(Path(rect), with: .color(color.color.opacity(0.5)))
-                        ctx.fill(Path(rect.offsetBy(dx: 4, dy: 0)), with: .color(.red.opacity(0.35)))
-                        ctx.fill(Path(rect.offsetBy(dx: -4, dy: 0)), with: .color(.cyan.opacity(0.35)))
-                    } else {
-                        ctx.fill(Path(rect), with: .color(color.color.opacity(0.15)))
-                    }
-                    y += sliceH; i += 1
-                }
-            }
         case .pixelDissolve:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
@@ -1232,163 +1090,6 @@ private struct EffectView: View {
         }
     }
 
-    @ViewBuilder private var fractalEffects: some View {
-        switch kind {
-        case .fractalTree:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
-                ctx.opacity = op
-                let maxDepth = 11
-                let cur = g * Double(maxDepth)
-                let branchAngle = 0.35 + Double(hash01(cycle, 1)) * 0.35
-                let ratio = 0.68 + Double(hash01(cycle, 2)) * 0.10
-                let lean = (Double(hash01(cycle, 3)) - 0.5) * 0.4
-                let baseX = Double(size.width) * (0.4 + Double(hash01(cycle, 4)) * 0.2)
-                let startLen = Double(size.height) * 0.28
-                func draw(_ x: Double, _ y: Double, _ angle: Double, _ len: Double, _ depth: Int) {
-                    let reveal = cur - Double(depth)
-                    if reveal <= 0 { return }
-                    let frac = min(reveal, 1)
-                    let x2 = x + cos(angle) * len * frac
-                    let y2 = y + sin(angle) * len * frac
-                    let t = Double(depth) / Double(maxDepth)
-                    let col = Color(red: 0.40 + 0.55 * t, green: 0.26 + 0.44 * t, blue: 0.13 + 0.05 * t)
-                    var p = Path()
-                    p.move(to: CGPoint(x: x, y: y))
-                    p.addLine(to: CGPoint(x: x2, y: y2))
-                    ctx.stroke(p, with: .color(col), lineWidth: max(1.0, Double(maxDepth - depth) * 0.6))
-                    if frac >= 1 && depth < maxDepth {
-                        draw(x2, y2, angle - branchAngle, len * ratio, depth + 1)
-                        draw(x2, y2, angle + branchAngle, len * ratio, depth + 1)
-                    }
-                }
-                draw(baseX, Double(size.height) * 0.96, -Double.pi / 2 + lean, startLen, 0)
-            }
-
-        case .barnsleyFern:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
-                ctx.opacity = op
-                let maxPoints = 4000
-                let n = Int(g * Double(maxPoints))
-                let salt = cycle * 4 + 11
-                let mirror = Double(hash01(cycle, 1)) < 0.5 ? -1.0 : 1.0
-                let scale = 0.9 + Double(hash01(cycle, 2)) * 0.25
-                let fw = Double(size.width) * 0.42 * scale
-                let fh = Double(size.height) * 0.92 * scale
-                var x = 0.0, y = 0.0
-                var lowPath = Path(), highPath = Path()
-                for i in 0..<n {
-                    let r = Double(hash01(i, salt))
-                    let nx: Double, ny: Double
-                    if r < 0.01 { nx = 0; ny = 0.16 * y }
-                    else if r < 0.86 { nx = 0.85 * x + 0.04 * y; ny = -0.04 * x + 0.85 * y + 1.6 }
-                    else if r < 0.93 { nx = 0.20 * x - 0.26 * y; ny = 0.23 * x + 0.22 * y + 1.6 }
-                    else { nx = -0.15 * x + 0.28 * y; ny = 0.26 * x + 0.24 * y + 0.44 }
-                    x = nx; y = ny
-                    if i < 20 { continue }
-                    let px = Double(size.width) * 0.5 + mirror * (x / 2.75) * fw
-                    let py = Double(size.height) * 0.98 - (y / 10.4) * fh
-                    let rect = CGRect(x: px - 0.7, y: py - 0.7, width: 1.4, height: 1.4)
-                    if y < 4 { lowPath.addRect(rect) } else { highPath.addRect(rect) }
-                }
-                ctx.fill(lowPath, with: .color(Color(red: 0.10, green: 0.40, blue: 0.12)))
-                ctx.fill(highPath, with: .color(Color(red: 0.30, green: 0.75, blue: 0.22)))
-            }
-
-        case .kochSnowflake:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
-                ctx.opacity = op
-                let maxIter = 5
-                let iterF = g * Double(maxIter)
-                let full = Int(floor(iterF))
-                let grow = iterF - Double(full)
-                let rot = Double(hash01(cycle, 1)) * 2 * .pi
-                let hueJit = 0.55 + Double(hash01(cycle, 2)) * 0.10
-                let R = Double(min(size.width, size.height)) * (0.30 + Double(hash01(cycle, 3)) * 0.05)
-                let cx = Double(size.width) / 2, cy = Double(size.height) / 2
-                func vert(_ k: Int) -> CGPoint {
-                    let a = rot - .pi / 2 + Double(k) * 2 * .pi / 3
-                    return CGPoint(x: cx + R * cos(a), y: cy + R * sin(a))
-                }
-                var pts: [CGPoint] = []
-                func koch(_ a: CGPoint, _ b: CGPoint, _ level: Int) {
-                    if level == 0 { pts.append(a); return }
-                    let ax = Double(a.x), ay = Double(a.y), bx = Double(b.x), by = Double(b.y)
-                    let p2 = CGPoint(x: ax + (bx - ax) / 3, y: ay + (by - ay) / 3)
-                    let p4 = CGPoint(x: ax + 2 * (bx - ax) / 3, y: ay + 2 * (by - ay) / 3)
-                    let mx = (Double(p2.x) + Double(p4.x)) / 2, my = (Double(p2.y) + Double(p4.y)) / 2
-                    let dx = Double(p4.x) - Double(p2.x), dy = Double(p4.y) - Double(p2.y)
-                    let ang = -Double.pi / 3   // outward bump; flip sign if bumps point inward
-                    let apexFull = CGPoint(x: Double(p2.x) + dx * cos(ang) - dy * sin(ang),
-                                           y: Double(p2.y) + dx * sin(ang) + dy * cos(ang))
-                    let gg = (level == 1) ? grow : 1.0
-                    let apex = CGPoint(x: mx + (Double(apexFull.x) - mx) * gg,
-                                       y: my + (Double(apexFull.y) - my) * gg)
-                    koch(a, p2, level - 1)
-                    koch(p2, apex, level - 1)
-                    koch(apex, p4, level - 1)
-                    koch(p4, b, level - 1)
-                }
-                let level = full + (grow > 0 ? 1 : 0)
-                let v = [vert(0), vert(1), vert(2)]
-                koch(v[0], v[1], level); koch(v[1], v[2], level); koch(v[2], v[0], level)
-                pts.append(v[0])
-                var path = Path()
-                path.move(to: pts[0])
-                for p in pts.dropFirst() { path.addLine(to: p) }
-                path.closeSubpath()
-                ctx.fill(path, with: .color(Color(hue: hueJit, saturation: 0.6, brightness: 0.5).opacity(0.25)))
-                ctx.stroke(path, with: .color(Color(hue: hueJit, saturation: 0.5, brightness: 1.0)), lineWidth: 1.5)
-            }
-
-        case .sierpinskiTriangle:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-                let (g, cycle, op) = fractalCycle(period: 120, build: 90, hold: 15)
-                ctx.opacity = op
-                let maxDepth = 6
-                let depthF = g * Double(maxDepth)
-                let D = Int(floor(depthF))
-                let frac = depthF - Double(D)
-                let rot = Double(hash01(cycle, 1)) * 2 * .pi
-                let hue = fract(Double(hash01(cycle, 2)))
-                let R = Double(min(size.width, size.height)) * 0.42
-                let cx = Double(size.width) / 2, cy = Double(size.height) / 2 + R * 0.15
-                func vert(_ k: Int) -> CGPoint {
-                    let a = rot - .pi / 2 + Double(k) * 2 * .pi / 3
-                    return CGPoint(x: cx + R * cos(a), y: cy + R * sin(a))
-                }
-                func mid(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2) }
-                func tri(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> Path {
-                    var p = Path(); p.move(to: a); p.addLine(to: b); p.addLine(to: c); p.closeSubpath(); return p
-                }
-                let col = Color(hue: hue, saturation: 0.7, brightness: 0.95)
-                func sierp(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ depth: Int) {
-                    if depth == 0 { ctx.fill(tri(a, b, c), with: .color(col)); return }
-                    let ab = mid(a, b), bc = mid(b, c), ca = mid(c, a)
-                    sierp(a, ab, ca, depth - 1); sierp(ab, b, bc, depth - 1); sierp(ca, bc, c, depth - 1)
-                }
-                let A = vert(0), B = vert(1), C = vert(2)
-                sierp(A, B, C, D)
-                if frac > 0 && D < maxDepth {
-                    func holes(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ depth: Int) {
-                        let ab = mid(a, b), bc = mid(b, c), ca = mid(c, a)
-                        if depth == 0 { ctx.fill(tri(ab, bc, ca), with: .color(.black.opacity(frac))); return }
-                        holes(a, ab, ca, depth - 1); holes(ab, b, bc, depth - 1); holes(ca, bc, c, depth - 1)
-                    }
-                    holes(A, B, C, D)
-                }
-            }
-
-        default: EmptyView()
-        }
-    }
-
     @ViewBuilder private var fieldEffects: some View {
         switch kind {
         case .voronoi:
@@ -1400,21 +1101,12 @@ private struct EffectView: View {
         case .hexGrid:
             Canvas { ctx, size in drawHexGrid(ctx: ctx, size: size) }
 
-        case .flowField:
-            Canvas { ctx, size in drawFlowField(ctx: ctx, size: size) }
-
         default: EmptyView()
         }
     }
 
     @ViewBuilder private var geometryEffects: some View {
         switch kind {
-        case .lissajous:
-            Canvas { ctx, size in drawLissajous(ctx: ctx, size: size) }
-
-        case .orbits:
-            Canvas { ctx, size in drawOrbits(ctx: ctx, size: size) }
-
         case .vectorGrid:
             Canvas { ctx, size in drawVectorGrid(ctx: ctx, size: size) }
 
@@ -1430,9 +1122,6 @@ private struct EffectView: View {
         case .livingTexture:
             Canvas { ctx, size in drawLivingTexture(ctx: ctx, size: size) }
 
-        case .depthBreaker:
-            Canvas { ctx, size in drawDepthBreaker(ctx: ctx, size: size) }
-
         default: EmptyView()
         }
     }
@@ -1443,6 +1132,278 @@ private struct EffectView: View {
             OutlineGlowView(color: color, accent: accent, time: time, outline: outline)
 
         default: EmptyView()
+        }
+    }
+
+    @ViewBuilder private var clockEffects: some View {
+        switch kind {
+        case .analogClock:
+            Canvas { ctx, size in drawAnalogClock(ctx: ctx, size: size) }
+
+        case .digitalClock:
+            DigitalClockView(color: color, accent: accent, time: time)
+
+        default: EmptyView()
+        }
+    }
+
+    /// Map flame "temperature" (0 = cool dark red … 1 = white-hot) to colour.
+    private func fireColor(_ t: Double) -> Color {
+        if t > 0.8 { let k = (t - 0.8) / 0.2; return Color(red: 1, green: 0.9 + 0.1 * k, blue: 0.55 + 0.4 * k) }
+        if t > 0.5 { let k = (t - 0.5) / 0.3; return Color(red: 1, green: 0.55 + 0.35 * k, blue: 0.10 + 0.12 * k) }
+        if t > 0.2 { let k = (t - 0.2) / 0.3; return Color(red: 0.92 + 0.08 * k, green: 0.18 + 0.37 * k, blue: 0.0) }
+        let k = t / 0.2; return Color(red: 0.45 + 0.47 * k, green: 0.02 + 0.16 * k, blue: 0.0)
+    }
+
+    private func drawFire(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        // Additive, blurred flame particles rising from the base.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            layer.addFilter(.blur(radius: 9))
+            drawFireGlow(&layer, size: size)
+            drawFlameParticles(&layer, size: size)
+            drawEmbers(&layer, size: size)
+        }
+    }
+
+    /// Warm base glow so the fire has a bright, grounded root.
+    private func drawFireGlow(_ layer: inout GraphicsContext, size: CGSize) {
+        let glowH: CGFloat = size.height * 0.4
+        let rect = CGRect(x: 0, y: size.height - glowH, width: size.width, height: glowH)
+        let colors: [Color] = [Color(red: 1.0, green: 0.45, blue: 0.08).opacity(0.5), .clear]
+        layer.fill(Path(rect), with: .linearGradient(
+            Gradient(colors: colors),
+            startPoint: CGPoint(x: 0, y: size.height),
+            endPoint: CGPoint(x: 0, y: size.height - glowH)))
+    }
+
+    private func drawFlameParticles(_ layer: inout GraphicsContext, size: CGSize) {
+        let w = Double(size.width), h = Double(size.height)
+        for i in 0..<70 {
+            let speed: Double = 0.5 + Double(hash01(i, 2)) * 0.9
+            let riseT: Double = fract(Double(hash01(i, 3)) + time * speed)   // 0 base … 1 top
+            // Concentrate flames toward the centre for a natural fire shape.
+            let spread: Double = 0.5 + (Double(hash01(i, 1)) - 0.5) * (0.9 - riseT * 0.4)
+            let flicker: Double = sin(time * (3 + Double(hash01(i, 6)) * 4) + Double(i) * 1.7)
+            let sway: Double = flicker * (8 + riseT * 26)
+            let x: Double = spread * w + sway
+            let y: Double = h * (1 - riseT * 0.98) - h * 0.02
+            // Hottest at the base, cooling as it rises; flicker jitters it.
+            let temp: Double = max(0, (1 - riseT * 1.05) + flicker * 0.06)
+            let r: Double = (10.0 + Double(hash01(i, 4)) * 12.0) * (1 - riseT * 0.55)
+            let alpha: Double = min(1, (1 - riseT) * 1.6) * (0.55 + 0.45 * (0.5 + 0.5 * flicker))
+            let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
+            let colors: [Color] = [fireColor(temp).opacity(alpha), .clear]
+            layer.fill(Path(ellipseIn: rect), with: .radialGradient(
+                Gradient(colors: colors),
+                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: r))
+        }
+    }
+
+    /// A few bright rising embers/sparks.
+    private func drawEmbers(_ layer: inout GraphicsContext, size: CGSize) {
+        let w = Double(size.width), h = Double(size.height)
+        for i in 0..<14 {
+            let speed: Double = 0.7 + Double(hash01(i, 11)) * 0.9
+            let riseT: Double = fract(Double(hash01(i, 12)) + time * speed)
+            let x: Double = Double(hash01(i, 13)) * w + sin(time * 3 + Double(i)) * 20
+            let y: Double = h * (1 - riseT)
+            let er: Double = 1.5 + Double(hash01(i, 14)) * 1.5
+            let rect = CGRect(x: x - er, y: y - er, width: er * 2, height: er * 2)
+            let ember = Color(red: 1, green: 0.8, blue: 0.4).opacity((1 - riseT) * 0.9)
+            layer.fill(Path(ellipseIn: rect), with: .color(ember))
+        }
+    }
+
+    private func drawBubbles(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.04)))
+        // Bright, colour-hued bubbles: each gets its own vivid hue, a glassy
+        // filled body (additive so overlaps glow) and a rim + specular glint.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for i in 0..<36 {
+                let speed = 0.15 + Double(hash01(i, 1)) * 0.3
+                let riseT = fract(Double(hash01(i, 2)) + time * speed)
+                let y = Double(size.height) * (1 - riseT)
+                let baseX = Double(hash01(i, 3)) * Double(size.width)
+                let wobble = sin(time * 1.3 + Double(i) * 2.1) * 14
+                let x = baseX + wobble
+                let r = 6.0 + Double(hash01(i, 4)) * 16.0
+                let rect = CGRect(x: CGFloat(x - r), y: CGFloat(y - r), width: CGFloat(r * 2), height: CGFloat(r * 2))
+                let hue = fract(Double(hash01(i, 5)) + time * 0.05)
+                let body = Color(hue: hue, saturation: 0.85, brightness: 1.0)
+                // Filled glassy body: bright core fading to a saturated edge.
+                layer.fill(Path(ellipseIn: rect),
+                           with: .radialGradient(
+                                Gradient(colors: [Color.white.opacity(0.55), body.opacity(0.7), body.opacity(0.15)]),
+                                center: CGPoint(x: x - r * 0.3, y: y - r * 0.3),
+                                startRadius: 0, endRadius: r * 1.2))
+                // Bright rim.
+                layer.stroke(Path(ellipseIn: rect), with: .color(body.opacity(0.9)), lineWidth: 1.5)
+                // Specular glint.
+                let gr = r * 0.28
+                let grect = CGRect(x: CGFloat(x - r * 0.35 - gr), y: CGFloat(y - r * 0.35 - gr),
+                                   width: CGFloat(gr * 2), height: CGFloat(gr * 2))
+                layer.fill(Path(ellipseIn: grect), with: .color(.white.opacity(0.7)))
+            }
+        }
+    }
+
+    private func drawAnalogClock(ctx: GraphicsContext, size: CGSize) {
+        // Real local time reconstructed from the global reference clock.
+        let date = Date(timeIntervalSinceReferenceDate: time)
+        let comps = Calendar.current.dateComponents([.hour, .minute, .second, .nanosecond], from: date)
+        let hours = Double(comps.hour ?? 0)
+        let minutes = Double(comps.minute ?? 0)
+        let seconds = Double(comps.second ?? 0) + Double(comps.nanosecond ?? 0) / 1_000_000_000
+
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius = Double(min(size.width, size.height)) * 0.45
+        let lw = max(2.0, radius * 0.02)
+
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.05)))
+        let faceRect = CGRect(x: center.x - CGFloat(radius), y: center.y - CGFloat(radius),
+                              width: CGFloat(radius * 2), height: CGFloat(radius * 2))
+        ctx.fill(Path(ellipseIn: faceRect), with: .color(Color(white: 0.09)))
+        ctx.stroke(Path(ellipseIn: faceRect), with: .color(color.color.opacity(0.75)), lineWidth: CGFloat(lw))
+
+        // Minute/hour ticks.
+        for i in 0..<60 {
+            let a: Double = Double(i) / 60 * 2 * .pi - .pi / 2
+            let isHour = i % 5 == 0
+            let inner: Double = radius * (isHour ? 0.83 : 0.90)
+            let outer: Double = radius * 0.96
+            let p1 = CGPoint(x: center.x + CGFloat(cos(a) * inner), y: center.y + CGFloat(sin(a) * inner))
+            let p2 = CGPoint(x: center.x + CGFloat(cos(a) * outer), y: center.y + CGFloat(sin(a) * outer))
+            var tick = Path(); tick.move(to: p1); tick.addLine(to: p2)
+            ctx.stroke(tick, with: .color(color.color.opacity(isHour ? 0.9 : 0.4)),
+                       lineWidth: CGFloat(isHour ? lw : 1))
+        }
+
+        // Hands.
+        func hand(angle: Double, length: Double, width: Double, tint: Color) {
+            let a: Double = angle - .pi / 2
+            let end = CGPoint(x: center.x + CGFloat(cos(a) * length), y: center.y + CGFloat(sin(a) * length))
+            let tail = CGPoint(x: center.x - CGFloat(cos(a) * length * 0.15), y: center.y - CGFloat(sin(a) * length * 0.15))
+            var p = Path(); p.move(to: tail); p.addLine(to: end)
+            ctx.stroke(p, with: .color(tint), style: StrokeStyle(lineWidth: CGFloat(width), lineCap: .round))
+        }
+        let hourAngle: Double = (hours.truncatingRemainder(dividingBy: 12) + minutes / 60) / 12 * 2 * .pi
+        let minuteAngle: Double = (minutes + seconds / 60) / 60 * 2 * .pi
+        let secondAngle: Double = seconds / 60 * 2 * .pi
+        hand(angle: hourAngle, length: radius * 0.5, width: max(3, radius * 0.035), tint: color.color)
+        hand(angle: minuteAngle, length: radius * 0.74, width: max(2, radius * 0.025), tint: color.color)
+        hand(angle: secondAngle, length: radius * 0.84, width: max(1, radius * 0.012), tint: accent.color)
+
+        let hubR = CGFloat(radius * 0.045)
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - hubR, y: center.y - hubR, width: hubR * 2, height: hubR * 2)),
+                 with: .color(accent.color))
+    }
+
+    // A handful of shells launch at a relaxed cadence; roughly a quarter of them
+    // are large multi-ring "grand" bursts.
+    private static let fireworkShells = 5
+
+    private func drawFireworks(ctx: GraphicsContext, size: CGSize) {
+        // Night sky.
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .linearGradient(Gradient(colors: [Color(red: 0.02, green: 0.02, blue: 0.07), .black]),
+                                       startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+        // Additive with a soft bloom.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            layer.addFilter(.blur(radius: 3))
+            for s in 0..<Self.fireworkShells { drawFireworkShell(&layer, shell: s, size: size) }
+        }
+    }
+
+    private func drawFireworkShell(_ layer: inout GraphicsContext, shell s: Int, size: CGSize) {
+        let w = Double(size.width), h = Double(size.height)
+        let minDim = Double(min(size.width, size.height))
+        let launchDur: Double = 1.2
+        let burstDur: Double = 3.2
+        let period: Double = launchDur + burstDur
+        // Relaxed, evenly-staggered launches so a few bursts hang in the sky at once.
+        let tt: Double = time + Double(s) * period / Double(Self.fireworkShells)
+        let cycle: Double = floor(tt / period)
+        let lt: Double = tt - cycle * period
+        let seed: Int = Int(cycle) &* 131 &+ s &* 977
+        let launchX: Double = (0.14 + Double(hash01(seed, 1)) * 0.72) * w
+        let burstY: Double = (0.10 + Double(hash01(seed, 2)) * 0.30) * h
+        let hue: Double = Double(hash01(seed, 3))
+        let grand: Bool = Double(hash01(seed, 9)) > 0.72   // ~28% are grand
+
+        if lt < launchDur {
+            // Rising rocket with a flickering spark trail.
+            let p: Double = lt / launchDur
+            let ease: Double = 1 - (1 - p) * (1 - p)       // ease-out rise
+            let y: Double = h + (burstY - h) * ease
+            for k in 0..<9 {
+                let ky: Double = y + Double(k) * 5
+                let r: Double = (grand ? 2.8 : 2.0) - Double(k) * 0.25
+                if r <= 0 { continue }
+                let a: Double = (1 - Double(k) / 9) * (1 - p * 0.2) * (0.5 + 0.5 * Double(hash01(seed, k + 30)))
+                let rect = CGRect(x: launchX - r, y: ky - r, width: r * 2, height: r * 2)
+                layer.fill(Path(ellipseIn: rect),
+                           with: .color(Color(red: 1, green: 0.8, blue: 0.45).opacity(a)))
+            }
+            return
+        }
+
+        // Burst: radial spray of spark streaks, expanding with air-drag and
+        // drooping under gravity, fading out over the shell's life.
+        let bt: Double = (lt - launchDur) / burstDur       // 0 … 1
+        let dragPow: Double = 3                             // strong ease-out = air drag
+        let expand: Double = 1 - pow(1 - bt, dragPow)
+        let btPrev: Double = max(0, bt - 0.05)             // look-back for streak tails
+        let expandPrev: Double = 1 - pow(1 - btPrev, dragPow)
+        let maxR: Double = minDim * (grand ? 0.42 : 0.26)
+        let gravity: Double = minDim * (grand ? 0.32 : 0.22)
+        let drop: Double = gravity * bt * bt
+        let dropPrev: Double = gravity * btPrev * btPrev
+        let fade: Double = pow(max(0, 1 - bt), grand ? 1.0 : 1.3)
+        let particles = grand ? 132 : 70
+
+        // Bright ignition flash.
+        let flashDur: Double = 0.15
+        if bt < flashDur {
+            let ff: Double = 1 - bt / flashDur
+            let fr: Double = maxR * (grand ? 0.75 : 0.55) * (0.25 + bt / flashDur)
+            let rect = CGRect(x: launchX - fr, y: burstY - fr, width: fr * 2, height: fr * 2)
+            layer.fill(Path(ellipseIn: rect),
+                       with: .radialGradient(Gradient(colors: [Color.white.opacity(ff), .clear]),
+                                             center: CGPoint(x: launchX, y: burstY), startRadius: 0, endRadius: fr))
+        }
+
+        for pI in 0..<particles {
+            // Grand bursts split into an inner + outer ring with a hue offset.
+            let inner: Bool = grand && (pI % 2 == 0)
+            let ring: Double = inner ? 0.6 : 1.0
+            let ang: Double = Double(pI) / Double(particles) * 2 * .pi + Double(hash01(seed, pI + 10)) * 0.22
+            // Wide speed spread → a filled, spherical burst rather than a thin ring.
+            let spd: Double = (0.28 + Double(hash01(seed, pI + 50)) * 0.72) * ring
+            let dist: Double = maxR * spd * expand
+            let distPrev: Double = maxR * spd * expandPrev
+            let px: Double = launchX + cos(ang) * dist
+            let py: Double = burstY + sin(ang) * dist + drop
+            let pxPrev: Double = launchX + cos(ang) * distPrev
+            let pyPrev: Double = burstY + sin(ang) * distPrev + dropPrev
+            let ph: Double = fract(hue + (inner ? 0.12 : 0) + (Double(hash01(seed, pI)) - 0.5) * 0.1)
+            let twinkle: Double = 0.72 + 0.28 * sin(time * 40 + Double(pI) * 1.3)
+            let alpha: Double = fade * twinkle
+            let col = Color(hue: ph, saturation: 0.85, brightness: 1)
+            let lwid: Double = (grand ? 2.2 : 1.7) * (0.4 + 0.6 * fade)
+            // Motion-blur streak from the previous position to the current one.
+            var streak = Path()
+            streak.move(to: CGPoint(x: pxPrev, y: pyPrev))
+            streak.addLine(to: CGPoint(x: px, y: py))
+            layer.stroke(streak, with: .color(col.opacity(alpha * 0.8)),
+                         style: StrokeStyle(lineWidth: lwid, lineCap: .round))
+            // Bright head.
+            let hr: Double = lwid * 0.85
+            let rect = CGRect(x: px - hr, y: py - hr, width: hr * 2, height: hr * 2)
+            layer.fill(Path(ellipseIn: rect), with: .color(col.opacity(alpha)))
         }
     }
 
@@ -1460,7 +1421,7 @@ private struct EffectView: View {
             let y = (baseY + cos(time * 0.5 + fi * 1.3) * 0.1) * Double(size.height)
             sites.append((x, y, hue))
         }
-        let cell: CGFloat = 12
+        let cell: CGFloat = 5   // finer sampling → high-definition cell edges
         var y: CGFloat = 0
         while y < size.height {
             var x: CGFloat = 0
@@ -1482,12 +1443,14 @@ private struct EffectView: View {
                 }
                 let rect = CGRect(x: x, y: y, width: cell, height: cell)
                 let edge = sqrt(second) - sqrt(nearest)
-                if edge < Double(cell) * 1.5 {
-                    ctx.fill(Path(rect), with: .color(Color(red: 0.05, green: 0.05, blue: 0.05)))
+                let hue = fract(nearestHue + time * 0.05)
+                if edge < Double(cell) * 1.2 {
+                    // Bright hued seam between cells instead of a dead black gap.
+                    ctx.fill(Path(rect), with: .color(Color(hue: hue, saturation: 0.35, brightness: 1.0)))
                 } else {
-                    let hue = fract(nearestHue + time * 0.05)
-                    let bright = 0.45 + 0.15 * min(edge / Double(cell), 1.0)
-                    ctx.fill(Path(rect), with: .color(Color(hue: hue, saturation: 0.8, brightness: bright)))
+                    // Vivid, fully saturated fill; slight lift toward each cell's core.
+                    let bright = 0.9 + 0.1 * min(edge / (Double(cell) * 4), 1.0)
+                    ctx.fill(Path(rect), with: .color(Color(hue: hue, saturation: 1.0, brightness: bright)))
                 }
                 x += cell
             }
@@ -1573,99 +1536,6 @@ private struct EffectView: View {
         let g = accent.g + (color.g - accent.g) * t
         let b = accent.b + (color.b - accent.b) * t
         return Color(red: r, green: g, blue: b)
-    }
-
-    private func drawFlowField(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0.02, green: 0.02, blue: 0.04)))
-        let particleCount = 450
-        let warmupSteps = 60
-        let streakLen = 7
-        let stepLen = 4.0
-        let speed = 0.12
-        let w = Double(size.width), h = Double(size.height)
-        for i in 0..<particleCount {
-            let fi = Double(i)
-            let seed = fract(sin(fi * 74.7) * 43758.5453)
-            let hueSeed = fract(sin(fi * 91.3) * 43758.5453)
-            var pos = (
-                x: fract(sin(fi * 127.1) * 43758.5453) * w,
-                y: fract(sin(fi * 311.7) * 43758.5453) * h
-            )
-            let warm = Int(fract(time * speed + seed) * Double(warmupSteps))
-            for _ in 0..<warm { pos = flowStep(pos, w: w, h: h, stepLen: stepLen, wrap: true) }
-
-            var path = Path()
-            path.move(to: CGPoint(x: pos.x, y: pos.y))
-            for _ in 0..<streakLen {
-                pos = flowStep(pos, w: w, h: h, stepLen: stepLen, wrap: false)
-                path.addLine(to: CGPoint(x: pos.x, y: pos.y))
-            }
-
-            let hue = fract(hueSeed + time * 0.05)
-            ctx.stroke(path, with: .color(Color(hue: hue, saturation: 1, brightness: 0.65).opacity(0.6)), lineWidth: 1.2)
-        }
-    }
-
-    private func flowStep(_ p: (x: Double, y: Double), w: Double, h: Double, stepLen: Double, wrap: Bool) -> (x: Double, y: Double) {
-        let ang = sin(p.x * 0.005 + time * 0.4) * .pi + cos(p.y * 0.005 - time * 0.3) * .pi
-        var nx = p.x + cos(ang) * stepLen
-        var ny = p.y + sin(ang) * stepLen
-        if wrap {
-            if nx < 0 { nx += w }; if nx > w { nx -= w }
-            if ny < 0 { ny += h }; if ny > h { ny -= h }
-        }
-        return (nx, ny)
-    }
-
-    private func drawLissajous(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hue: 0, saturation: 0, brightness: 0.02)))
-        let w = Double(size.width), h = Double(size.height)
-        let cx = w / 2, cy = h / 2
-        let r = min(w, h) * 0.4
-        let a = 3 + sin(time * 0.2) * 2
-        let b = 4 + cos(time * 0.15) * 2
-        let dph = time * 0.5
-        let steps = 600
-        var path = Path()
-        for i in 0...steps {
-            let u = Double(i) / Double(steps) * 2 * .pi
-            let px = cx + sin(a * u + dph) * r
-            let py = cy + sin(b * u) * r
-            let pt = CGPoint(x: px, y: py)
-            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
-        }
-        let hue = fract(time * 40 / 360)
-        ctx.stroke(path, with: .color(Color(hue: hue, saturation: 1, brightness: 0.65)), lineWidth: 1.5)
-    }
-
-    private func drawOrbits(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hue: 0, saturation: 0, brightness: 0.02)))
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let startRadius = min(size.width, size.height) * 0.35
-        drawOrbitLevel(ctx: ctx, center: center, radius: startRadius, angle: 0, depth: 3)
-    }
-
-    private func drawOrbitLevel(ctx: GraphicsContext, center: CGPoint, radius: Double, angle: Double, depth: Int) {
-        guard depth > 0 else { return }
-        for i in 0..<5 {
-            let a = angle + time * (0.5 + Double(depth) * 0.2) + Double(i) / 5 * 2 * .pi
-            let p = CGPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius)
-
-            let orbitHue = fract((Double(depth) * 80 + time * 30 + Double(i) * 20) / 360)
-            let orbitRect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-            ctx.stroke(
-                Path(ellipseIn: orbitRect),
-                with: .color(Color(hue: orbitHue, saturation: 1, brightness: 0.65).opacity(0.4)),
-                lineWidth: 1
-            )
-
-            let planetHue = fract((Double(depth) * 80 + Double(i) * 30 + time * 30) / 360)
-            let planetR = Double(depth) * 4
-            let planetRect = CGRect(x: p.x - planetR, y: p.y - planetR, width: planetR * 2, height: planetR * 2)
-            ctx.fill(Path(ellipseIn: planetRect), with: .color(Color(hue: planetHue, saturation: 1, brightness: 0.65)))
-
-            drawOrbitLevel(ctx: ctx, center: p, radius: radius * 0.45, angle: a * 2, depth: depth - 1)
-        }
     }
 
     private func drawVectorGrid(ctx: GraphicsContext, size: CGSize) {
@@ -1830,116 +1700,6 @@ private struct EffectView: View {
             }
         }
     }
-
-    /// Project a well cross-section point (u,v ∈ −1…1) at depth d (0 front … 1 back)
-    /// toward the centered vanishing point.
-    private func dbProject(_ u: Double, _ v: Double, _ d: Double, _ size: CGSize) -> CGPoint {
-        let scaleD = CGFloat(1 - d * 0.58)
-        return CGPoint(x: size.width / 2 + CGFloat(u) * (size.width / 2) * scaleD,
-                       y: size.height / 2 + CGFloat(v) * (size.height / 2) * scaleD)
-    }
-
-    private func drawDepthBreaker(ctx: GraphicsContext, size: CGSize) {
-        let backDark = Color(red: 0.02, green: 0.024, blue: 0.04)
-        let frontLit = Color(red: 0.10, green: 0.12, blue: 0.17)
-        let cyan = Color(red: 0.13, green: 0.88, blue: 1.0)
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(backDark))
-
-        // Four receding walls, each a trapezoid front-edge → back-edge, depth-shaded.
-        let edges: [((Double, Double), (Double, Double))] = [
-            ((-1, -1), (1, -1)), ((1, 1), (-1, 1)), ((-1, 1), (-1, -1)), ((1, -1), (1, 1)),
-        ]
-        for e in edges {
-            let f0 = dbProject(e.0.0, e.0.1, 0, size)
-            let f1 = dbProject(e.1.0, e.1.1, 0, size)
-            let b1 = dbProject(e.1.0, e.1.1, 1, size)
-            let b0 = dbProject(e.0.0, e.0.1, 1, size)
-            var p = Path()
-            p.move(to: f0); p.addLine(to: f1); p.addLine(to: b1); p.addLine(to: b0); p.closeSubpath()
-            let frontMid = CGPoint(x: (f0.x + f1.x) / 2, y: (f0.y + f1.y) / 2)
-            let backMid = CGPoint(x: (b0.x + b1.x) / 2, y: (b0.y + b1.y) / 2)
-            ctx.fill(p, with: .linearGradient(Gradient(colors: [frontLit, backDark]),
-                                              startPoint: frontMid, endPoint: backMid))
-        }
-
-        // Neon depth rings (fade toward the back).
-        var d = 0.0
-        while d <= 1.0001 {
-            let c0 = dbProject(-1, -1, d, size), c1 = dbProject(1, -1, d, size)
-            let c2 = dbProject(1, 1, d, size), c3 = dbProject(-1, 1, d, size)
-            var ring = Path()
-            ring.move(to: c0); ring.addLine(to: c1); ring.addLine(to: c2); ring.addLine(to: c3); ring.closeSubpath()
-            ctx.stroke(ring, with: .color(cyan.opacity(0.10 + 0.20 * (1 - d))), lineWidth: 1)
-            d += 0.2
-        }
-        // Four receding corner edges.
-        for c in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-            var line = Path()
-            line.move(to: dbProject(c.0, c.1, 0, size))
-            line.addLine(to: dbProject(c.0, c.1, 1, size))
-            ctx.stroke(line, with: .color(cyan.opacity(0.35)), lineWidth: 1)
-        }
-        // Magenta frame around the opening.
-        ctx.stroke(Path(CGRect(origin: .zero, size: size).insetBy(dx: 1.5, dy: 1.5)),
-                   with: .color(Color(red: 1.0, green: 0.18, blue: 0.58).opacity(0.6)), lineWidth: 2)
-
-        // Floating shapes: (u, v, z, kind, color); kind 0 = sphere, 1 = torus.
-        let defs: [(uAmp: Double, vAmp: Double, uSpd: Double, vSpd: Double, zSpd: Double, phase: Double, kind: Int, color: Color)] = [
-            (0.50, 0.40, 0.30, 0.24, 0.50, 0.0, 0, Color(red: 0.13, green: 0.88, blue: 1.0)),
-            (0.45, 0.50, 0.27, 0.31, 0.60, 2.1, 0, Color(red: 1.0, green: 0.30, blue: 0.72)),
-            (0.55, 0.35, 0.22, 0.28, 0.40, 4.0, 1, Color(red: 1.0, green: 0.80, blue: 0.35)),
-            (0.38, 0.55, 0.34, 0.20, 0.55, 1.0, 0, Color(red: 0.55, green: 0.45, blue: 1.0)),
-            (0.60, 0.45, 0.19, 0.33, 0.45, 3.2, 1, Color(red: 0.30, green: 1.0, blue: 0.65)),
-        ]
-        var shapes: [(u: Double, v: Double, z: Double, kind: Int, color: Color)] = []
-        for def in defs {
-            let u = def.uAmp * sin(time * def.uSpd + def.phase)
-            let v = def.vAmp * cos(time * def.vSpd + def.phase * 1.3)
-            let z = 0.5 + 0.4 * sin(time * def.zSpd + def.phase)
-            shapes.append((u, v, z, def.kind, def.color))
-        }
-
-        // Soft fake shadows cast on the back wall (drawn behind the shapes).
-        let baseR = Double(min(size.width, size.height)) * 0.12
-        ctx.drawLayer { layer in
-            layer.addFilter(.blur(radius: 8))
-            for s in shapes {
-                let c = dbProject(s.u + 0.07, s.v + 0.10, 1.0, size)
-                let r = CGFloat(baseR * (1 - s.z * 0.58))
-                let rect = CGRect(x: c.x - r, y: c.y - r * 0.45, width: r * 2, height: r * 0.9)
-                layer.fill(Path(ellipseIn: rect), with: .color(.black.opacity(0.4 * (0.3 + 0.7 * s.z))))
-            }
-        }
-
-        // Shapes, far (high z) first.
-        for s in shapes.sorted(by: { $0.z > $1.z }) {
-            let center = dbProject(s.u, s.v, s.z, size)
-            let radius = baseR * (1 - s.z * 0.58)
-            if s.kind == 0 {
-                drawDBSphere(ctx: ctx, center: center, radius: radius, color: s.color)
-            } else {
-                drawDBTorus(ctx: ctx, center: center, radius: radius, color: s.color)
-            }
-        }
-    }
-
-    private func drawDBSphere(ctx: GraphicsContext, center: CGPoint, radius: Double, color: Color) {
-        let r = CGFloat(radius)
-        let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
-        let highlight = CGPoint(x: center.x - r * 0.35, y: center.y - r * 0.35)
-        ctx.fill(Path(ellipseIn: rect),
-                 with: .radialGradient(Gradient(colors: [.white, color, color.opacity(0.12)]),
-                                       center: highlight, startRadius: 0, endRadius: r * 1.3))
-    }
-
-    private func drawDBTorus(ctx: GraphicsContext, center: CGPoint, radius: Double, color: Color) {
-        let rw = CGFloat(radius), rh = CGFloat(radius * 0.5)
-        let rect = CGRect(x: center.x - rw, y: center.y - rh, width: rw * 2, height: rh * 2)
-        let tube = CGFloat(radius * 0.28)
-        ctx.stroke(Path(ellipseIn: rect), with: .color(color), lineWidth: tube)
-        ctx.stroke(Path(ellipseIn: rect), with: .color(.black.opacity(0.35)), lineWidth: tube * 0.35)
-    }
-
     private func polygonPath(center: CGPoint, radius: CGFloat, sides: Int, rotation: Double) -> Path {
         var path = Path()
         for i in 0...sides {
@@ -1967,25 +1727,6 @@ private struct EffectView: View {
     private func hash01(_ i: Int, _ salt: Int) -> CGFloat {
         let v = sin(Double(i) * 12.9898 + Double(salt) * 78.233) * 43758.5453
         return CGFloat(v - floor(v))
-    }
-
-    /// Progress `g` (0…1 during build), integer cycle index, and an opacity
-    /// envelope for a generate → hold → vanish fractal loop of period `P` seconds.
-    private func fractalCycle(period P: Double, build: Double, hold: Double) -> (g: Double, cycle: Int, opacity: Double) {
-        let localT = time.truncatingRemainder(dividingBy: P)
-        let cycle = Int(floor(time / P))
-        let g = min(localT / build, 1)
-        let fadeIn = 2.0
-        let fade = P - build - hold
-        let opacity: Double
-        if localT < fadeIn {
-            opacity = localT / fadeIn
-        } else if localT < build + hold {
-            opacity = 1
-        } else {
-            opacity = max(0, 1 - (localT - (build + hold)) / max(fade, 0.001))
-        }
-        return (g, cycle, opacity)
     }
 }
 
