@@ -79,9 +79,12 @@ Two image-input media types added alongside `.image`/`.video`:
   overlaying the previous and staying lit (build-up), then hold/fade/repeat; and
   a **Rainbow** option colors the trace by arc-length position across the whole
   walk in ~24 gradient bands (one spectrum pass, gentle drift) via the pure,
-  unit-tested `ContourTrace` helper in LumoraKit. Compat caveat: projects saved
-  before this change that contain a Contour Trace surface won't reopen (the case
-  payload shape changed; other media unaffected).
+  unit-tested `ContourTrace` helper in LumoraKit. Params now live in a
+  `ContourTraceConfig` struct with a user-editable **hold duration** (default
+  30s, how long the finished trace stays before fade+repeat) and a **Keep on
+  after trace** toggle (trace once, then stay on permanently). Compat caveat:
+  projects saved before these changes that contain a Contour Trace surface won't
+  reopen (the case payload shape changed; other media unaffected).
 
 Both are stateless `Canvas` views (`LaserTraceContent`/`ContourTraceContent`)
 with edge extraction cached off-thread. Vision/CoreImage use bottom-left origin —
