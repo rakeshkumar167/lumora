@@ -9,11 +9,9 @@ final class ChristmasLightsTests: XCTestCase {
         XCTAssertEqual(Set(p).count, 5)
     }
 
-    func testStrandCountScalesWithHeightMinTwo() {
-        let few = ChristmasLights.strands(in: CGSize(width: 400, height: 120))
-        let many = ChristmasLights.strands(in: CGSize(width: 400, height: 900))
-        XCTAssertGreaterThanOrEqual(few.count, 2)
-        XCTAssertGreaterThan(many.count, few.count)
+    func testAlwaysASingleStrand() {
+        XCTAssertEqual(ChristmasLights.strands(in: CGSize(width: 400, height: 120)).count, 1)
+        XCTAssertEqual(ChristmasLights.strands(in: CGSize(width: 400, height: 900)).count, 1)
     }
 
     func testBulbCountScalesWithWidthMinThree() {

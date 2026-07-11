@@ -292,7 +292,7 @@ private struct EffectView: View {
             edgeEffects
         case .analogClock, .digitalClock:
             clockEffects
-        case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights:
+        case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             christmasEffects
         }
     }
@@ -318,17 +318,24 @@ private struct EffectView: View {
                 }
             }
 
-        case .chasingLights, .multiColorLights, .twinklingLights:
+        case .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)),
                          with: .color(Color(red: 0.03, green: 0.04, blue: 0.07)))
+                let round = (kind == .warmBulbs)
                 for strand in ChristmasLights.strands(in: size) {
+                    let bulbs = strand.bulbs
+                    // The hanging wire runs through the attach points; bulbs dangle below.
                     var wire = Path()
-                    wire.addLines(strand.bulbs)
-                    ctx.stroke(wire, with: .color(Color.white.opacity(0.12)), lineWidth: 1.5)
-                    for (i, b) in strand.bulbs.enumerated() {
-                        let (col, bright) = bulbState(index: i, count: strand.bulbs.count)
-                        drawBulb(ctx, at: b, color: col, brightness: bright)
+                    wire.addLines(bulbs)
+                    ctx.stroke(wire, with: .color(Color(white: 0.35).opacity(0.6)),
+                               lineWidth: max(1.2, size.width * 0.0018))
+                    // Bulb size scales with the spacing between bulbs.
+                    let spacing = bulbs.count > 1 ? hypot(bulbs[1].x - bulbs[0].x, bulbs[1].y - bulbs[0].y) : 24
+                    let r = min(spacing * (round ? 0.34 : 0.30), size.height * 0.12)
+                    for (i, b) in bulbs.enumerated() {
+                        let (col, bright) = bulbState(index: i, count: bulbs.count)
+                        drawBulb(ctx, at: b, color: col, brightness: bright, radius: r, round: round)
                     }
                 }
             }
@@ -388,23 +395,53 @@ private struct EffectView: View {
             let tw = 0.5 + 0.5 * sin(time * 1.8 + seed * 6.283)
             let col = palette[i % palette.count].color
             return (col, 0.1 + 0.9 * pow(tw, 2))
+        case .warmBulbs:
+            // Steady warm amber glow with a gentle per-bulb flicker.
+            let warm = Color(red: 1.0, green: 0.82, blue: 0.52)
+            let flicker = 0.82 + 0.18 * sin(time * 1.1 + Double(i) * 1.3)
+            return (warm, flicker)
         default:
             return (palette[i % palette.count].color, 1)
         }
     }
 
-    /// A glowing bulb: bright core + soft plusLighter halo.
-    private func drawBulb(_ ctx: GraphicsContext, at p: CGPoint, color: Color, brightness: Double) {
-        let coreR = 4.0
+    /// A glowing bulb hanging from the wire at `p`: a small socket cap, an oval
+    /// (mini light) or round (globe) glass body dangling below with a soft
+    /// plusLighter halo, and a specular highlight.
+    private func drawBulb(_ ctx: GraphicsContext, at p: CGPoint, color: Color,
+                          brightness: Double, radius r: CGFloat, round: Bool) {
+        // Socket cap straddling the wire.
+        let capW = r * 0.75, capH = r * 0.55
+        let capRect = CGRect(x: p.x - capW / 2, y: p.y - capH * 0.35, width: capW, height: capH)
+        ctx.fill(Path(roundedRect: capRect, cornerSize: CGSize(width: capH * 0.3, height: capH * 0.3)),
+                 with: .color(Color(white: 0.32)))
+
+        // Glass body dangling below the cap.
+        let halfH: CGFloat = round ? r : r * 1.18
+        let halfW: CGFloat = round ? r : r * 0.82
+        let cy = p.y + capH * 0.5 + halfH
+        let center = CGPoint(x: p.x, y: cy)
+        let bodyRect = CGRect(x: center.x - halfW, y: center.y - halfH, width: 2 * halfW, height: 2 * halfH)
+
+        // Soft glow halo.
         ctx.drawLayer { layer in
-            layer.addFilter(.blur(radius: 6))
+            layer.addFilter(.blur(radius: r * 1.3))
             layer.blendMode = .plusLighter
-            let haloR = coreR + 6 * brightness
-            layer.fill(Path(ellipseIn: CGRect(x: p.x - haloR, y: p.y - haloR, width: 2 * haloR, height: 2 * haloR)),
-                       with: .color(color.opacity(0.5 * brightness)))
+            let hr = halfH * (1.3 + 0.8 * brightness)
+            layer.fill(Path(ellipseIn: CGRect(x: center.x - hr, y: center.y - hr, width: 2 * hr, height: 2 * hr)),
+                       with: .color(color.opacity(0.55 * brightness)))
         }
-        ctx.fill(Path(ellipseIn: CGRect(x: p.x - coreR, y: p.y - coreR, width: 2 * coreR, height: 2 * coreR)),
-                 with: .color(color.opacity(0.4 + 0.6 * brightness)))
+
+        // Glass body.
+        let body = Path(ellipseIn: bodyRect)
+        ctx.fill(body, with: .color(color.opacity(0.55 + 0.45 * brightness)))
+        ctx.stroke(body, with: .color(.black.opacity(0.18)), lineWidth: max(0.6, r * 0.06))
+
+        // Specular highlight, upper-left of the body.
+        let hlR = halfW * 0.34
+        let hl = CGPoint(x: center.x - halfW * 0.32, y: center.y - halfH * 0.4)
+        ctx.fill(Path(ellipseIn: CGRect(x: hl.x - hlR, y: hl.y - hlR, width: 2 * hlR, height: 2 * hlR)),
+                 with: .color(.white.opacity(0.55 * max(0.4, brightness))))
     }
 
     @ViewBuilder private var gradientEffects: some View {

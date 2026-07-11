@@ -21,33 +21,27 @@ public enum ChristmasLights {
         public init(bulbs: [CGPoint]) { self.bulbs = bulbs }
     }
 
-    private static let rowSpacing: CGFloat = 90
     private static let bulbSpacing: CGFloat = 55
     private static let insetFraction: CGFloat = 0.06
 
-    /// Horizontal sagging strands stacked down the surface. Count scales with
-    /// height (min 2); bulbs-per-strand scales with width (min 3).
+    /// A single horizontal strand hung across the surface, sagging in the
+    /// middle. Bulb count scales with width (min 3). The wire is pinned near the
+    /// mid-height at both ends and dips down between them.
     public static func strands(in size: CGSize) -> [Strand] {
         guard size.width > 0, size.height > 0 else { return [] }
-        let strandCount = max(2, Int((size.height / rowSpacing).rounded()))
         let bulbCount = max(3, Int((size.width / bulbSpacing).rounded()))
-        let sag = 0.35 * rowSpacing
+        let y0 = 0.42 * size.height          // pin height (near center, room to sag)
+        let sag = 0.13 * size.height         // droop depth at mid-span
         let inset = size.width * insetFraction
         let left = inset, right = size.width - inset
 
-        var result: [Strand] = []
-        for s in 0..<strandCount {
-            // Base (pin) height for this strand, evenly distributed.
-            let y0 = size.height * (CGFloat(s) + 0.5) / CGFloat(strandCount)
-            var bulbs: [CGPoint] = []
-            for i in 0..<bulbCount {
-                let t = CGFloat(i) / CGFloat(bulbCount - 1)      // 0…1
-                let x = left + (right - left) * t
-                let y = y0 + sag * 4 * t * (1 - t)               // 0 at ends, max mid
-                bulbs.append(CGPoint(x: x, y: y))
-            }
-            result.append(Strand(bulbs: bulbs))
+        var bulbs: [CGPoint] = []
+        for i in 0..<bulbCount {
+            let t = CGFloat(i) / CGFloat(bulbCount - 1)      // 0…1
+            let x = left + (right - left) * t
+            let y = y0 + sag * 4 * t * (1 - t)               // 0 at ends, max mid
+            bulbs.append(CGPoint(x: x, y: y))
         }
-        return result
+        return [Strand(bulbs: bulbs)]
     }
 }

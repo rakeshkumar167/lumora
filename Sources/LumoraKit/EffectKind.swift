@@ -54,6 +54,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case chasingLights
     case multiColorLights
     case twinklingLights
+    case warmBulbs
 
     public var id: String { rawValue }
 
@@ -62,7 +63,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
              .voronoi, .vectorGrid, .livingTexture, .fire, .bubbles, .fireworks,
-             .christmasTree, .chasingLights, .multiColorLights, .twinklingLights:
+             .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             return false
         default:
             return true
@@ -138,6 +139,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .chasingLights: return "Chasing Lights"
         case .multiColorLights: return "Multi-Colored Lights"
         case .twinklingLights: return "Twinkling Lights"
+        case .warmBulbs: return "Warm Round Bulbs"
         }
     }
 
@@ -169,7 +171,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .edge
         case .analogClock, .digitalClock:
             return .clocks
-        case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights:
+        case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             return .christmas
         }
     }
