@@ -88,13 +88,19 @@ struct LightLineHandlesOverlay: View {
                         }
                 )
                 .contextMenu {
+                    Button("Fork from Here") {
+                        // Make this joint the active pen origin so the next click
+                        // drops a new joint branching off it (creating a fork).
+                        store.tool = .pen
+                        lastJointID = joint.id
+                    }
                     Button("Set as Source") { store.setLineSource(line.id, joint.id) }
                     Button("Delete Joint", role: .destructive) {
                         store.deleteJoint(line.id, joint.id)
                         if lastJointID == joint.id { lastJointID = nil }
                     }
                 }
-                .help(isSource ? "Source joint (pulse starts here)" : "Drag to move; right-click for options")
+                .help(isSource ? "Source joint (pulse starts here)" : "Drag to move; right-click to fork, set source, or delete")
         }
     }
 
