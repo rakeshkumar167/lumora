@@ -50,6 +50,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case outlineGlow
     case analogClock
     case digitalClock
+    case christmasTree
+    case chasingLights
+    case multiColorLights
+    case twinklingLights
 
     public var id: String { rawValue }
 
@@ -57,7 +61,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesColor: Bool {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
-             .voronoi, .vectorGrid, .livingTexture, .fire, .bubbles, .fireworks:
+             .voronoi, .vectorGrid, .livingTexture, .fire, .bubbles, .fireworks,
+             .christmasTree, .chasingLights, .multiColorLights, .twinklingLights:
             return false
         default:
             return true
@@ -129,6 +134,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .outlineGlow: return "Outline Glow"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
+        case .christmasTree: return "Christmas Tree"
+        case .chasingLights: return "Chasing Lights"
+        case .multiColorLights: return "Multi-Colored Lights"
+        case .twinklingLights: return "Twinkling Lights"
         }
     }
 
@@ -160,6 +169,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .edge
         case .analogClock, .digitalClock:
             return .clocks
+        case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights:
+            return .christmas
         }
     }
 }
@@ -177,6 +188,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case ambient
     case edge
     case clocks
+    case christmas
 
     public var id: String { rawValue }
 
@@ -192,6 +204,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .ambient: return "Ambient & Illusion"
         case .edge: return "Edge"
         case .clocks: return "Clocks & Info"
+        case .christmas: return "Christmas Lights"
         }
     }
 

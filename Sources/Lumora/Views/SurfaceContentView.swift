@@ -292,7 +292,14 @@ private struct EffectView: View {
             edgeEffects
         case .analogClock, .digitalClock:
             clockEffects
+        case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights:
+            christmasEffects
         }
+    }
+
+    // Placeholder until Task 3 implements the Christmas renderers.
+    @ViewBuilder private var christmasEffects: some View {
+        Color.black
     }
 
     @ViewBuilder private var gradientEffects: some View {
