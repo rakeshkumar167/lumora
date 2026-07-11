@@ -172,32 +172,44 @@ private struct MediaEditor: View {
                 in: 0.05...4
             )
 
-        case .contourTrace(let urls, let penColor, let speed, let rainbow):
+        case .contourTrace(let cfg):
             Text("Images (traced in order)").font(.caption).foregroundStyle(.secondary)
-            ForEach(Array(urls.enumerated()), id: \.offset) { idx, url in
+            ForEach(Array(cfg.images.enumerated()), id: \.offset) { idx, url in
                 HStack {
                     Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
                     Spacer()
                     Button {
-                        var next = urls; next.remove(at: idx)
-                        media = .contourTrace(next, penColor, speed, rainbow)
+                        var c = cfg; c.images.remove(at: idx); media = .contourTrace(c)
                     } label: { Image(systemName: "trash") }
                         .buttonStyle(.borderless)
-                        .disabled(urls.count <= 1)
+                        .disabled(cfg.images.count <= 1)
                 }
             }
-            Button("Add Image(s)…") { addContourImages(to: urls, color: penColor, speed: speed, rainbow: rainbow) }
+            Button("Add Image(s)…") { addContourImages(to: cfg) }
             Toggle("Rainbow", isOn: Binding(
-                get: { rainbow },
-                set: { media = .contourTrace(urls, penColor, speed, $0) }
+                get: { cfg.rainbow },
+                set: { var c = cfg; c.rainbow = $0; media = .contourTrace(c) }
             ))
-            if !rainbow {
+            if !cfg.rainbow {
                 Text("Pen Color").font(.caption).foregroundStyle(.secondary)
-                colorControls(current: penColor) { media = .contourTrace(urls, $0, speed, rainbow) }
+                colorControls(current: cfg.penColor) { var c = cfg; c.penColor = $0; media = .contourTrace(c) }
+            }
+            Toggle("Keep on after trace", isOn: Binding(
+                get: { cfg.alwaysOn },
+                set: { var c = cfg; c.alwaysOn = $0; media = .contourTrace(c) }
+            ))
+            if !cfg.alwaysOn {
+                Stepper(
+                    value: Binding(get: { cfg.holdSeconds },
+                                   set: { var c = cfg; c.holdSeconds = $0; media = .contourTrace(c) }),
+                    in: 1...600, step: 5
+                ) {
+                    Text("Hold \(Int(cfg.holdSeconds))s before repeat").font(.caption)
+                }
             }
             Text("Trace Speed").font(.caption).foregroundStyle(.secondary)
             Slider(
-                value: Binding(get: { speed }, set: { media = .contourTrace(urls, penColor, $0, rainbow) }),
+                value: Binding(get: { cfg.speed }, set: { var c = cfg; c.speed = $0; media = .contourTrace(c) }),
                 in: 0.05...4
             )
         }
@@ -275,16 +287,16 @@ private struct MediaEditor: View {
         panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK, !panel.urls.isEmpty {
-            media = .contourTrace(panel.urls, color, 1.0, false)
+            media = .contourTrace(ContourTraceConfig(images: panel.urls, penColor: color))
         }
     }
 
-    private func addContourImages(to urls: [URL], color: RGBAColor, speed: Double, rainbow: Bool) {
+    private func addContourImages(to cfg: ContourTraceConfig) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK, !panel.urls.isEmpty {
-            media = .contourTrace(urls + panel.urls, color, speed, rainbow)
+            var c = cfg; c.images += panel.urls; media = .contourTrace(c)
         }
     }
 }

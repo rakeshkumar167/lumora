@@ -73,8 +73,8 @@ struct SurfaceContentView: View {
             VideoContent(url: url)
         case .laserTrace(let url, let c, let speed):
             LaserTraceContent(url: url, color: c, speed: speed, time: time)
-        case .contourTrace(let urls, let c, let speed, let rainbow):
-            ContourTraceContent(urls: urls, color: c, speed: speed, rainbow: rainbow, time: time)
+        case .contourTrace(let cfg):
+            ContourTraceContent(config: cfg, time: time)
         }
     }
 
@@ -2128,6 +2128,9 @@ private struct ContourPolyline {
 private final class ContourTraceModel: ObservableObject {
     @Published var contours: [ContourPolyline] = []
     @Published var totalLength: CGFloat = 0
+    /// Reference-date timestamp when the current contours became available, so
+    /// the sweep starts from load (needed for the "always on" one-shot).
+    @Published var readyAt: Double = 0
     private var loadedURLs: [URL] = []
 
     private static var cache: [URL: [ContourPolyline]] = [:]
@@ -2158,6 +2161,7 @@ private final class ContourTraceModel: ObservableObject {
     private func apply(_ c: [ContourPolyline]) {
         contours = c
         totalLength = c.reduce(0) { $0 + $1.total }
+        readyAt = Date.timeIntervalSinceReferenceDate
     }
 
     private static func extractContours(from url: URL) -> [ContourPolyline] {
@@ -2263,10 +2267,7 @@ private final class ContourTraceModel: ObservableObject {
 /// (bottom→top); drawn strokes persist into the full outline, which holds and
 /// fades before repeating. A `Canvas` so it warps with the surface.
 private struct ContourTraceContent: View {
-    let urls: [URL]
-    let color: RGBAColor
-    let speed: Double
-    let rainbow: Bool
+    let config: ContourTraceConfig
     let time: Double
 
     @StateObject private var model = ContourTraceModel()
@@ -2282,19 +2283,29 @@ private struct ContourTraceContent: View {
             let total = model.totalLength
             guard !contours.isEmpty, total > 0 else { return }
 
+            let rainbow = config.rainbow
             // ~6s per image, so more images take proportionally longer.
-            let sweepDur = 6.0 * Double(max(1, urls.count)) / max(speed, 0.02)
-            let holdDur = 1.5, fadeDur = 1.5
-            let period = sweepDur + holdDur + fadeDur
-            let localT = time.truncatingRemainder(dividingBy: period)
-            let sweepP = min(localT / sweepDur, 1)
-            ctx.opacity = localT < sweepDur + holdDur
-                ? 1
-                : max(0, 1 - (localT - (sweepDur + holdDur)) / fadeDur)
+            let sweepDur = 6.0 * Double(max(1, config.images.count)) / max(config.speed, 0.02)
+            // Elapsed since the contours loaded, so the sweep starts at load.
+            let elapsed = max(0, time - model.readyAt)
+            let sweepP: CGFloat
+            if config.alwaysOn {
+                // Trace once, then stay on permanently.
+                sweepP = CGFloat(min(elapsed / sweepDur, 1))
+                ctx.opacity = 1
+            } else {
+                let holdDur = max(0, config.holdSeconds), fadeDur = 1.5
+                let period = sweepDur + holdDur + fadeDur
+                let localT = elapsed.truncatingRemainder(dividingBy: period)
+                sweepP = CGFloat(min(localT / sweepDur, 1))
+                ctx.opacity = localT < sweepDur + holdDur
+                    ? 1
+                    : max(0, 1 - (localT - (sweepDur + holdDur)) / fadeDur)
+            }
 
-            let laser = color.color
+            let laser = config.penColor.color
             let w = size.width, h = size.height
-            let drawn = CGFloat(sweepP) * total
+            let drawn = sweepP * total
             let phase = time * 0.03
             func sp(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * w, y: p.y * h) }
             func band(_ midLen: CGFloat) -> Int { ContourTrace.rainbowBand(length: midLen, total: total, phase: phase) }
@@ -2384,6 +2395,6 @@ private struct ContourTraceContent: View {
                 ctx.fill(Path(ellipseIn: CGRect(x: tip.x - 2, y: tip.y - 2, width: 4, height: 4)), with: .color(.white))
             }
         }
-        .task(id: urls) { model.load(urls) }
+        .task(id: config.images) { model.load(config.images) }
     }
 }

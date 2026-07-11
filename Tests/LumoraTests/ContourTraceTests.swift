@@ -5,12 +5,21 @@ import XCTest
 
 final class ContourTraceTests: XCTestCase {
     func testContourTraceCodableRoundTrip() throws {
-        let media = MediaAssignment.contourTrace(
-            [URL(fileURLWithPath: "/a.png"), URL(fileURLWithPath: "/b.png")],
-            .green, 1.5, true)
+        let cfg = ContourTraceConfig(
+            images: [URL(fileURLWithPath: "/a.png"), URL(fileURLWithPath: "/b.png")],
+            penColor: .green, speed: 1.5, rainbow: true, holdSeconds: 45, alwaysOn: true)
+        let media = MediaAssignment.contourTrace(cfg)
         let data = try JSONEncoder().encode(media)
         let back = try JSONDecoder().decode(MediaAssignment.self, from: data)
         XCTAssertEqual(media, back)
+    }
+
+    func testContourTraceConfigDefaults() {
+        let cfg = ContourTraceConfig(images: [URL(fileURLWithPath: "/a.png")])
+        XCTAssertEqual(cfg.holdSeconds, 30)
+        XCTAssertFalse(cfg.alwaysOn)
+        XCTAssertFalse(cfg.rainbow)
+        XCTAssertEqual(cfg.speed, 1.0)
     }
 
     func testRainbowBandInRange() {
