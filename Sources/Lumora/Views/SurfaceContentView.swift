@@ -297,9 +297,114 @@ private struct EffectView: View {
         }
     }
 
-    // Placeholder until Task 3 implements the Christmas renderers.
     @ViewBuilder private var christmasEffects: some View {
-        Color.black
+        switch kind {
+        case .christmasTree:
+            Canvas { ctx, size in
+                // Dark backing so unlit margins read as night, not white.
+                ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                         with: .color(Color(red: 0.02, green: 0.03, blue: 0.02)))
+                if let img = ChristmasTreeAsset.image {
+                    let resolved = ctx.resolve(Image(nsImage: img))
+                    let isz = img.size
+                    let scale = min(size.width / isz.width, size.height / isz.height)
+                    let w = isz.width * scale, h = isz.height * scale
+                    let ox = (size.width - w) / 2, oy = (size.height - h) / 2
+                    let rect = CGRect(x: ox, y: oy, width: w, height: h)
+                    ctx.draw(resolved, in: rect)
+                    drawTreeGlints(ctx, imageRect: rect)
+                } else {
+                    drawTreeGlints(ctx, imageRect: CGRect(origin: .zero, size: size))
+                }
+            }
+
+        case .chasingLights, .multiColorLights, .twinklingLights:
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                         with: .color(Color(red: 0.03, green: 0.04, blue: 0.07)))
+                for strand in ChristmasLights.strands(in: size) {
+                    var wire = Path()
+                    wire.addLines(strand.bulbs)
+                    ctx.stroke(wire, with: .color(Color.white.opacity(0.12)), lineWidth: 1.5)
+                    for (i, b) in strand.bulbs.enumerated() {
+                        let (col, bright) = bulbState(index: i, count: strand.bulbs.count)
+                        drawBulb(ctx, at: b, color: col, brightness: bright)
+                    }
+                }
+            }
+
+        default:
+            EmptyView()
+        }
+    }
+
+    /// Twinkle glints on the tree: soft glowing dots that pulse on their own
+    /// phase, only at the precomputed on-tree points.
+    private func drawTreeGlints(_ ctx: GraphicsContext, imageRect: CGRect) {
+        let points = ChristmasTreeAsset.litPoints
+        guard !points.isEmpty else { return }
+        let palette = ChristmasLights.palette
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 3))
+            layer.blendMode = .plusLighter
+            for (i, p) in points.enumerated() {
+                let phase = Double(i) * 0.7
+                let pulse = 0.5 + 0.5 * sin(time * 2.2 + phase)
+                guard pulse > 0.55 else { continue }
+                let intensity = (pulse - 0.55) / 0.45
+                // Warm-white/gold dominate; occasional colored sparkle.
+                let col: Color = (i % 5 == 0) ? palette[i % palette.count].color
+                                              : (i % 2 == 0 ? palette[4].color : palette[2].color)
+                let c = CGPoint(x: imageRect.minX + p.x * imageRect.width,
+                                y: imageRect.minY + p.y * imageRect.height)
+                let r = 2.0 + 4.0 * intensity
+                layer.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)),
+                           with: .color(col.opacity(0.35 + 0.65 * intensity)))
+            }
+        }
+    }
+
+    /// Per-bulb color + brightness for the three string variations.
+    private func bulbState(index i: Int, count: Int) -> (Color, Double) {
+        let palette = ChristmasLights.palette
+        switch kind {
+        case .chasingLights:
+            // A bright band runs along the strand; color cycles slowly.
+            let pos = Double(i) / Double(max(count - 1, 1))
+            let head = (time * 0.5).truncatingRemainder(dividingBy: 1)
+            let d = abs(pos - head)
+            let wrapped = min(d, 1 - d)
+            let bright = max(0, 1 - wrapped * 6)
+            let col = palette[(i + Int(time)) % palette.count].color
+            return (col, 0.15 + 0.85 * bright)
+        case .multiColorLights:
+            // Steady alternating palette with a gentle per-bulb shimmer.
+            let col = palette[i % palette.count].color
+            let shimmer = 0.75 + 0.25 * sin(time * 1.5 + Double(i) * 0.9)
+            return (col, shimmer)
+        case .twinklingLights:
+            // Smooth pseudo-random fade per bulb.
+            let seed = Double((i * 2654435761) % 1000) / 1000.0
+            let tw = 0.5 + 0.5 * sin(time * 1.8 + seed * 6.283)
+            let col = palette[i % palette.count].color
+            return (col, 0.1 + 0.9 * pow(tw, 2))
+        default:
+            return (palette[i % palette.count].color, 1)
+        }
+    }
+
+    /// A glowing bulb: bright core + soft plusLighter halo.
+    private func drawBulb(_ ctx: GraphicsContext, at p: CGPoint, color: Color, brightness: Double) {
+        let coreR = 4.0
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 6))
+            layer.blendMode = .plusLighter
+            let haloR = coreR + 6 * brightness
+            layer.fill(Path(ellipseIn: CGRect(x: p.x - haloR, y: p.y - haloR, width: 2 * haloR, height: 2 * haloR)),
+                       with: .color(color.opacity(0.5 * brightness)))
+        }
+        ctx.fill(Path(ellipseIn: CGRect(x: p.x - coreR, y: p.y - coreR, width: 2 * coreR, height: 2 * coreR)),
+                 with: .color(color.opacity(0.4 + 0.6 * brightness)))
     }
 
     @ViewBuilder private var gradientEffects: some View {
