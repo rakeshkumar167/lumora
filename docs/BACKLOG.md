@@ -71,10 +71,17 @@ Two image-input media types added alongside `.image`/`.video`:
 - **Laser Trace** (`.laserTrace(URL, RGBAColor, Double)`) — `CIEdges` edge
   points, a laser bar sweeps bottom→top revealing edges that persist, then
   hold/fade/repeat. Selectable color + trace speed (0.05×–4×).
-- **Contour Trace** (`.contourTrace(URL, RGBAColor, Double)`) — Vision
+- **Contour Trace** (`.contourTrace([URL], RGBAColor, Double, Bool)`) — Vision
   `VNDetectContoursRequest` contours, a single pen navigates edge-to-edge
   (nearest-neighbour walk), with polygon-simplify + dedup to tighten. Selectable
-  color + trace speed.
+  color + trace speed. **Updated 2026-07-11:** now takes *multiple images* —
+  each image's contour walk is concatenated and traced one after another,
+  overlaying the previous and staying lit (build-up), then hold/fade/repeat; and
+  a **Rainbow** option colors the trace by arc-length position across the whole
+  walk in ~24 gradient bands (one spectrum pass, gentle drift) via the pure,
+  unit-tested `ContourTrace` helper in LumoraKit. Compat caveat: projects saved
+  before this change that contain a Contour Trace surface won't reopen (the case
+  payload shape changed; other media unaffected).
 
 Both are stateless `Canvas` views (`LaserTraceContent`/`ContourTraceContent`)
 with edge extraction cached off-thread. Vision/CoreImage use bottom-left origin —
