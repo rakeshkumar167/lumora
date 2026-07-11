@@ -172,14 +172,32 @@ private struct MediaEditor: View {
                 in: 0.05...4
             )
 
-        case .contourTrace(let url, let penColor, let speed):
-            LabeledContent("File", value: url.lastPathComponent)
-            Button("Choose Image…") { chooseContourImage(keeping: penColor) }
-            Text("Pen Color").font(.caption).foregroundStyle(.secondary)
-            colorControls(current: penColor) { media = .contourTrace(url, $0, speed) }
+        case .contourTrace(let urls, let penColor, let speed, let rainbow):
+            Text("Images (traced in order)").font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(urls.enumerated()), id: \.offset) { idx, url in
+                HStack {
+                    Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button {
+                        var next = urls; next.remove(at: idx)
+                        media = .contourTrace(next, penColor, speed, rainbow)
+                    } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                        .disabled(urls.count <= 1)
+                }
+            }
+            Button("Add Image(s)…") { addContourImages(to: urls, color: penColor, speed: speed, rainbow: rainbow) }
+            Toggle("Rainbow", isOn: Binding(
+                get: { rainbow },
+                set: { media = .contourTrace(urls, penColor, speed, $0) }
+            ))
+            if !rainbow {
+                Text("Pen Color").font(.caption).foregroundStyle(.secondary)
+                colorControls(current: penColor) { media = .contourTrace(urls, $0, speed, rainbow) }
+            }
             Text("Trace Speed").font(.caption).foregroundStyle(.secondary)
             Slider(
-                value: Binding(get: { speed }, set: { media = .contourTrace(url, penColor, $0) }),
+                value: Binding(get: { speed }, set: { media = .contourTrace(urls, penColor, $0, rainbow) }),
                 in: 0.05...4
             )
         }
@@ -255,9 +273,18 @@ private struct MediaEditor: View {
     private func chooseContourImage(keeping color: RGBAColor = .green) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            media = .contourTrace(url, color, 1.0)
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK, !panel.urls.isEmpty {
+            media = .contourTrace(panel.urls, color, 1.0, false)
+        }
+    }
+
+    private func addContourImages(to urls: [URL], color: RGBAColor, speed: Double, rainbow: Bool) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK, !panel.urls.isEmpty {
+            media = .contourTrace(urls + panel.urls, color, speed, rainbow)
         }
     }
 }

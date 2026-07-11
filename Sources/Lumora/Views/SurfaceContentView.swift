@@ -73,8 +73,8 @@ struct SurfaceContentView: View {
             VideoContent(url: url)
         case .laserTrace(let url, let c, let speed):
             LaserTraceContent(url: url, color: c, speed: speed, time: time)
-        case .contourTrace(let url, let c, let speed):
-            ContourTraceContent(url: url, color: c, speed: speed, time: time)
+        case .contourTrace(let urls, let c, let speed, let rainbow):
+            ContourTraceContent(urls: urls, color: c, speed: speed, rainbow: rainbow, time: time)
         }
     }
 
@@ -2128,24 +2128,29 @@ private struct ContourPolyline {
 private final class ContourTraceModel: ObservableObject {
     @Published var contours: [ContourPolyline] = []
     @Published var totalLength: CGFloat = 0
-    private var loadedURL: URL?
+    private var loadedURLs: [URL] = []
 
     private static var cache: [URL: [ContourPolyline]] = [:]
     private static let cacheQueue = DispatchQueue(label: "lumora.contourTrace.cache")
 
-    func load(_ url: URL) {
-        guard url != loadedURL else { return }
-        loadedURL = url
-        if let cached = Self.cacheQueue.sync(execute: { Self.cache[url] }) {
-            apply(cached)
-            return
-        }
+    /// Load one or more images and concatenate their ordered contour walks in
+    /// array order, so the pen traces image 1 fully, then image 2, etc. — each
+    /// overlaying the previous.
+    func load(_ urls: [URL]) {
+        guard urls != loadedURLs else { return }
+        loadedURLs = urls
         contours = []; totalLength = 0
+        let work = urls
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Self.extractContours(from: url)
-            Self.cacheQueue.sync { Self.cache[url] = result }
+            var all: [ContourPolyline] = []
+            for url in work {
+                let cached = Self.cacheQueue.sync { Self.cache[url] }
+                let c = cached ?? Self.extractContours(from: url)
+                if cached == nil { Self.cacheQueue.sync { Self.cache[url] = c } }
+                all.append(contentsOf: c)   // per-image walk, kept in image order
+            }
             DispatchQueue.main.async {
-                if self.loadedURL == url { self.apply(result) }
+                if self.loadedURLs == work { self.apply(all) }
             }
         }
     }
@@ -2258,12 +2263,17 @@ private final class ContourTraceModel: ObservableObject {
 /// (bottom→top); drawn strokes persist into the full outline, which holds and
 /// fades before repeating. A `Canvas` so it warps with the surface.
 private struct ContourTraceContent: View {
-    let url: URL
+    let urls: [URL]
     let color: RGBAColor
     let speed: Double
+    let rainbow: Bool
     let time: Double
 
     @StateObject private var model = ContourTraceModel()
+
+    private func bandColor(_ bi: Int) -> Color {
+        Color(hue: ContourTrace.hue(forBand: bi), saturation: 0.95, brightness: 1)
+    }
 
     var body: some View {
         Canvas { ctx, size in
@@ -2272,7 +2282,9 @@ private struct ContourTraceContent: View {
             let total = model.totalLength
             guard !contours.isEmpty, total > 0 else { return }
 
-            let sweepDur = 6.0 / max(speed, 0.02), holdDur = 1.5, fadeDur = 1.5
+            // ~6s per image, so more images take proportionally longer.
+            let sweepDur = 6.0 * Double(max(1, urls.count)) / max(speed, 0.02)
+            let holdDur = 1.5, fadeDur = 1.5
             let period = sweepDur + holdDur + fadeDur
             let localT = time.truncatingRemainder(dividingBy: period)
             let sweepP = min(localT / sweepDur, 1)
@@ -2283,30 +2295,52 @@ private struct ContourTraceContent: View {
             let laser = color.color
             let w = size.width, h = size.height
             let drawn = CGFloat(sweepP) * total
+            let phase = time * 0.03
             func sp(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * w, y: p.y * h) }
+            func band(_ midLen: CGFloat) -> Int { ContourTrace.rainbowBand(length: midLen, total: total, phase: phase) }
 
             var acc: CGFloat = 0
-            var full = Path()          // fully-drawn contours
+            var full = Path()          // fully-drawn contours (single-color mode)
             var partial = Path()       // the contour currently under the pen
+            var bands = rainbow ? [Path](repeating: Path(), count: ContourTrace.rainbowBandCount) : []
             var penTip: CGPoint?
+
             for c in contours {
                 if drawn >= acc + c.total {
-                    full.move(to: sp(c.points[0]))
-                    for k in 1..<c.points.count { full.addLine(to: sp(c.points[k])) }
+                    if rainbow {
+                        for k in 1..<c.points.count {
+                            let bi = band(acc + (c.lengths[k - 1] + c.lengths[k]) / 2)
+                            bands[bi].move(to: sp(c.points[k - 1])); bands[bi].addLine(to: sp(c.points[k]))
+                        }
+                    } else {
+                        full.move(to: sp(c.points[0]))
+                        for k in 1..<c.points.count { full.addLine(to: sp(c.points[k])) }
+                    }
                     acc += c.total
                 } else if drawn > acc {
                     let target = drawn - acc
-                    partial.move(to: sp(c.points[0]))
                     var tip = c.points[0]
+                    if !rainbow { partial.move(to: sp(c.points[0])) }
                     for k in 1..<c.points.count {
                         if c.lengths[k] <= target {
-                            partial.addLine(to: sp(c.points[k])); tip = c.points[k]
+                            if rainbow {
+                                let bi = band(acc + (c.lengths[k - 1] + c.lengths[k]) / 2)
+                                bands[bi].move(to: sp(c.points[k - 1])); bands[bi].addLine(to: sp(c.points[k]))
+                            } else {
+                                partial.addLine(to: sp(c.points[k]))
+                            }
+                            tip = c.points[k]
                         } else {
                             let seg = max(c.lengths[k] - c.lengths[k - 1], 0.0001)
                             let f = (target - c.lengths[k - 1]) / seg
                             let a = c.points[k - 1], b = c.points[k]
                             tip = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
-                            partial.addLine(to: sp(tip))
+                            if rainbow {
+                                let bi = band(acc + (c.lengths[k - 1] + target) / 2)
+                                bands[bi].move(to: sp(a)); bands[bi].addLine(to: sp(tip))
+                            } else {
+                                partial.addLine(to: sp(tip))
+                            }
                             break
                         }
                     }
@@ -2317,26 +2351,39 @@ private struct ContourTraceContent: View {
                 }
             }
 
-            // Glow underlay + solid core for both drawn portions.
-            ctx.drawLayer { layer in
-                layer.addFilter(.blur(radius: 3))
-                layer.stroke(full, with: .color(laser.opacity(0.5)), lineWidth: 2.6)
-                layer.stroke(partial, with: .color(laser.opacity(0.5)), lineWidth: 2.6)
+            // Glow underlay + solid core.
+            if rainbow {
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 3))
+                    for bi in bands.indices where !bands[bi].isEmpty {
+                        layer.stroke(bands[bi], with: .color(bandColor(bi).opacity(0.5)), lineWidth: 2.6)
+                    }
+                }
+                for bi in bands.indices where !bands[bi].isEmpty {
+                    ctx.stroke(bands[bi], with: .color(bandColor(bi)), lineWidth: 1.6)
+                }
+            } else {
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 3))
+                    layer.stroke(full, with: .color(laser.opacity(0.5)), lineWidth: 2.6)
+                    layer.stroke(partial, with: .color(laser.opacity(0.5)), lineWidth: 2.6)
+                }
+                ctx.stroke(full, with: .color(laser), lineWidth: 1.6)
+                ctx.stroke(partial, with: .color(laser), lineWidth: 1.6)
             }
-            ctx.stroke(full, with: .color(laser), lineWidth: 1.6)
-            ctx.stroke(partial, with: .color(laser), lineWidth: 1.6)
 
             // The bright pen tip (only while still drawing).
             if let tip = penTip, sweepP < 1 {
+                let glow = rainbow ? bandColor(band(drawn)) : Color.white
                 let r: CGFloat = 4
                 ctx.drawLayer { layer in
                     layer.addFilter(.blur(radius: 5))
                     layer.fill(Path(ellipseIn: CGRect(x: tip.x - r, y: tip.y - r, width: 2 * r, height: 2 * r)),
-                               with: .color(.white.opacity(0.9)))
+                               with: .color(glow.opacity(0.9)))
                 }
                 ctx.fill(Path(ellipseIn: CGRect(x: tip.x - 2, y: tip.y - 2, width: 4, height: 4)), with: .color(.white))
             }
         }
-        .task(id: url) { model.load(url) }
+        .task(id: urls) { model.load(urls) }
     }
 }

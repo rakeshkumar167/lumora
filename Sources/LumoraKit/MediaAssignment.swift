@@ -8,7 +8,7 @@ public enum MediaAssignment: Equatable, Codable {
     case image(URL)
     case video(URL)
     case laserTrace(URL, RGBAColor, Double)     // source image, laser color, trace speed (×)
-    case contourTrace(URL, RGBAColor, Double)   // source image, pen color, trace speed (×)
+    case contourTrace([URL], RGBAColor, Double, Bool)   // images, pen color, trace speed (×), rainbow
 
     public var label: String {
         switch self {
@@ -18,7 +18,8 @@ public enum MediaAssignment: Equatable, Codable {
         case .image(let url): return url.lastPathComponent
         case .video(let url): return url.lastPathComponent
         case .laserTrace(let url, _, _): return "Laser Trace · \(url.lastPathComponent)"
-        case .contourTrace(let url, _, _): return "Contour Trace · \(url.lastPathComponent)"
+        case .contourTrace(let urls, _, _, _):
+            return "Contour Trace · \(urls.count == 1 ? (urls.first?.lastPathComponent ?? "") : "\(urls.count) images")"
         }
     }
 }
