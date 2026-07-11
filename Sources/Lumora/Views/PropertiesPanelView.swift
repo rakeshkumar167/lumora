@@ -8,13 +8,15 @@ struct PropertiesPanelView: View {
 
     var body: some View {
         Group {
-            if let binding = store.selectedBinding() {
+            if let lineBinding = store.selectedLineBinding() {
+                LightLineEditor(line: lineBinding)
+            } else if let binding = store.selectedBinding() {
                 editor(binding)
             } else {
                 ContentUnavailableView(
-                    "No Surface Selected",
+                    "Nothing Selected",
                     systemImage: "square.dashed",
-                    description: Text("Select or add a surface to edit its media and geometry.")
+                    description: Text("Select or add a surface or light line to edit it.")
                 )
             }
         }
@@ -257,5 +259,77 @@ private struct MediaEditor: View {
         if panel.runModal() == .OK, let url = panel.url {
             media = .contourTrace(url, color, 1.0)
         }
+    }
+}
+
+/// Edits the selected light line: name, colors, thickness, glow, and timing.
+private struct LightLineEditor: View {
+    @Binding var line: LightLine
+
+    var body: some View {
+        Form {
+            Section("Light Line") {
+                TextField("Name", text: $line.name)
+                Toggle("Visible", isOn: $line.isVisible)
+                VStack(alignment: .leading) {
+                    Text("Opacity \(Int(line.opacity * 100))%").font(.caption)
+                    Slider(value: $line.opacity, in: 0...1)
+                }
+                LabeledContent("Joints", value: "\(line.joints.count)")
+                LabeledContent("Source", value: line.sourceJointID == nil ? "None (right-click a joint)" : "Set")
+            }
+
+            Section("Appearance") {
+                Text("Line Color").font(.caption).foregroundStyle(.secondary)
+                colorControls(current: line.style.color) { line.style.color = $0 }
+                Text("Glow / Tracer Color").font(.caption).foregroundStyle(.secondary)
+                colorControls(current: line.style.glowColor) { line.style.glowColor = $0 }
+
+                VStack(alignment: .leading) {
+                    Text("Thickness \(String(format: "%.1f", line.style.thickness))").font(.caption)
+                    Slider(value: $line.style.thickness, in: 1...10)
+                }
+                VStack(alignment: .leading) {
+                    Text("Glow Radius \(Int(line.style.glowRadius))").font(.caption)
+                    Slider(value: $line.style.glowRadius, in: 2...30)
+                }
+            }
+
+            Section("Timing") {
+                VStack(alignment: .leading) {
+                    Text("Fill Duration \(String(format: "%.1f", line.style.fillDuration))s").font(.caption)
+                    Slider(value: $line.style.fillDuration, in: 0.5...10)
+                }
+                VStack(alignment: .leading) {
+                    Text("Hold Duration \(String(format: "%.1f", line.style.holdDuration))s").font(.caption)
+                    Slider(value: $line.style.holdDuration, in: 0...5)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Preset swatches plus a full color picker (mirrors MediaEditor.colorControls).
+    @ViewBuilder
+    private func colorControls(current: RGBAColor, apply: @escaping (RGBAColor) -> Void) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 28), spacing: 8)], spacing: 8) {
+            ForEach(RGBAColor.palette, id: \.self) { swatch in
+                Circle()
+                    .fill(swatch.color)
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Circle().stroke(
+                            swatch == current ? Color.primary : Color.black.opacity(0.2),
+                            lineWidth: swatch == current ? 2.5 : 1
+                        )
+                    )
+                    .onTapGesture { apply(swatch) }
+            }
+        }
+        ColorPicker(
+            "Custom Color",
+            selection: Binding(get: { current.color }, set: { apply(RGBAColor($0)) }),
+            supportsOpacity: true
+        )
     }
 }

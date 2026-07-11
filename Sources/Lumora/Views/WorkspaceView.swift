@@ -37,11 +37,12 @@ struct WorkspaceView: View {
             Picker("Pointer", selection: $store.tool) {
                 Image(systemName: "cursorarrow").tag(EditTool.arrow)
                 Image(systemName: "hand.raised.fill").tag(EditTool.hand)
+                Image(systemName: "pencil.line").tag(EditTool.pen)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            .help("Arrow: drag corners to warp the surface. Hand: drag inside to move the whole surface.")
+            .help("Arrow: warp surface corners. Hand: move a surface. Pen: click to drop/connect light-line joints.")
 
             Divider().frame(height: 16)
 
@@ -49,6 +50,12 @@ struct WorkspaceView: View {
                 store.addSurface()
             } label: {
                 Label("Add Surface", systemImage: "plus.square.on.square")
+            }
+
+            Button {
+                store.addLine()
+            } label: {
+                Label("Add Line", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
             }
 
             Divider().frame(height: 16)
