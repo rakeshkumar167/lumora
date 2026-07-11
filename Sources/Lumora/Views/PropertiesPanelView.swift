@@ -200,15 +200,15 @@ private struct MediaEditor: View {
     /// Preset swatches plus a full color picker for any custom color.
     @ViewBuilder
     private func colorControls(current: RGBAColor, apply: @escaping (RGBAColor) -> Void) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 28), spacing: 8)], spacing: 8) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 8), spacing: 4) {
             ForEach(RGBAColor.palette, id: \.self) { swatch in
-                Circle()
+                RoundedRectangle(cornerRadius: 3)
                     .fill(swatch.color)
-                    .frame(width: 24, height: 24)
+                    .aspectRatio(1, contentMode: .fit)
                     .overlay(
-                        Circle().stroke(
+                        RoundedRectangle(cornerRadius: 3).stroke(
                             swatch == current ? Color.primary : Color.black.opacity(0.2),
-                            lineWidth: swatch == current ? 2.5 : 1
+                            lineWidth: swatch == current ? 2 : 1
                         )
                     )
                     .onTapGesture { apply(swatch) }
@@ -312,15 +312,15 @@ private struct LightLineEditor: View {
     /// Preset swatches plus a full color picker (mirrors MediaEditor.colorControls).
     @ViewBuilder
     private func colorControls(current: RGBAColor, apply: @escaping (RGBAColor) -> Void) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 28), spacing: 8)], spacing: 8) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 8), spacing: 4) {
             ForEach(RGBAColor.palette, id: \.self) { swatch in
-                Circle()
+                RoundedRectangle(cornerRadius: 3)
                     .fill(swatch.color)
-                    .frame(width: 24, height: 24)
+                    .aspectRatio(1, contentMode: .fit)
                     .overlay(
-                        Circle().stroke(
+                        RoundedRectangle(cornerRadius: 3).stroke(
                             swatch == current ? Color.primary : Color.black.opacity(0.2),
-                            lineWidth: swatch == current ? 2.5 : 1
+                            lineWidth: swatch == current ? 2 : 1
                         )
                     )
                     .onTapGesture { apply(swatch) }
