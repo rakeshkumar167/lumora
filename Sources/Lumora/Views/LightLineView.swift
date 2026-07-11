@@ -76,7 +76,7 @@ struct LightLineView: View {
             let (p0, p1) = dA <= dB ? (a, b) : (b, a)
             let litEnd = CGPoint(x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f)
             litPath.move(to: p0); litPath.addLine(to: litEnd)
-            if f < 1 { heads.append(litEnd) } // still filling -> tracer head here
+            if f < 0.9999 { heads.append(litEnd) } // epsilon tolerance: don't leave a head stuck at a fully-lit tip during hold (float imprecision)
         }
 
         // Wide soft glow, brighter mid glow, crisp core.
