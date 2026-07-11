@@ -416,32 +416,57 @@ private struct EffectView: View {
         ctx.fill(Path(roundedRect: capRect, cornerSize: CGSize(width: capH * 0.3, height: capH * 0.3)),
                  with: .color(Color(white: 0.32)))
 
-        // Glass body dangling below the cap.
-        let halfH: CGFloat = round ? r : r * 1.18
-        let halfW: CGFloat = round ? r : r * 0.82
+        // Glass body dangling below the cap. Globes are round; the others are
+        // C7/C9-style flame bulbs — a wide rounded shoulder near the cap
+        // tapering to a pointed tip.
+        let halfH: CGFloat = round ? r : r * 1.5
+        let halfW: CGFloat = round ? r : r * 0.85
         let cy = p.y + capH * 0.5 + halfH
         let center = CGPoint(x: p.x, y: cy)
-        let bodyRect = CGRect(x: center.x - halfW, y: center.y - halfH, width: 2 * halfW, height: 2 * halfH)
 
         // Soft glow halo.
         ctx.drawLayer { layer in
             layer.addFilter(.blur(radius: r * 1.3))
             layer.blendMode = .plusLighter
-            let hr = halfH * (1.3 + 0.8 * brightness)
+            let hr = halfH * (1.1 + 0.8 * brightness)
             layer.fill(Path(ellipseIn: CGRect(x: center.x - hr, y: center.y - hr, width: 2 * hr, height: 2 * hr)),
                        with: .color(color.opacity(0.55 * brightness)))
         }
 
         // Glass body.
-        let body = Path(ellipseIn: bodyRect)
+        let body = round
+            ? Path(ellipseIn: CGRect(x: center.x - halfW, y: center.y - halfH, width: 2 * halfW, height: 2 * halfH))
+            : flameBulbPath(center: center, halfW: halfW, halfH: halfH)
         ctx.fill(body, with: .color(color.opacity(0.55 + 0.45 * brightness)))
         ctx.stroke(body, with: .color(.black.opacity(0.18)), lineWidth: max(0.6, r * 0.06))
 
-        // Specular highlight, upper-left of the body.
-        let hlR = halfW * 0.34
-        let hl = CGPoint(x: center.x - halfW * 0.32, y: center.y - halfH * 0.4)
+        // Specular highlight, upper-left near the shoulder.
+        let hlR = halfW * 0.32
+        let hl = CGPoint(x: center.x - halfW * 0.34, y: center.y - halfH * 0.45)
         ctx.fill(Path(ellipseIn: CGRect(x: hl.x - hlR, y: hl.y - hlR, width: 2 * hlR, height: 2 * hlR)),
                  with: .color(.white.opacity(0.55 * max(0.4, brightness))))
+    }
+
+    /// A C7/C9 "flame" bulb outline: a rounded, wide shoulder near the top (cap
+    /// side) tapering down to a pointed tip. `center` is the body center.
+    private func flameBulbPath(center: CGPoint, halfW: CGFloat, halfH: CGFloat) -> Path {
+        let cx = center.x
+        let ty = center.y - halfH          // top (cap side)
+        let by = center.y + halfH          // pointed tip
+        let shoulderY = center.y - halfH * 0.40   // widest, ~30% down from top
+        var p = Path()
+        p.move(to: CGPoint(x: cx - halfW, y: shoulderY))
+        // Rounded dome over the top toward the cap.
+        p.addQuadCurve(to: CGPoint(x: cx + halfW, y: shoulderY),
+                       control: CGPoint(x: cx, y: ty - halfH * 0.05))
+        // Right shoulder tapering to the tip.
+        p.addQuadCurve(to: CGPoint(x: cx, y: by),
+                       control: CGPoint(x: cx + halfW * 0.95, y: center.y + halfH * 0.4))
+        // Tip back up the left side.
+        p.addQuadCurve(to: CGPoint(x: cx - halfW, y: shoulderY),
+                       control: CGPoint(x: cx - halfW * 0.95, y: center.y + halfH * 0.4))
+        p.closeSubpath()
+        return p
     }
 
     @ViewBuilder private var gradientEffects: some View {
