@@ -1304,6 +1304,8 @@ private struct EffectView: View {
     // A handful of shells launch at a relaxed cadence; roughly a quarter of them
     // are large multi-ring "grand" bursts.
     private static let fireworkShells = 5
+    /// Multiplier on the fireworks clock; < 1 slows the whole cycle down.
+    private static let fireworkSpeed: Double = 0.6
 
     private func drawFireworks(ctx: GraphicsContext, size: CGSize) {
         // Night sky.
@@ -1325,7 +1327,7 @@ private struct EffectView: View {
         let burstDur: Double = 3.2
         let period: Double = launchDur + burstDur
         // Relaxed, evenly-staggered launches so a few bursts hang in the sky at once.
-        let tt: Double = time + Double(s) * period / Double(Self.fireworkShells)
+        let tt: Double = time * Self.fireworkSpeed + Double(s) * period / Double(Self.fireworkShells)
         let cycle: Double = floor(tt / period)
         let lt: Double = tt - cycle * period
         let seed: Int = Int(cycle) &* 131 &+ s &* 977
