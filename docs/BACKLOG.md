@@ -109,6 +109,18 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 - **Grid default** — new surfaces spawn with the `grid` alignment effect.
 - **20 new effects** (see above).
 
+## Paused — ready to build on request
+
+- **Marker calibration & auto-surface detection** — project four corner
+  fiducials, photograph the scene, import the photo, auto-detect object
+  rectangles via Vision, map them through a photo→canvas homography into
+  editable quad surfaces with a keep/discard review step (also delivers
+  room-photo-import backdrop). Spec + full implementation plan are written and
+  approved; do NOT start until the user asks to resume.
+  - Spec: `docs/superpowers/specs/2026-07-11-marker-calibration-auto-surfaces-design.md`
+  - Plan: `docs/superpowers/plans/2026-07-11-marker-calibration-auto-surfaces.md`
+    (5 TDD tasks; execute via subagent-driven-development on a feature branch).
+
 ## Working preferences (for next session)
 
 - Build incrementally in **verified sets of 2**; keep it compiling at each step.
