@@ -14,6 +14,7 @@ enum Cities {
     static let all: [City] = [
         City(name: "Amsterdam", latitude: 52.3676, longitude: 4.9041),
         City(name: "Auckland", latitude: -36.8485, longitude: 174.7633),
+        City(name: "Bangalore", latitude: 12.9716, longitude: 77.5946),
         City(name: "Bangkok", latitude: 13.7563, longitude: 100.5018),
         City(name: "Barcelona", latitude: 41.3874, longitude: 2.1686),
         City(name: "Berlin", latitude: 52.5200, longitude: 13.4050),

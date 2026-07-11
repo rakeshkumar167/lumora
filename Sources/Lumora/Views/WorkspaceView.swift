@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct WorkspaceView: View {
     @EnvironmentObject var store: ProjectStore
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
 
     private var lumoraType: UTType { UTType(filenameExtension: "lumora") ?? .json }
 
@@ -18,14 +19,12 @@ struct WorkspaceView: View {
             VStack(spacing: 0) {
                 toolbar
                 Divider()
-                ScrollView([.horizontal, .vertical]) {
-                    RoomCanvasView()
-                        .padding(28)
-                }
-                .frame(maxHeight: .infinity)
-                .background(Color(nsColor: .underPageBackgroundColor))
+                RoomCanvasView()
+                    .padding(16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(nsColor: .underPageBackgroundColor))
             }
-            .frame(minWidth: 500)
+            .frame(minWidth: 360)
 
             PropertiesPanelView()
                 .frame(minWidth: 250, idealWidth: 270, maxWidth: 320)
@@ -82,11 +81,17 @@ struct WorkspaceView: View {
                 .foregroundStyle(.secondary)
 
             Button {
-                openWindow(id: "projection")
+                if store.projecting {
+                    dismissWindow(id: "projection")
+                } else {
+                    openWindow(id: "projection")
+                }
             } label: {
-                Label("Project", systemImage: "play.rectangle.fill")
+                Label(store.projecting ? "Stop" : "Project",
+                      systemImage: store.projecting ? "stop.rectangle.fill" : "play.rectangle.fill")
             }
             .buttonStyle(.borderedProminent)
+            .tint(store.projecting ? .red : .accentColor)
             .keyboardShortcut("p", modifiers: [.command])
         }
         .padding(.horizontal, 14)

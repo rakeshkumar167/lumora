@@ -290,7 +290,7 @@ private struct EffectView: View {
             ambientEffects
         case .outlineGlow:
             edgeEffects
-        case .analogClock, .digitalClock:
+        case .analogClock, .digitalClock, .weatherWidget:
             clockEffects
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             christmasEffects
@@ -1323,6 +1323,9 @@ private struct EffectView: View {
         case .digitalClock:
             DigitalClockView(color: color, accent: accent, time: time)
 
+        case .weatherWidget:
+            WeatherWidgetView(time: time)
+
         default: EmptyView()
         }
     }
@@ -1521,14 +1524,15 @@ private struct EffectView: View {
             let p: Double = lt / launchDur
             let ease: Double = 1 - (1 - p) * (1 - p)       // ease-out rise
             let y: Double = h + (burstY - h) * ease
-            for k in 0..<9 {
-                let ky: Double = y + Double(k) * 5
-                let r: Double = (grand ? 2.8 : 2.0) - Double(k) * 0.25
+            // Longer, brighter rising spark trail.
+            for k in 0..<16 {
+                let ky: Double = y + Double(k) * 6
+                let r: Double = (grand ? 3.4 : 2.6) - Double(k) * 0.18
                 if r <= 0 { continue }
-                let a: Double = (1 - Double(k) / 9) * (1 - p * 0.2) * (0.5 + 0.5 * Double(hash01(seed, k + 30)))
+                let a: Double = (1 - Double(k) / 16) * (1 - p * 0.15) * (0.6 + 0.4 * Double(hash01(seed, k + 30)))
                 let rect = CGRect(x: launchX - r, y: ky - r, width: r * 2, height: r * 2)
                 layer.fill(Path(ellipseIn: rect),
-                           with: .color(Color(red: 1, green: 0.8, blue: 0.45).opacity(a)))
+                           with: .color(Color(red: 1, green: 0.85, blue: 0.5).opacity(a)))
             }
             return
         }
@@ -1538,13 +1542,13 @@ private struct EffectView: View {
         let bt: Double = (lt - launchDur) / burstDur       // 0 … 1
         let dragPow: Double = 3                             // strong ease-out = air drag
         let expand: Double = 1 - pow(1 - bt, dragPow)
-        let btPrev: Double = max(0, bt - 0.05)             // look-back for streak tails
+        let btPrev: Double = max(0, bt - 0.12)             // longer look-back → longer visible trails
         let expandPrev: Double = 1 - pow(1 - btPrev, dragPow)
         let maxR: Double = minDim * (grand ? 0.42 : 0.26)
         let gravity: Double = minDim * (grand ? 0.32 : 0.22)
         let drop: Double = gravity * bt * bt
         let dropPrev: Double = gravity * btPrev * btPrev
-        let fade: Double = pow(max(0, 1 - bt), grand ? 1.0 : 1.3)
+        let fade: Double = pow(max(0, 1 - bt), grand ? 0.85 : 1.05)   // slower fade → trails linger
         let particles = grand ? 132 : 70
 
         // Bright ignition flash.
@@ -1574,16 +1578,16 @@ private struct EffectView: View {
             let ph: Double = fract(hue + (inner ? 0.12 : 0) + (Double(hash01(seed, pI)) - 0.5) * 0.1)
             let twinkle: Double = 0.72 + 0.28 * sin(time * 40 + Double(pI) * 1.3)
             let alpha: Double = fade * twinkle
-            let col = Color(hue: ph, saturation: 0.85, brightness: 1)
-            let lwid: Double = (grand ? 2.2 : 1.7) * (0.4 + 0.6 * fade)
+            let col = Color(hue: ph, saturation: 0.82, brightness: 1)
+            let lwid: Double = (grand ? 3.0 : 2.4) * (0.5 + 0.5 * fade)
             // Motion-blur streak from the previous position to the current one.
             var streak = Path()
             streak.move(to: CGPoint(x: pxPrev, y: pyPrev))
             streak.addLine(to: CGPoint(x: px, y: py))
-            layer.stroke(streak, with: .color(col.opacity(alpha * 0.8)),
+            layer.stroke(streak, with: .color(col.opacity(min(1, alpha * 1.15))),
                          style: StrokeStyle(lineWidth: lwid, lineCap: .round))
             // Bright head.
-            let hr: Double = lwid * 0.85
+            let hr: Double = lwid * 0.95
             let rect = CGRect(x: px - hr, y: py - hr, width: hr * 2, height: hr * 2)
             layer.fill(Path(ellipseIn: rect), with: .color(col.opacity(alpha)))
         }

@@ -12,7 +12,8 @@ struct DigitalClockView: View {
     @ObservedObject private var weather = WeatherStore.shared
 
     private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter(); f.timeStyle = .medium; f.dateStyle = .none; return f
+        // .short → hours:minutes only (no seconds).
+        let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none; return f
     }()
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("EEEEMMMd"); return f

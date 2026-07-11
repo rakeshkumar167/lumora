@@ -136,7 +136,7 @@ private struct MediaEditor: View {
                     }
                 }
             }
-            if effectKind == .digitalClock {
+            if effectKind == .digitalClock || effectKind == .weatherWidget {
                 Picker("City", selection: Binding(
                     get: { weather.selectedCity },
                     set: { weather.selectedCity = $0 }

@@ -50,6 +50,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case outlineGlow
     case analogClock
     case digitalClock
+    case weatherWidget
     case christmasTree
     case chasingLights
     case multiColorLights
@@ -63,7 +64,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
              .voronoi, .vectorGrid, .livingTexture, .fire, .bubbles, .fireworks,
-             .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
+             .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
+             .weatherWidget:
             return false
         default:
             return true
@@ -135,6 +137,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .outlineGlow: return "Outline Glow"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
+        case .weatherWidget: return "Weather Widget"
         case .christmasTree: return "Christmas Tree"
         case .chasingLights: return "Chasing Lights"
         case .multiColorLights: return "Multi-Colored Lights"
@@ -169,7 +172,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .ambient
         case .outlineGlow:
             return .edge
-        case .analogClock, .digitalClock:
+        case .analogClock, .digitalClock, .weatherWidget:
             return .clocks
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             return .christmas

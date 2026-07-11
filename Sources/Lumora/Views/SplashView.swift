@@ -33,9 +33,15 @@ struct SplashView: View {
 /// Wraps the workspace and shows the splash on launch.
 struct RootView: View {
     @State private var showSplash = true
+    @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
         WorkspaceView()
+            .onDisappear {
+                // Closing the editor window also closes the projection output,
+                // so nothing keeps running on the projector after the app is shut.
+                dismissWindow(id: "projection")
+            }
             .overlay {
                 if showSplash {
                     SplashView()

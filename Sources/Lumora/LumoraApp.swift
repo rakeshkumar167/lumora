@@ -10,7 +10,7 @@ struct LumoraApp: App {
         WindowGroup("Lumora") {
             RootView()
                 .environmentObject(store)
-                .frame(minWidth: 1200, minHeight: 700)
+                .frame(minWidth: 900, minHeight: 600)
         }
 
         // Fullscreen projection output (send to a second display / projector).

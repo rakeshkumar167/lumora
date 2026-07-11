@@ -8,37 +8,46 @@ struct RoomCanvasView: View {
     @EnvironmentObject var store: ProjectStore
 
     var body: some View {
-        let size = store.canvasSize
-        TimelineView(.animation) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            ZStack(alignment: .topLeading) {
-                Image(nsImage: store.roomImage)
-                    .resizable()
-                    .frame(width: size.width, height: size.height)
+        let canvas = store.canvasSize
+        // Scale the canvas to fit the available area (aspect-preserving, never
+        // upscaled past native) so it is always fully visible, even on a small
+        // screen. All child geometry + the "canvas" coordinate space use this
+        // fitted size, so drag handles stay correct.
+        GeometryReader { geo in
+            let scale = min(geo.size.width / canvas.width, geo.size.height / canvas.height, 1)
+            let size = CGSize(width: canvas.width * scale, height: canvas.height * scale)
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                ZStack(alignment: .topLeading) {
+                    Image(nsImage: store.roomImage)
+                        .resizable()
+                        .frame(width: size.width, height: size.height)
 
-                ForEach(store.surfaces) { surface in
-                    if surface.isVisible {
-                        SurfaceContentView(surface: surface, canvasSize: size, time: t)
+                    ForEach(store.surfaces) { surface in
+                        if surface.isVisible {
+                            SurfaceContentView(surface: surface, canvasSize: size, time: t)
+                        }
+                    }
+
+                    ForEach(store.lightLines) { line in
+                        if line.isVisible {
+                            LightLineView(line: line, canvasSize: size, time: t)
+                        }
+                    }
+
+                    if let selectedLine = store.selectedLine {
+                        LightLineHandlesOverlay(line: selectedLine, canvasSize: size)
+                            .id(selectedLine.id)
+                    } else if let selected = store.selected {
+                        HandlesOverlay(surface: selected, canvasSize: size)
                     }
                 }
-
-                ForEach(store.lightLines) { line in
-                    if line.isVisible {
-                        LightLineView(line: line, canvasSize: size, time: t)
-                    }
-                }
-
-                if let selectedLine = store.selectedLine {
-                    LightLineHandlesOverlay(line: selectedLine, canvasSize: size)
-                        .id(selectedLine.id)
-                } else if let selected = store.selected {
-                    HandlesOverlay(surface: selected, canvasSize: size)
-                }
+                .frame(width: size.width, height: size.height)
+                .coordinateSpace(name: "canvas")
+                .overlay(Rectangle().stroke(Color.black.opacity(0.18), lineWidth: 1))
+                .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             }
-            .frame(width: size.width, height: size.height)
-            .coordinateSpace(name: "canvas")
-            .overlay(Rectangle().stroke(Color.black.opacity(0.18), lineWidth: 1))
-            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
     }
 }

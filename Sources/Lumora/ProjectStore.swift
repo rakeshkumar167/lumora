@@ -18,6 +18,8 @@ final class ProjectStore: ObservableObject {
     @Published var tool: EditTool = .arrow
     @Published var lightLines: [LightLine] = []
     @Published var selectedLineID: LightLine.ID?
+    /// Whether the projection output window is currently open.
+    @Published var projecting: Bool = false
 
     let roomImage: NSImage
     let canvasSize: CGSize

@@ -36,6 +36,8 @@ struct ProjectionRootView: View {
         }
         .ignoresSafeArea()
         .background(ProjectionWindowConfigurator())
+        .onAppear { store.projecting = true }
+        .onDisappear { store.projecting = false }
     }
 }
 
