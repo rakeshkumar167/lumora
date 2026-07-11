@@ -74,6 +74,21 @@ final class LightLineTests: XCTestCase {
         XCTAssertEqual(c.frontFraction(elapsed: 4), 0.5, accuracy: 1e-9)   // next cycle mid-fill
     }
 
+    func testLitFractionZeroLengthSegment() {
+        let a = UUID(), b = UUID(), c = UUID()
+        // A(0,0) - B(0.5,0) - C(0.5,0); B-C is zero-length.
+        let l = line(joints: [(a, CGPoint(x: 0, y: 0)), (b, CGPoint(x: 0.5, y: 0)), (c, CGPoint(x: 0.5, y: 0))],
+                     edges: [(a, b), (b, c)], source: a)
+        let dist = l.distancesFromSource()
+        let bc = l.segments[1] // B-C, zero-length segment, near endpoint B at distance 0.5
+        // front hasn't reached B yet.
+        XCTAssertEqual(l.litFraction(of: bc, front: 0.25, distances: dist), 0, accuracy: 1e-9)
+        // front at B (the near endpoint).
+        XCTAssertEqual(l.litFraction(of: bc, front: 0.5, distances: dist), 1, accuracy: 1e-9)
+        // front past B.
+        XCTAssertEqual(l.litFraction(of: bc, front: 1.0, distances: dist), 1, accuracy: 1e-9)
+    }
+
     func testCodableRoundTrip() throws {
         let a = UUID(), b = UUID()
         let original = line(joints: [(a, CGPoint(x: 0.1, y: 0.2)), (b, CGPoint(x: 0.8, y: 0.9))],
