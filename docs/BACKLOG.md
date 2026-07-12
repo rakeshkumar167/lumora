@@ -111,6 +111,15 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 
 ## Done recently (2026-07-13)
 
+- **More effects + GoL rebake** — Game of Life rebaked with denser seeding (45
+  clusters) and 4 distinct baked acts looping (~3 min). New **Circuit Trace**
+  (Ambient): deterministic PCB traces routed on a grid, progressively drawn in
+  with glowing heads + vias (contour-trace-style). Five geometric morphing
+  effects (Patterns): **Infinite Kaleidoscope**, **Mandala Expansion**,
+  **Sacred Geometry** (continuous-sides polygon radius morphs triangle↔hexagon↔
+  circle), **Recursive Fractal Zoom** (log-periodic nested polygons), and
+  **Tessellation Morph**. Also fixed projection re-entering fullscreen on the
+  projector after Stop→Start (viewDidMoveToWindow reconfig).
 - **Scenes** — a project is now an ordered list of `ProjectScene`s (each with
   its own surfaces, light lines, and play duration). `Project` is scene-based
   with backward-compatible decode (legacy flat files load as one scene).
