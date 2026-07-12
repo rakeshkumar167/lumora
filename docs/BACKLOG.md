@@ -111,6 +111,16 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 
 ## Done recently (2026-07-12)
 
+- **Four Ambient effects + GoL baking** — added `flowingPlasma`,
+  `reactionDiffusion` (live Gray-Scott via a persistent `@StateObject`,
+  blurred to read as organic coral), `driftingNebula`, and `perlinFlow`
+  (streak grid oriented by an animated noise field). Falling Leaves falls ~1/3
+  as fast with a leaf-size control (`FallingLeavesConfig`). **Game of Life** no
+  longer simulates live: `scripts/generate_gol.swift` bakes ~2 min of curated
+  generations (liveliest of 30 seeds, periodic re-injection) into
+  `Resources/gameoflife.json`; the effect loops the baked frames via
+  `GameOfLifePattern` (zero per-frame cost) and resets at the end. Per-effect
+  configs live as optional structs on `Surface` with tolerant decode.
 - **Effect roster changes** — removed `crtScanlines` and `moire`. Added
   **Game of Life** (`gameOfLife`, Ambient category): Conway's Life driven from
   the clock, ~20 seeded soups, rainbow hue advancing per generation, panel
