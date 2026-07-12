@@ -1427,35 +1427,69 @@ private struct EffectView: View {
     }
 
     private func drawBubbles(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.04)))
-        // Bright, colour-hued bubbles: each gets its own vivid hue, a glassy
-        // filled body (additive so overlaps glow) and a rim + specular glint.
-        ctx.drawLayer { layer in
-            layer.blendMode = .plusLighter
-            for i in 0..<36 {
-                let speed = 0.15 + Double(hash01(i, 1)) * 0.3
-                let riseT = fract(Double(hash01(i, 2)) + time * speed)
-                let y = Double(size.height) * (1 - riseT)
-                let baseX = Double(hash01(i, 3)) * Double(size.width)
-                let wobble = sin(time * 1.3 + Double(i) * 2.1) * 14
-                let x = baseX + wobble
-                let r = 6.0 + Double(hash01(i, 4)) * 16.0
-                let rect = CGRect(x: CGFloat(x - r), y: CGFloat(y - r), width: CGFloat(r * 2), height: CGFloat(r * 2))
-                let hue = fract(Double(hash01(i, 5)) + time * 0.05)
-                let body = Color(hue: hue, saturation: 0.85, brightness: 1.0)
-                // Filled glassy body: bright core fading to a saturated edge.
-                layer.fill(Path(ellipseIn: rect),
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.05)))
+        // Transparent soap bubbles: a near-clear body so the background shows
+        // through, a thin iridescent (pastel spectrum) film on the rim, and a
+        // small offset specular glint. Normal blending for the body keeps
+        // overlaps from glowing like metal; only the glints are additive.
+        for i in 0..<34 {
+            let speed = 0.12 + Double(hash01(i, 1)) * 0.26
+            let riseT = fract(Double(hash01(i, 2)) + time * speed)
+            let y = Double(size.height) * (1 - riseT)
+            let baseX = Double(hash01(i, 3)) * Double(size.width)
+            let wobble = sin(time * 1.1 + Double(i) * 2.1) * 12
+            let x = baseX + wobble
+            let r = 7.0 + Double(hash01(i, 4)) * 20.0
+            let cx = CGFloat(x), cy = CGFloat(y)
+            let rect = CGRect(x: cx - CGFloat(r), y: cy - CGFloat(r), width: CGFloat(r * 2), height: CGFloat(r * 2))
+            let hueShift = Double(hash01(i, 5))
+
+            // Faint see-through body: clear center → a whisper of tint that only
+            // gathers near the film at the edge.
+            let tint = Color(hue: fract(0.55 + hueShift * 0.25), saturation: 0.22, brightness: 1.0)
+            ctx.fill(Path(ellipseIn: rect),
+                     with: .radialGradient(
+                        Gradient(stops: [
+                            .init(color: .white.opacity(0.015), location: 0.0),
+                            .init(color: tint.opacity(0.05), location: 0.65),
+                            .init(color: tint.opacity(0.16), location: 0.93),
+                            .init(color: .white.opacity(0.06), location: 1.0),
+                        ]),
+                        center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: CGFloat(r)))
+
+            // Iridescent film on the rim — pastel spectrum, thin and soft,
+            // slowly rotating so the sheen shifts.
+            let irid = Gradient(colors: [
+                Color(hue: 0.95, saturation: 0.32, brightness: 1),   // pink
+                Color(hue: 0.55, saturation: 0.32, brightness: 1),   // cyan
+                Color(hue: 0.33, saturation: 0.30, brightness: 1),   // green
+                Color(hue: 0.75, saturation: 0.32, brightness: 1),   // violet
+                Color(hue: 0.08, saturation: 0.28, brightness: 1),   // warm
+                Color(hue: 0.95, saturation: 0.32, brightness: 1),   // back to pink
+            ])
+            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: 1, dy: 1)),
+                       with: .conicGradient(irid, center: CGPoint(x: cx, y: cy),
+                                            angle: .radians(time * 0.5 + hueShift * 6.28)),
+                       lineWidth: max(1, CGFloat(r * 0.11)))
+            // Crisp thin outer edge.
+            ctx.stroke(Path(ellipseIn: rect), with: .color(.white.opacity(0.16)), lineWidth: 1)
+
+            // Specular glints (additive, localized so overlaps stay glassy).
+            ctx.drawLayer { layer in
+                layer.blendMode = .plusLighter
+                let gx = cx - CGFloat(r * 0.38), gy = cy - CGFloat(r * 0.38)
+                let gr = CGFloat(r * 0.5)
+                layer.fill(Path(ellipseIn: CGRect(x: gx - gr, y: gy - gr, width: gr * 2, height: gr * 2)),
                            with: .radialGradient(
-                                Gradient(colors: [Color.white.opacity(0.55), body.opacity(0.7), body.opacity(0.15)]),
-                                center: CGPoint(x: x - r * 0.3, y: y - r * 0.3),
-                                startRadius: 0, endRadius: r * 1.2))
-                // Bright rim.
-                layer.stroke(Path(ellipseIn: rect), with: .color(body.opacity(0.9)), lineWidth: 1.5)
-                // Specular glint.
-                let gr = r * 0.28
-                let grect = CGRect(x: CGFloat(x - r * 0.35 - gr), y: CGFloat(y - r * 0.35 - gr),
-                                   width: CGFloat(gr * 2), height: CGFloat(gr * 2))
-                layer.fill(Path(ellipseIn: grect), with: .color(.white.opacity(0.7)))
+                                Gradient(colors: [.white.opacity(0.7), .white.opacity(0)]),
+                                center: CGPoint(x: gx, y: gy), startRadius: 0, endRadius: gr))
+                let sr = CGFloat(r * 0.1)
+                layer.fill(Path(ellipseIn: CGRect(x: gx - sr, y: gy - sr, width: sr * 2, height: sr * 2)),
+                           with: .color(.white.opacity(0.85)))
+                // faint reflected catchlight, lower-right
+                let lx = cx + CGFloat(r * 0.4), ly = cy + CGFloat(r * 0.45), lr = CGFloat(r * 0.14)
+                layer.fill(Path(ellipseIn: CGRect(x: lx - lr, y: ly - lr, width: lr * 2, height: lr * 2)),
+                           with: .color(.white.opacity(0.18)))
             }
         }
     }
