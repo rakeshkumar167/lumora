@@ -18,8 +18,8 @@ struct WorkspaceView: View {
 
     var body: some View {
         HSplitView {
-            SurfaceListView()
-                .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
+            PropertiesPanelView()
+                .frame(minWidth: 250, idealWidth: 270, maxWidth: 320)
 
             VStack(spacing: 0) {
                 toolbar
@@ -31,8 +31,8 @@ struct WorkspaceView: View {
             }
             .frame(minWidth: 360)
 
-            PropertiesPanelView()
-                .frame(minWidth: 250, idealWidth: 270, maxWidth: 320)
+            SurfaceListView()
+                .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
         }
         .sheet(isPresented: $showReview) {
             if let img = reviewImage {
