@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -268,6 +268,7 @@ private struct EffectView: View {
     let accent: RGBAColor
     let time: Double
     var name: String = ""
+    var marquee: MarqueeConfig? = nil
     var outline: EffectOutline = .rect
 
     var body: some View {
@@ -1249,20 +1250,46 @@ private struct EffectView: View {
         case .marqueeText:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
-                let label = (name.isEmpty ? "LUMORA" : name.uppercased()) + "     "
-                let text = Text(label)
-                    .font(.system(size: 48, weight: .bold, design: .monospaced))
-                    .foregroundColor(color.color)
-                let resolved = ctx.resolve(text)
-                let textWidth = max(resolved.measure(in: CGSize(width: 10000, height: 100)).width, 1)
+                let cfg = marquee ?? MarqueeConfig()
+                let base = cfg.text.isEmpty ? (name.isEmpty ? "LUMORA" : name) : cfg.text
+                let label = base + "     "
+                let font: Font = cfg.fontName.isEmpty
+                    ? .system(size: cfg.fontSize, weight: .bold, design: .monospaced)
+                    : .custom(cfg.fontName, size: cfg.fontSize)
+
+                // Measure each character once so a rainbow run can color glyphs
+                // individually while the whole string tiles seamlessly.
+                let chars = Array(label)
+                var widths: [CGFloat] = []
+                widths.reserveCapacity(chars.count)
+                var unitWidth: CGFloat = 0
+                for ch in chars {
+                    let w = ctx.resolve(Text(String(ch)).font(font))
+                        .measure(in: CGSize(width: 10000, height: 10000)).width
+                    widths.append(w)
+                    unitWidth += w
+                }
+                if unitWidth < 1 { unitWidth = 1 }
+
                 let scrollSpeed: CGFloat = 120
                 let offset = CGFloat(time) * scrollSpeed
-                var x = -offset.truncatingRemainder(dividingBy: textWidth)
-                if x > 0 { x -= textWidth }
+                var tileX = -offset.truncatingRemainder(dividingBy: unitWidth)
+                if tileX > 0 { tileX -= unitWidth }
                 let y = size.height / 2
-                while x < size.width {
-                    ctx.draw(text, at: CGPoint(x: x + textWidth / 2, y: y))
-                    x += textWidth
+                let denom = Double(max(chars.count, 1))
+                while tileX < size.width {
+                    var x = tileX
+                    for (i, ch) in chars.enumerated() {
+                        let w = widths[i]
+                        let col: Color = cfg.rainbow
+                            ? Color(hue: (Double(i) / denom + time * 0.08).truncatingRemainder(dividingBy: 1),
+                                    saturation: 0.95, brightness: 1)
+                            : color.color
+                        ctx.draw(Text(String(ch)).font(font).foregroundColor(col),
+                                 at: CGPoint(x: x + w / 2, y: y))
+                        x += w
+                    }
+                    tileX += unitWidth
                 }
             }
 

@@ -19,6 +19,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var opacity: Double
     /// Draw order: higher draws on top. Default 10; may be positive or negative.
     public var zIndex: Int
+    /// Customization for the Marquee Text effect (nil = defaults).
+    public var marquee: MarqueeConfig?
 
     public init(
         id: UUID = UUID(),
@@ -29,7 +31,8 @@ public struct Surface: Identifiable, Equatable, Codable {
         media: MediaAssignment = .color(.teal),
         isVisible: Bool = true,
         opacity: Double = 1,
-        zIndex: Int = 10
+        zIndex: Int = 10,
+        marquee: MarqueeConfig? = nil
     ) {
         self.id = id
         self.name = name
@@ -40,10 +43,11 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.isVisible = isVisible
         self.opacity = opacity
         self.zIndex = zIndex
+        self.marquee = marquee
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -59,6 +63,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         isVisible = try c.decode(Bool.self, forKey: .isVisible)
         opacity = try c.decode(Double.self, forKey: .opacity)
         zIndex = try c.decodeIfPresent(Int.self, forKey: .zIndex) ?? 10
+        marquee = try c.decodeIfPresent(MarqueeConfig.self, forKey: .marquee)
     }
 
     /// The shape's center (normalized), used as the rotation pivot.

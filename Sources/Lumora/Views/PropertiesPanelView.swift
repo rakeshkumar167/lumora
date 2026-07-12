@@ -77,7 +77,7 @@ struct PropertiesPanelView: View {
             }
 
             Section("Media") {
-                MediaEditor(media: surface.media)
+                MediaEditor(media: surface.media, marquee: surface.marquee)
             }
         }
         .formStyle(.grouped)
@@ -87,7 +87,24 @@ struct PropertiesPanelView: View {
 /// Picks the media kind and its parameters for a surface.
 private struct MediaEditor: View {
     @Binding var media: MediaAssignment
+    @Binding var marquee: MarqueeConfig?
     @ObservedObject private var weather = WeatherStore.shared
+
+    /// Curated fonts offered for the Marquee Text effect. Empty family name =
+    /// the system monospaced default.
+    private static let marqueeFonts: [(label: String, family: String)] = [
+        ("Monospaced (default)", ""),
+        ("Helvetica Neue", "Helvetica Neue"),
+        ("Avenir Next", "Avenir Next"),
+        ("Futura", "Futura"),
+        ("Georgia", "Georgia"),
+        ("Courier New", "Courier New"),
+        ("Menlo", "Menlo"),
+        ("Impact", "Impact"),
+        ("Chalkboard SE", "Chalkboard SE"),
+        ("Marker Felt", "Marker Felt"),
+        ("Snell Roundhand", "Snell Roundhand"),
+    ]
 
     private enum Kind: String, CaseIterable, Identifiable {
         case none, color, effect, image, video, laserTrace, contourTrace
@@ -147,9 +164,21 @@ private struct MediaEditor: View {
                     ForEach(Cities.all) { Text($0.name).tag($0) }
                 }
             }
+            if effectKind == .marqueeText {
+                marqueeControls
+            }
             if effectKind.usesColor {
                 Text("Color").font(.caption).foregroundStyle(.secondary)
                 colorControls(current: primary) { media = .effect(effectKind, $0, accent) }
+            }
+            if effectKind == .marqueeText {
+                // Marquee's text color uses the primary "Color" swatch above,
+                // unless Rainbow is on.
+                let cfg = marquee ?? MarqueeConfig()
+                if cfg.rainbow {
+                    Text("Rainbow is on — palette color is ignored.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             }
             if effectKind.usesAccent {
                 Text("Accent Color").font(.caption).foregroundStyle(.secondary)
@@ -216,6 +245,33 @@ private struct MediaEditor: View {
                 in: 0.05...4
             )
         }
+    }
+
+    /// Custom text, font, size, and rainbow controls for the Marquee Text effect.
+    @ViewBuilder
+    private var marqueeControls: some View {
+        let cfg = marquee ?? MarqueeConfig()
+        TextField("Text", text: Binding(
+            get: { cfg.text },
+            set: { var c = cfg; c.text = $0; marquee = c }
+        ), prompt: Text("Surface name"))
+        Picker("Font", selection: Binding(
+            get: { cfg.fontName },
+            set: { var c = cfg; c.fontName = $0; marquee = c }
+        )) {
+            ForEach(Self.marqueeFonts, id: \.family) { Text($0.label).tag($0.family) }
+        }
+        VStack(alignment: .leading) {
+            Text("Font Size \(Int(cfg.fontSize))").font(.caption)
+            Slider(value: Binding(
+                get: { cfg.fontSize },
+                set: { var c = cfg; c.fontSize = $0; marquee = c }
+            ), in: 12...200)
+        }
+        Toggle("Rainbow", isOn: Binding(
+            get: { cfg.rainbow },
+            set: { var c = cfg; c.rainbow = $0; marquee = c }
+        ))
     }
 
     private func setKind(_ newKind: Kind) {
