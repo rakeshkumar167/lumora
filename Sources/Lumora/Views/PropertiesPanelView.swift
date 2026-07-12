@@ -82,7 +82,8 @@ struct PropertiesPanelView: View {
                             christmas: surface.christmasLights,
                             game: surface.gameOfLife,
                             leaves: surface.fallingLeaves,
-                            treeImage: surface.christmasTreeImage)
+                            treeImage: surface.christmasTreeImage,
+                            three: surface.threeD)
             }
         }
         .formStyle(.grouped)
@@ -97,7 +98,11 @@ private struct MediaEditor: View {
     @Binding var game: GameOfLifeConfig?
     @Binding var leaves: FallingLeavesConfig?
     @Binding var treeImage: Int
+    @Binding var three: ThreeDConfig?
     @ObservedObject private var weather = WeatherStore.shared
+
+    /// The 3D effects that take a speed (and, for the cloud, colour) config.
+    private static let threeDKinds: Set<EffectKind> = [.torus3D, .sphere3D, .pointCloud3D]
 
     /// String-light effects that take a bulb/sag config (the tree does not).
     private static let stringLightKinds: Set<EffectKind> =
@@ -200,6 +205,23 @@ private struct MediaEditor: View {
             }
             if effectKind == .gameOfLife {
                 gameOfLifeControls
+            }
+            if Self.threeDKinds.contains(effectKind) {
+                let cfg = three ?? ThreeDConfig()
+                VStack(alignment: .leading) {
+                    Text("Speed: \(String(format: "%.1f", cfg.speed))×").font(.caption)
+                    Slider(value: Binding(get: { cfg.speed },
+                                          set: { var c = cfg; c.speed = $0; three = c }),
+                           in: 0.1...4)
+                }
+                if effectKind == .pointCloud3D {
+                    Toggle("Rainbow", isOn: Binding(get: { cfg.rainbow },
+                                                    set: { var c = cfg; c.rainbow = $0; three = c }))
+                    if !cfg.rainbow {
+                        Text("Color").font(.caption).foregroundStyle(.secondary)
+                        colorControls(current: primary) { media = .effect(effectKind, $0, accent) }
+                    }
+                }
             }
             if effectKind == .fallingLeaves {
                 let cfg = leaves ?? FallingLeavesConfig()

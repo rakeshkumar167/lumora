@@ -29,6 +29,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var fallingLeaves: FallingLeavesConfig?
     /// Which bundled tree image the Christmas Tree effect uses (0-based).
     public var christmasTreeImage: Int
+    /// Customization for the 3D effects (nil = defaults).
+    public var threeD: ThreeDConfig?
 
     public init(
         id: UUID = UUID(),
@@ -44,7 +46,8 @@ public struct Surface: Identifiable, Equatable, Codable {
         christmasLights: ChristmasLightsConfig? = nil,
         gameOfLife: GameOfLifeConfig? = nil,
         fallingLeaves: FallingLeavesConfig? = nil,
-        christmasTreeImage: Int = 0
+        christmasTreeImage: Int = 0,
+        threeD: ThreeDConfig? = nil
     ) {
         self.id = id
         self.name = name
@@ -60,10 +63,11 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.gameOfLife = gameOfLife
         self.fallingLeaves = fallingLeaves
         self.christmasTreeImage = christmasTreeImage
+        self.threeD = threeD
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, christmasTreeImage
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, christmasTreeImage, threeD
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -84,6 +88,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         gameOfLife = try c.decodeIfPresent(GameOfLifeConfig.self, forKey: .gameOfLife)
         fallingLeaves = try c.decodeIfPresent(FallingLeavesConfig.self, forKey: .fallingLeaves)
         christmasTreeImage = try c.decodeIfPresent(Int.self, forKey: .christmasTreeImage) ?? 0
+        threeD = try c.decodeIfPresent(ThreeDConfig.self, forKey: .threeD)
     }
 
     /// The shape's center (normalized), used as the rotation pivot.

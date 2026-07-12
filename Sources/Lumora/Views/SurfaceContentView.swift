@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -273,6 +273,7 @@ private struct EffectView: View {
     var game: GameOfLifeConfig? = nil
     var leaves: FallingLeavesConfig? = nil
     var treeImage: Int = 0
+    var three: ThreeDConfig? = nil
     var outline: EffectOutline = .rect
 
     var body: some View {
@@ -2164,8 +2165,9 @@ private struct EffectView: View {
 
     private func drawTorus3D(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let sp = three?.speed ?? 1.0
         let R = 1.4, r = 0.52, nu = 64, nv = 26
-        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.5, ay: time * 0.7, scaleF: 0.13) { iu, iv in
+        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.5 * sp, ay: time * 0.7 * sp, scaleF: 0.13) { iu, iv in
             let u = Double(iu) / Double(nu) * 2 * .pi
             let v = Double(iv) / Double(nv) * 2 * .pi
             return (Vec3(x: (R + r * cos(v)) * cos(u), y: (R + r * cos(v)) * sin(u), z: r * sin(v)),
@@ -2175,11 +2177,12 @@ private struct EffectView: View {
 
     private func drawSphere3D(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let sp = three?.speed ?? 1.0
         let nu = 52, nv = 30
-        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.3, ay: time * 0.6, scaleF: 0.16) { iu, iv in
+        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.3 * sp, ay: time * 0.6 * sp, scaleF: 0.16) { iu, iv in
             let u = Double(iu) / Double(nu) * 2 * .pi
             let v = Double(iv) / Double(nv) * .pi
-            let rad = 1.5 + 0.18 * sin(v * 6 + time * 2)   // travelling ripple
+            let rad = 1.5 + 0.18 * sin(v * 6 + time * 2 * sp)   // travelling ripple
             return (Vec3(x: rad * sin(v) * cos(u), y: rad * cos(v), z: rad * sin(v) * sin(u)),
                     fract(v / .pi + time * 0.04))
         }
@@ -2190,24 +2193,26 @@ private struct EffectView: View {
         let n = 1400
         let scale = Double(min(size.width, size.height)) * 0.30
         let camDist = 5.0
+        let spd = three?.speed ?? 1.0
+        let rainbow = three?.rainbow ?? true
         var pts: [(CGPoint, Double, Double)] = []
         pts.reserveCapacity(n)
         for i in 0..<n {
             let th = Double(hash01(i, 1)) * 2 * .pi
             let ph = acos(2 * Double(hash01(i, 2)) - 1)
-            let rr = 1.4 + 0.5 * sin(time * 0.6 + Double(i) * 0.05)   // pulsing = movement
+            let rr = 1.4 + 0.5 * sin(time * 0.6 * spd + Double(i) * 0.05)   // pulsing = movement
             var p = Vec3(x: rr * sin(ph) * cos(th), y: rr * sin(ph) * sin(th), z: rr * cos(ph))
-            p = rot3(p, time * 0.22, time * 0.4)
+            p = rot3(p, time * 0.22 * spd, time * 0.4 * spd)
             let f = camDist / max(p.z + camDist, 0.1)
             let sp = CGPoint(x: size.width / 2 + p.x * f * scale, y: size.height / 2 + p.y * f * scale)
-            pts.append((sp, f, fract(0.6 + Double(i) * 0.0007 + time * 0.03)))
+            pts.append((sp, f, fract(0.6 + Double(i) * 0.0007 + time * 0.03 * spd)))
         }
         pts.sort { $0.1 < $1.1 }
         ctx.drawLayer { layer in
             layer.blendMode = .plusLighter
             for (sp, f, hue) in pts {
                 let rad = max(0.4, (f - 0.55) * 3.2)
-                let col = Color(hue: hue, saturation: 0.8, brightness: 1)
+                let col = rainbow ? Color(hue: hue, saturation: 0.8, brightness: 1) : color.color
                 layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
                            with: .color(col.opacity(min(1, f * 0.85))))
             }
