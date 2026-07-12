@@ -109,6 +109,19 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 - **Design doc rename** — `docs/superpowers/specs/2026-07-05-spatialcanvas-design.md`
   still uses the old "SpatialCanvas" name.
 
+## Done recently (2026-07-13)
+
+- **Scenes** — a project is now an ordered list of `ProjectScene`s (each with
+  its own surfaces, light lines, and play duration). `Project` is scene-based
+  with backward-compatible decode (legacy flat files load as one scene).
+  `ProjectStore` holds `scenes` + `activeSceneIndex`; `surfaces`/`lightLines`
+  are computed proxies into the active scene so all existing editing code
+  operates on the edited scene. A full-width **SceneStripView** below the canvas
+  handles select/add/delete/reorder/rename + per-scene duration + a Preview
+  toggle. Projection auto-advances through scenes by duration and loops
+  (`SceneTimeline.index(at:)`, unit-tested). Also: Lumora navbar + experimental
+  Detect Surfaces disclaimer; WebP/BMP/HEIF accepted in image pickers.
+
 ## Done recently (2026-07-12)
 
 - **Four Ambient effects + GoL baking** — added `flowingPlasma`,
