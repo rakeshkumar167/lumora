@@ -111,6 +111,13 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 
 ## Done recently (2026-07-13)
 
+- **Native 3D effects** — a software 3D pipeline in Canvas (rotate → perspective
+  project → depth-sort; `Vec3`/`rot3`/`normalize3` + `render3DSurface`). New
+  **3D** category: **3D Torus** and **3D Sphere** (shaded quad meshes,
+  painter's-sorted, lambert-lit, rainbow) and **3D Point Cloud** (rotating,
+  pulsing sphere of depth-cued glowing points). No SceneKit/Metal/three.js —
+  WKWebView/three.js embedding was considered and set aside for this. Also:
+  Christmas Tree image selection (3 trees), AVIF in image pickers.
 - **More effects + GoL rebake** — Game of Life rebaked with denser seeding (45
   clusters) and 4 distinct baked acts looping (~3 min). New **Circuit Trace**
   (Ambient): deterministic PCB traces routed on a grid, progressively drawn in
