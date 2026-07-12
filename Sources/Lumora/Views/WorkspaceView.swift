@@ -13,26 +13,31 @@ struct WorkspaceView: View {
     @State private var reviewQuads: [DetectedQuad] = []
     @State private var showReview = false
     @State private var detecting = false
+    @State private var showDetectDisclaimer = false
 
     private var lumoraType: UTType { UTType(filenameExtension: "lumora") ?? .json }
 
     var body: some View {
-        HSplitView {
-            PropertiesPanelView()
-                .frame(minWidth: 250, idealWidth: 270, maxWidth: 320)
+        VStack(spacing: 0) {
+            navbar
+            Divider()
+            HSplitView {
+                PropertiesPanelView()
+                    .frame(minWidth: 250, idealWidth: 270, maxWidth: 320)
 
-            VStack(spacing: 0) {
-                toolbar
-                Divider()
-                RoomCanvasView()
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .underPageBackgroundColor))
+                VStack(spacing: 0) {
+                    toolbar
+                    Divider()
+                    RoomCanvasView()
+                        .padding(16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(nsColor: .underPageBackgroundColor))
+                }
+                .frame(minWidth: 360)
+
+                SurfaceListView()
+                    .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
             }
-            .frame(minWidth: 360)
-
-            SurfaceListView()
-                .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
         }
         .sheet(isPresented: $showReview) {
             if let img = reviewImage {
@@ -47,6 +52,55 @@ struct WorkspaceView: View {
                 )
             }
         }
+        .alert("Experimental feature", isPresented: $showDetectDisclaimer) {
+            Button("Cancel", role: .cancel) {}
+            Button("Continue") { detectSurfaces() }
+        } message: {
+            Text("Automatic surface detection is experimental. It works best on large, flat, well-lit surfaces, and may miss some or need manual adjustment after import.")
+        }
+    }
+
+    /// App-level bar: Lumora branding on the left, project status + the Project
+    /// toggle on the right.
+    private var navbar: some View {
+        HStack(spacing: 10) {
+            if let icon = AppAssets.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+            Text("Lumora")
+                .font(.headline)
+                .fontWeight(.semibold)
+            Text("Projection Mapping")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 2)
+
+            Spacer()
+
+            Text("\(store.surfaces.count) surface\(store.surfaces.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                if store.projecting {
+                    dismissWindow(id: "projection")
+                } else {
+                    openWindow(id: "projection")
+                }
+            } label: {
+                Label(store.projecting ? "Stop" : "Project",
+                      systemImage: store.projecting ? "stop.rectangle.fill" : "play.rectangle.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(store.projecting ? .red : .accentColor)
+            .keyboardShortcut("p", modifiers: [.command])
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     private var toolbar: some View {
@@ -76,12 +130,12 @@ struct WorkspaceView: View {
             }
 
             Button {
-                detectSurfaces()
+                showDetectDisclaimer = true
             } label: {
                 Label("Detect Surfaces", systemImage: "viewfinder.rectangular")
             }
             .disabled(detecting)
-            .help("Import a room photo and auto-detect large flat surfaces as editable quads.")
+            .help("Experimental: import a room photo and auto-detect large flat surfaces as editable quads.")
 
             Divider().frame(height: 16)
 
@@ -101,24 +155,6 @@ struct WorkspaceView: View {
             .disabled(store.surfaces.isEmpty)
 
             Spacer()
-
-            Text("\(store.surfaces.count) surface\(store.surfaces.count == 1 ? "" : "s")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Button {
-                if store.projecting {
-                    dismissWindow(id: "projection")
-                } else {
-                    openWindow(id: "projection")
-                }
-            } label: {
-                Label(store.projecting ? "Stop" : "Project",
-                      systemImage: store.projecting ? "stop.rectangle.fill" : "play.rectangle.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(store.projecting ? .red : .accentColor)
-            .keyboardShortcut("p", modifiers: [.command])
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
