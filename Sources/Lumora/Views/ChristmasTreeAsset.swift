@@ -7,15 +7,34 @@ import Foundation
 /// background, so a luminance threshold on a downsampled grid cleanly excludes
 /// the background — glints only spawn on the tree. Computed once, lazily.
 enum ChristmasTreeAsset {
-    static let image: NSImage? = {
-        guard let url = Bundle.module.url(forResource: "christmas-tree", withExtension: "png") else { return nil }
-        return NSImage(contentsOf: url)
-    }()
+    private static let names = ["christmas-tree", "christmas-tree2", "christmas-tree3"]
+    static var count: Int { names.count }
 
-    /// Normalized (0…1, top-left) bright on-tree points, sampled on a grid.
-    static let litPoints: [CGPoint] = computeLitPoints()
+    private static var imageCache: [Int: NSImage] = [:]
+    private static var pointsCache: [Int: [CGPoint]] = [:]
 
-    private static func computeLitPoints() -> [CGPoint] {
+    /// The bundled tree image at `index` (clamped), loaded and cached lazily.
+    static func image(_ index: Int) -> NSImage? {
+        let i = clamp(index)
+        if let img = imageCache[i] { return img }
+        guard let url = Bundle.module.url(forResource: names[i], withExtension: "png"),
+              let img = NSImage(contentsOf: url) else { return nil }
+        imageCache[i] = img
+        return img
+    }
+
+    /// Normalized (0…1, top-left) bright on-tree points for tree `index`.
+    static func litPoints(_ index: Int) -> [CGPoint] {
+        let i = clamp(index)
+        if let p = pointsCache[i] { return p }
+        let p = computeLitPoints(image(i))
+        pointsCache[i] = p
+        return p
+    }
+
+    private static func clamp(_ index: Int) -> Int { max(0, min(index, names.count - 1)) }
+
+    private static func computeLitPoints(_ image: NSImage?) -> [CGPoint] {
         guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             return fallbackTrianglePoints()
         }

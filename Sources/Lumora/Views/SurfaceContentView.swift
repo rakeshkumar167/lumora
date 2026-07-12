@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -272,6 +272,7 @@ private struct EffectView: View {
     var christmas: ChristmasLightsConfig? = nil
     var game: GameOfLifeConfig? = nil
     var leaves: FallingLeavesConfig? = nil
+    var treeImage: Int = 0
     var outline: EffectOutline = .rect
 
     var body: some View {
@@ -309,7 +310,7 @@ private struct EffectView: View {
                 // Dark backing so unlit margins read as night, not white.
                 ctx.fill(Path(CGRect(origin: .zero, size: size)),
                          with: .color(Color(red: 0.02, green: 0.03, blue: 0.02)))
-                if let img = ChristmasTreeAsset.image {
+                if let img = ChristmasTreeAsset.image(treeImage) {
                     let resolved = ctx.resolve(Image(nsImage: img))
                     let isz = img.size
                     let scale = min(size.width / isz.width, size.height / isz.height)
@@ -356,7 +357,7 @@ private struct EffectView: View {
     /// Twinkle glints on the tree: soft glowing dots that pulse on their own
     /// phase, only at the precomputed on-tree points.
     private func drawTreeGlints(_ ctx: GraphicsContext, imageRect: CGRect) {
-        let points = ChristmasTreeAsset.litPoints
+        let points = ChristmasTreeAsset.litPoints(treeImage)
         guard !points.isEmpty else { return }
         let palette = ChristmasLights.palette
         ctx.drawLayer { layer in

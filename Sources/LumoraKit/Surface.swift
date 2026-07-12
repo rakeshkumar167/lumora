@@ -27,6 +27,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var gameOfLife: GameOfLifeConfig?
     /// Customization for the Falling Leaves effect (nil = defaults).
     public var fallingLeaves: FallingLeavesConfig?
+    /// Which bundled tree image the Christmas Tree effect uses (0-based).
+    public var christmasTreeImage: Int
 
     public init(
         id: UUID = UUID(),
@@ -41,7 +43,8 @@ public struct Surface: Identifiable, Equatable, Codable {
         marquee: MarqueeConfig? = nil,
         christmasLights: ChristmasLightsConfig? = nil,
         gameOfLife: GameOfLifeConfig? = nil,
-        fallingLeaves: FallingLeavesConfig? = nil
+        fallingLeaves: FallingLeavesConfig? = nil,
+        christmasTreeImage: Int = 0
     ) {
         self.id = id
         self.name = name
@@ -56,10 +59,11 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.christmasLights = christmasLights
         self.gameOfLife = gameOfLife
         self.fallingLeaves = fallingLeaves
+        self.christmasTreeImage = christmasTreeImage
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, christmasTreeImage
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -79,6 +83,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         christmasLights = try c.decodeIfPresent(ChristmasLightsConfig.self, forKey: .christmasLights)
         gameOfLife = try c.decodeIfPresent(GameOfLifeConfig.self, forKey: .gameOfLife)
         fallingLeaves = try c.decodeIfPresent(FallingLeavesConfig.self, forKey: .fallingLeaves)
+        christmasTreeImage = try c.decodeIfPresent(Int.self, forKey: .christmasTreeImage) ?? 0
     }
 
     /// The shape's center (normalized), used as the rotation pivot.

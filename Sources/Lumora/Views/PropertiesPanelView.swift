@@ -81,7 +81,8 @@ struct PropertiesPanelView: View {
                             marquee: surface.marquee,
                             christmas: surface.christmasLights,
                             game: surface.gameOfLife,
-                            leaves: surface.fallingLeaves)
+                            leaves: surface.fallingLeaves,
+                            treeImage: surface.christmasTreeImage)
             }
         }
         .formStyle(.grouped)
@@ -95,6 +96,7 @@ private struct MediaEditor: View {
     @Binding var christmas: ChristmasLightsConfig?
     @Binding var game: GameOfLifeConfig?
     @Binding var leaves: FallingLeavesConfig?
+    @Binding var treeImage: Int
     @ObservedObject private var weather = WeatherStore.shared
 
     /// String-light effects that take a bulb/sag config (the tree does not).
@@ -102,8 +104,12 @@ private struct MediaEditor: View {
         [.chasingLights, .multiColorLights, .twinklingLights, .warmBulbs]
 
     /// Raster image formats accepted by the image pickers. All decode via
-    /// ImageIO / NSImage, so no conversion is needed (WebP, HEIF, BMP included).
-    private static let imageTypes: [UTType] = [.png, .jpeg, .heic, .heif, .gif, .tiff, .bmp, .webP]
+    /// ImageIO / NSImage, so no conversion is needed (WebP, HEIF, BMP, AVIF).
+    private static let imageTypes: [UTType] = {
+        var t: [UTType] = [.png, .jpeg, .heic, .heif, .gif, .tiff, .bmp, .webP]
+        if let avif = UTType("public.avif") { t.append(avif) }
+        return t
+    }()
 
     /// Curated fonts offered for the Marquee Text effect. Empty family name =
     /// the system monospaced default.
@@ -181,6 +187,13 @@ private struct MediaEditor: View {
             }
             if effectKind == .marqueeText {
                 marqueeControls
+            }
+            if effectKind == .christmasTree {
+                Picker("Tree", selection: $treeImage) {
+                    Text("Classic").tag(0)
+                    Text("Red & Green").tag(1)
+                    Text("Blue & Gold").tag(2)
+                }
             }
             if Self.stringLightKinds.contains(effectKind) {
                 stringLightControls
