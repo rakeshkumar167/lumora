@@ -17,6 +17,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var media: MediaAssignment
     public var isVisible: Bool
     public var opacity: Double
+    /// Draw order: higher draws on top. Default 10; may be positive or negative.
+    public var zIndex: Int
 
     public init(
         id: UUID = UUID(),
@@ -26,7 +28,8 @@ public struct Surface: Identifiable, Equatable, Codable {
         rotation: Double = 0,
         media: MediaAssignment = .color(.teal),
         isVisible: Bool = true,
-        opacity: Double = 1
+        opacity: Double = 1,
+        zIndex: Int = 10
     ) {
         self.id = id
         self.name = name
@@ -36,10 +39,11 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.media = media
         self.isVisible = isVisible
         self.opacity = opacity
+        self.zIndex = zIndex
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -54,6 +58,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         media = try c.decode(MediaAssignment.self, forKey: .media)
         isVisible = try c.decode(Bool.self, forKey: .isVisible)
         opacity = try c.decode(Double.self, forKey: .opacity)
+        zIndex = try c.decodeIfPresent(Int.self, forKey: .zIndex) ?? 10
     }
 
     /// The shape's center (normalized), used as the rotation pivot.

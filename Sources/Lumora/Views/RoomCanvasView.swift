@@ -23,7 +23,7 @@ struct RoomCanvasView: View {
                         .resizable()
                         .frame(width: size.width, height: size.height)
 
-                    ForEach(store.surfaces) { surface in
+                    ForEach(store.surfacesInDrawOrder) { surface in
                         if surface.isVisible {
                             SurfaceContentView(surface: surface, canvasSize: size, time: t)
                         }

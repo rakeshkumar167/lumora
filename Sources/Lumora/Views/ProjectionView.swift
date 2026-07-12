@@ -16,7 +16,7 @@ struct ProjectionRootView: View {
                 TimelineView(.animation) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
                     ZStack(alignment: .topLeading) {
-                        ForEach(store.surfaces) { surface in
+                        ForEach(store.surfacesInDrawOrder) { surface in
                             if surface.isVisible {
                                 SurfaceContentView(surface: surface, canvasSize: size, time: t)
                             }

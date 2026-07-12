@@ -71,6 +71,9 @@ struct PropertiesPanelView: View {
                         .font(.caption)
                     Slider(value: surface.opacity, in: 0...1)
                 }
+                Stepper(value: surface.zIndex, in: -999...999) {
+                    Text("Layer (z-index): \(surface.wrappedValue.zIndex)")
+                }
             }
 
             Section("Media") {
@@ -230,7 +233,7 @@ private struct MediaEditor: View {
     /// Preset swatches plus a full color picker for any custom color.
     @ViewBuilder
     private func colorControls(current: RGBAColor, apply: @escaping (RGBAColor) -> Void) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 8), spacing: 4) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 11), spacing: 4) {
             ForEach(RGBAColor.palette, id: \.self) { swatch in
                 RoundedRectangle(cornerRadius: 3)
                     .fill(swatch.color)
@@ -351,7 +354,7 @@ private struct LightLineEditor: View {
     /// Preset swatches plus a full color picker (mirrors MediaEditor.colorControls).
     @ViewBuilder
     private func colorControls(current: RGBAColor, apply: @escaping (RGBAColor) -> Void) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 8), spacing: 4) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 11), spacing: 4) {
             ForEach(RGBAColor.palette, id: \.self) { swatch in
                 RoundedRectangle(cornerRadius: 3)
                     .fill(swatch.color)

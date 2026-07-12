@@ -78,6 +78,19 @@ final class ProjectStore: ObservableObject {
         )
     }
 
+    /// Surfaces ordered for compositing: lower `zIndex` first (drawn behind),
+    /// ties keep their array order (stable).
+    var surfacesInDrawOrder: [Surface] {
+        let indexed: [(offset: Int, element: Surface)] = Array(surfaces.enumerated())
+        let sorted = indexed.sorted { lhs, rhs in
+            if lhs.element.zIndex != rhs.element.zIndex {
+                return lhs.element.zIndex < rhs.element.zIndex
+            }
+            return lhs.offset < rhs.offset
+        }
+        return sorted.map { $0.element }
+    }
+
     func addSurface() {
         var surface = Surface.defaultRect(name: "Surface \(surfaces.count + 1)")
         surface.media = .effect(.grid, .cyan, RGBAColor(r: 0.05, g: 0.06, b: 0.09))
