@@ -788,6 +788,16 @@ private struct EffectView: View {
                     ctx.stroke(path, with: .color(c), lineWidth: 3)
                 }
             }
+        case .infiniteKaleidoscope:
+            Canvas { ctx, size in drawInfiniteKaleidoscope(ctx: ctx, size: size) }
+        case .mandalaExpansion:
+            Canvas { ctx, size in drawMandala(ctx: ctx, size: size) }
+        case .sacredGeometry:
+            Canvas { ctx, size in drawSacredGeometry(ctx: ctx, size: size) }
+        case .fractalZoom:
+            Canvas { ctx, size in drawFractalZoom(ctx: ctx, size: size) }
+        case .tessellationMorph:
+            Canvas { ctx, size in drawTessellation(ctx: ctx, size: size) }
         default: EmptyView()
         }
     }
@@ -2108,6 +2118,159 @@ private struct EffectView: View {
                     let hr = step * 0.16
                     layer.fill(Path(ellipseIn: CGRect(x: head.x - hr, y: head.y - hr, width: hr * 2, height: hr * 2)),
                                with: .color(.white.opacity(0.9)))
+                }
+            }
+        }
+    }
+
+    // MARK: - Geometric morphing effects
+
+    /// Rotating, mirrored kaleidoscope wedges whose motifs continuously morph.
+    private func drawInfiniteKaleidoscope(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let segments = 10
+        let wedge = 2 * Double.pi / Double(segments)
+        let maxR = Double(min(size.width, size.height)) / 2
+        let spin = time * 0.25
+        let n = 10
+        for seg in 0..<segments {
+            ctx.drawLayer { layer in
+                layer.translateBy(x: center.x, y: center.y)
+                layer.rotate(by: .radians(Double(seg) * wedge + spin))
+                if seg % 2 == 1 { layer.scaleBy(x: -1, y: 1) }
+                layer.blendMode = .plusLighter
+                for i in 0..<n {
+                    let fi = Double(i)
+                    let ang: Double = 0.1 + wedge * (0.15 + 0.7 * fi / Double(n)) + sin(time * 0.6 + fi) * 0.1
+                    let r: Double = maxR * (0.1 + 0.85 * fi / Double(n)) * (0.7 + 0.3 * sin(time * 0.5 + fi * 1.3))
+                    let s = CGFloat(maxR * (0.04 + 0.06 * (0.5 + 0.5 * sin(time + fi * 2))))
+                    let hue = fract(fi / Double(n) + time * 0.05)
+                    let p = CGPoint(x: cos(ang) * r, y: sin(ang) * r)
+                    let col = Color(hue: hue, saturation: 0.95, brightness: 1)
+                    var line = Path(); line.move(to: .zero); line.addLine(to: p)
+                    layer.stroke(line, with: .color(col.opacity(0.22)), lineWidth: 1.5)
+                    layer.fill(Path(ellipseIn: CGRect(x: p.x - s, y: p.y - s, width: s * 2, height: s * 2)),
+                               with: .color(col.opacity(0.8)))
+                }
+            }
+        }
+    }
+
+    /// Radial rings of petals that grow out from the centre, multiply (split),
+    /// and fade/reform at the rim.
+    private func drawMandala(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let maxR = Double(min(size.width, size.height)) / 2
+        let rings = 6
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for ringIdx in 0..<rings {
+                let phase = fract(Double(ringIdx) / Double(rings) + time * 0.12)
+                let r = phase * maxR
+                let alpha = sin(phase * Double.pi)                 // 0 at centre & rim
+                let petals = 6 + Int(phase * 18)                   // more petals as it expands
+                let hue = fract(Double(ringIdx) / Double(rings) + time * 0.1)
+                let col = Color(hue: hue, saturation: 0.9, brightness: 1)
+                for p in 0..<petals {
+                    let a: Double = Double(p) / Double(petals) * 2 * .pi + time * 0.2
+                    let px = center.x + CGFloat(cos(a) * r)
+                    let py = center.y + CGFloat(sin(a) * r)
+                    let s = CGFloat(maxR * 0.03 * (0.6 + 0.8 * alpha))
+                    layer.fill(Path(ellipseIn: CGRect(x: px - s, y: py - s, width: s * 2, height: s * 2)),
+                               with: .color(col.opacity(0.7 * alpha)))
+                }
+            }
+        }
+    }
+
+    /// Radius of a regular polygon (apothem 1) at angle `theta` for a
+    /// continuous side count — morphs smoothly triangle→hexagon→circle.
+    private func polyRadius(_ theta: Double, sides: Double) -> Double {
+        let a = 2 * Double.pi / max(sides, 3)
+        var m = theta.truncatingRemainder(dividingBy: a)
+        if m < 0 { m += a }
+        return cos(a / 2) / cos(m - a / 2)
+    }
+
+    /// Concentric outlines whose side count morphs between triangle, hexagon,
+    /// and circle, rotating in alternating directions.
+    private func drawSacredGeometry(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let maxR = Double(min(size.width, size.height)) / 2
+        let sides = 3 + 4.5 * (1 + sin(time * 0.4))    // 3 … 12
+        let layers = 5
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for li in 0..<layers {
+                let rr: Double = maxR * (0.2 + 0.16 * Double(li))
+                let rot: Double = time * 0.15 * (li % 2 == 0 ? 1 : -1) + Double(li) * 0.3
+                let hue = fract(Double(li) / Double(layers) + time * 0.06)
+                let col = Color(hue: hue, saturation: 0.9, brightness: 1)
+                var path = Path()
+                let steps = 140
+                for s in 0...steps {
+                    let th: Double = Double(s) / Double(steps) * 2 * .pi
+                    let r: Double = rr * polyRadius(th - rot, sides: sides)
+                    let pt = CGPoint(x: center.x + CGFloat(cos(th) * r), y: center.y + CGFloat(sin(th) * r))
+                    if s == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+                }
+                layer.stroke(path, with: .color(col.opacity(0.85)), lineWidth: 2.5)
+            }
+        }
+    }
+
+    /// Nested rotating polygons scaled log-periodically so it appears to zoom
+    /// into itself forever (self-similar).
+    private func drawFractalZoom(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let maxR = Double(min(size.width, size.height)) / 2
+        let factor = 1.7
+        let zoom = pow(factor, fract(time * 0.15))     // cycles in [1, factor)
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for k in 0..<16 {
+                let scale = zoom * pow(factor, Double(k) - 7)
+                let r = maxR * 1.5 * scale
+                if r < 2 || r > maxR * 3 { continue }
+                let rot = Double(k) * 0.5 + time * 0.12
+                let hue = fract(Double(k) * 0.08 + time * 0.05)
+                let col = Color(hue: hue, saturation: 0.9, brightness: 1)
+                let fadeIn = min(1.0, r / (maxR * 0.2))
+                let fadeOut = min(1.0, (maxR * 3 - r) / (maxR * 1.2))
+                let alpha = max(0.0, min(fadeIn, fadeOut))
+                let path = polygonPath(center: center, radius: CGFloat(r), sides: 6, rotation: rot)
+                layer.stroke(path, with: .color(col.opacity(0.9 * alpha)),
+                             style: StrokeStyle(lineWidth: max(1, CGFloat(2 * scale)), lineJoin: .round))
+            }
+        }
+    }
+
+    /// A grid of squares that rotate and pulse in a travelling wave, coloured by
+    /// position + time — a tessellation that smoothly morphs shape and colour.
+    private func drawTessellation(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
+        let cell = max(28.0, Double(min(size.width, size.height)) / 12)
+        let cols = Int(Double(size.width) / cell) + 1
+        let rows = Int(Double(size.height) / cell) + 1
+        for gy in 0..<rows {
+            for gx in 0..<cols {
+                let cx = (Double(gx) + 0.5) * cell
+                let cy = (Double(gy) + 0.5) * cell
+                let wave = Double(gx + gy) * 0.5
+                let rot = time * 0.6 + wave
+                let scale = 0.45 + 0.4 * (0.5 + 0.5 * sin(time * 1.2 + wave))
+                let hue = fract(Double(gx + gy) * 0.05 + time * 0.08)
+                let col = Color(hue: hue, saturation: 0.85, brightness: 1)
+                let half = CGFloat(cell * 0.5 * scale)
+                ctx.drawLayer { layer in
+                    layer.translateBy(x: CGFloat(cx), y: CGFloat(cy))
+                    layer.rotate(by: .radians(rot))
+                    layer.fill(Path(CGRect(x: -half, y: -half, width: half * 2, height: half * 2)),
+                               with: .color(col.opacity(0.85)))
                 }
             }
         }
