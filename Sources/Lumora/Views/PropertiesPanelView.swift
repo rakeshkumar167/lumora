@@ -101,6 +101,10 @@ private struct MediaEditor: View {
     private static let stringLightKinds: Set<EffectKind> =
         [.chasingLights, .multiColorLights, .twinklingLights, .warmBulbs]
 
+    /// Raster image formats accepted by the image pickers. All decode via
+    /// ImageIO / NSImage, so no conversion is needed (WebP, HEIF, BMP included).
+    private static let imageTypes: [UTType] = [.png, .jpeg, .heic, .heif, .gif, .tiff, .bmp, .webP]
+
     /// Curated fonts offered for the Marquee Text effect. Empty family name =
     /// the system monospaced default.
     private static let marqueeFonts: [(label: String, family: String)] = [
@@ -398,7 +402,7 @@ private struct MediaEditor: View {
 
     private func chooseImage() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowedContentTypes = Self.imageTypes
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             media = .image(url)
@@ -416,7 +420,7 @@ private struct MediaEditor: View {
 
     private func chooseLaserImage(keeping color: RGBAColor = .green) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowedContentTypes = Self.imageTypes
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             media = .laserTrace(url, color, 1.0)
@@ -425,7 +429,7 @@ private struct MediaEditor: View {
 
     private func chooseContourImage(keeping color: RGBAColor = .green) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowedContentTypes = Self.imageTypes
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             media = .contourTrace(ContourTraceConfig(images: panel.urls, penColor: color))
@@ -434,7 +438,7 @@ private struct MediaEditor: View {
 
     private func addContourImages(to cfg: ContourTraceConfig) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.allowedContentTypes = Self.imageTypes
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             var c = cfg; c.images += panel.urls; media = .contourTrace(c)
