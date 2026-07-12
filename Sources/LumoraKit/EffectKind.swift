@@ -50,6 +50,12 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case reactionDiffusion
     case driftingNebula
     case perlinFlow
+    case circuitTrace
+    case infiniteKaleidoscope
+    case mandalaExpansion
+    case sacredGeometry
+    case fractalZoom
+    case tessellationMorph
     case outlineGlow
     case analogClock
     case digitalClock
@@ -68,7 +74,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
              .voronoi, .vectorGrid, .livingTexture, .gameOfLife, .flowingPlasma, .fire, .bubbles, .fireworks,
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
-             .weatherWidget:
+             .weatherWidget,
+             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
             return false
         default:
             return true
@@ -83,7 +90,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .halftoneDots, .truchet, .concentricPolygons, .lightning,
              .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
-             .reactionDiffusion, .driftingNebula, .perlinFlow,
+             .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace,
              .outlineGlow, .analogClock, .digitalClock:
             return true
         default:
@@ -141,6 +148,12 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .reactionDiffusion: return "Reaction Diffusion"
         case .driftingNebula: return "Drifting Nebula"
         case .perlinFlow: return "Perlin Flow Field"
+        case .circuitTrace: return "Circuit Trace"
+        case .infiniteKaleidoscope: return "Infinite Kaleidoscope"
+        case .mandalaExpansion: return "Mandala Expansion"
+        case .sacredGeometry: return "Sacred Geometry"
+        case .fractalZoom: return "Recursive Fractal Zoom"
+        case .tessellationMorph: return "Tessellation Morph"
         case .outlineGlow: return "Outline Glow"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
@@ -160,7 +173,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .radialPulse, .aurora, .plasma, .strobe:
             return .gradients
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
-             .truchet, .concentricPolygons:
+             .truchet, .concentricPolygons,
+             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks:
@@ -175,7 +189,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .fields
         case .vectorGrid, .particleMesh:
             return .curvesGrids
-        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace:
             return .ambient
         case .outlineGlow:
             return .edge

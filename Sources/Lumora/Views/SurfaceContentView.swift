@@ -278,7 +278,8 @@ private struct EffectView: View {
         switch kind {
         case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep, .radialPulse, .aurora, .plasma, .strobe:
             gradientEffects
-        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons:
+        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons,
+             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks:
             natureEffects
@@ -290,7 +291,7 @@ private struct EffectView: View {
             fieldEffects
         case .vectorGrid, .particleMesh:
             geometryEffects
-        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace:
             ambientEffects
         case .outlineGlow:
             edgeEffects
@@ -1292,6 +1293,9 @@ private struct EffectView: View {
         case .perlinFlow:
             Canvas { ctx, size in drawPerlinFlow(ctx: ctx, size: size) }
 
+        case .circuitTrace:
+            Canvas { ctx, size in drawCircuit(ctx: ctx, size: size) }
+
         case .reactionDiffusion:
             ReactionDiffusionContent(color: color, accent: accent, time: time)
 
@@ -2001,6 +2005,110 @@ private struct EffectView: View {
                 let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
                 ctx.fill(Path(roundedRect: r.insetBy(dx: cw * 0.14, dy: ch * 0.14), cornerRadius: cw * 0.25),
                          with: .color(col))
+            }
+        }
+    }
+
+    /// Progressive path from `pts` up to `fraction` of its total length, plus
+    /// the current head point (for a glowing trace tip).
+    private func partialPath(_ pts: [CGPoint], fraction: Double) -> (Path, CGPoint) {
+        var path = Path()
+        guard let first = pts.first else { return (path, .zero) }
+        path.move(to: first)
+        if pts.count < 2 || fraction <= 0 { return (path, first) }
+        var lengths: [Double] = []
+        var total = 0.0
+        for i in 1..<pts.count {
+            let l = Double(hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y))
+            lengths.append(l); total += l
+        }
+        let target = total * fraction
+        var acc = 0.0
+        var head = first
+        for i in 1..<pts.count {
+            let l = lengths[i - 1]
+            if acc + l <= target || l == 0 {
+                path.addLine(to: pts[i]); head = pts[i]; acc += l
+            } else {
+                let t = CGFloat((target - acc) / l)
+                let p = CGPoint(x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t,
+                                y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t)
+                path.addLine(to: p); head = p; break
+            }
+        }
+        return (path, head)
+    }
+
+    /// A modern PCB: deterministic Manhattan/45° traces routed on a grid with
+    /// vias, slowly "traced in" (progressive reveal) then held, looping.
+    private func drawCircuit(ctx: GraphicsContext, size: CGSize) {
+        let w = Double(size.width), h = Double(size.height)
+        let minDim = min(w, h)
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .color(Color(red: accent.r * 0.12, green: accent.g * 0.15, blue: accent.b * 0.12)))
+        let step = max(16.0, minDim / 22)
+        let cols = max(2, Int(w / step)), rows = max(2, Int(h / step))
+        let trace = color.color
+        let traceCount = 44
+        let cycle = 16.0
+        let ct = time.truncatingRemainder(dividingBy: cycle) / cycle
+        let reveal = min(1.0, ct / 0.7)   // draw over first 70% of the cycle
+
+        func node(_ gx: Int, _ gy: Int) -> CGPoint { CGPoint(x: Double(gx) * step, y: Double(gy) * step) }
+        func buildTrace(_ sd: Int) -> [CGPoint] {
+            var gx = Int(hash01(sd, 1) * Double(cols))
+            var gy = Int(hash01(sd, 2) * Double(rows))
+            var pts = [node(gx, gy)]
+            let segs = 3 + Int(hash01(sd, 3) * 6)
+            for s in 0..<segs {
+                let roll = hash01(sd, s * 7 + 4)
+                var dx = 0, dy = 0
+                if roll < 0.38 { dx = hash01(sd, s + 9) < 0.5 ? 1 : -1 }
+                else if roll < 0.76 { dy = hash01(sd, s + 11) < 0.5 ? 1 : -1 }
+                else { dx = hash01(sd, s + 13) < 0.5 ? 1 : -1; dy = hash01(sd, s + 17) < 0.5 ? 1 : -1 }
+                let n = 1 + Int(hash01(sd, s + 19) * 4)
+                gx = min(max(gx + dx * n, 0), cols); gy = min(max(gy + dy * n, 0), rows)
+                pts.append(node(gx, gy))
+            }
+            return pts
+        }
+        let traces = (0..<traceCount).map { buildTrace($0 * 131 + 7) }
+
+        // Faint full circuit + vias so the board reads as populated.
+        for pts in traces {
+            var p = Path(); p.addLines(pts)
+            ctx.stroke(p, with: .color(trace.opacity(0.10)),
+                       style: StrokeStyle(lineWidth: max(1, step * 0.05), lineCap: .round, lineJoin: .round))
+            for pt in pts {
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - 2, y: pt.y - 2, width: 4, height: 4)),
+                         with: .color(trace.opacity(0.14)))
+            }
+        }
+
+        // Bright revealed portion with glow + a head spark, staggered per trace.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            layer.addFilter(.blur(radius: 1.5))
+            for (i, pts) in traces.enumerated() {
+                let start = Double(i) / Double(traceCount) * 0.5
+                let frac = min(1.0, max(0.0, (reveal - start) / 0.5))
+                if frac <= 0 { continue }
+                let (path, head) = partialPath(pts, fraction: frac)
+                layer.stroke(path, with: .color(trace.opacity(0.9)),
+                             style: StrokeStyle(lineWidth: max(1.5, step * 0.08), lineCap: .round, lineJoin: .round))
+                let shown = min(pts.count - 1, Int(ceil(frac * Double(pts.count - 1))))
+                if shown >= 0 {
+                    for k in 0...shown {
+                        let pt = pts[k]; let pr = step * 0.09
+                        layer.fill(Path(ellipseIn: CGRect(x: pt.x - pr, y: pt.y - pr, width: pr * 2, height: pr * 2)),
+                                   with: .color(trace.opacity(0.85)))
+                    }
+                }
+                if frac < 1 {
+                    let hr = step * 0.16
+                    layer.fill(Path(ellipseIn: CGRect(x: head.x - hr, y: head.y - hr, width: hr * 2, height: hr * 2)),
+                               with: .color(.white.opacity(0.9)))
+                }
             }
         }
     }
