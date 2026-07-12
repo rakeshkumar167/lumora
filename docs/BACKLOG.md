@@ -111,6 +111,17 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 
 ## Done recently (2026-07-12)
 
+- **Effect roster changes** — removed `crtScanlines` and `moire`. Added
+  **Game of Life** (`gameOfLife`, Ambient category): Conway's Life driven from
+  the clock, ~20 seeded soups, rainbow hue advancing per generation, panel
+  controls for speed (gen/s) and cell size; rules/seeding are pure LumoraKit
+  (`GameOfLife`) and unit-tested. Tunings: metaballs de-pixelated (blur +
+  alphaThreshold gooey), voronoi rebuilt as vector cells via half-plane
+  clipping (crisp + cheap), kaleidoscope now a dense 12-fold rainbow mandala,
+  equalizer bars randomized (layered per-bar frequencies + beat), fireworks
+  gained a rare ~2× **mega** burst tier with detailed comet trails, and Falling
+  Leaves uses a maple-leaf shape. Per-effect configs (marquee/christmas/GoL)
+  are stored as optional structs on `Surface` with tolerant decode.
 - **Auto surface detection** — a **Detect Surfaces** toolbar button imports a
   room photo and proposes large flat quad surfaces via a hybrid, plane-first
   detector: gradient-barrier region segmentation for walls/planes plus Vision
