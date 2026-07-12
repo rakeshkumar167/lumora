@@ -7,7 +7,7 @@
 import Foundation
 
 let cols = 100, rows = 56
-let frames = 960          // ~2 min at the app's default 8 gen/s
+let frames = 1440         // ~3 min at the app's default 8 gen/s (4 acts × 360)
 let cells = cols * rows
 
 func hash01(_ a: Int, _ b: Int) -> Double {
@@ -49,9 +49,13 @@ func step(_ g: [Bool]) -> [Bool] {
     return n
 }
 
+let seedCount = 45         // denser initial seeding (more seed points)
+let acts = 4               // distinct initial states cycled through the loop
+let actFrames = frames / acts
+
 // Score a seed by total activity (cells that toggle) over 160 generations.
 func activity(of sv: Int) -> Int {
-    var g = seed(20, sv)
+    var g = seed(seedCount, sv)
     var toggles = 0
     for _ in 0..<160 {
         let n = step(g)
@@ -61,26 +65,27 @@ func activity(of sv: Int) -> Int {
     return toggles
 }
 
-var bestSV = 1, bestScore = -1
-for sv in 1...30 {
-    let a = activity(of: sv)
-    if a > bestScore { bestScore = a; bestSV = sv }
-}
-FileHandle.standardError.write("best seed \(bestSV) (activity \(bestScore))\n".data(using: .utf8)!)
+// Pick the `acts` liveliest distinct seeds for the acts.
+let ranked = (1...60).map { (sv: $0, score: activity(of: $0)) }.sorted { $0.score > $1.score }
+let actSeeds = Array(ranked.prefix(acts)).map { $0.sv }
+FileHandle.standardError.write("act seeds \(actSeeds)\n".data(using: .utf8)!)
 
-// Bake the frames, re-injecting a small fresh soup every 120 gens to stay lively.
-var grid = seed(20, bestSV)
+// Bake `acts` acts back to back; each starts from a fresh dense soup and gets a
+// light re-injection every 120 gens so it stays lively for the whole act.
 let bytesPerFrame = (cells + 7) / 8
 var data = Data(capacity: bytesPerFrame * frames)
-for f in 0..<frames {
-    var frame = [UInt8](repeating: 0, count: bytesPerFrame)
-    for i in 0..<cells where grid[i] { frame[i >> 3] |= (1 << (i & 7)) }
-    data.append(contentsOf: frame)
-    if f > 0 && f % 120 == 0 {
-        let inject = seed(8, bestSV &* 131 &+ f)
-        for i in 0..<cells where inject[i] { grid[i] = true }
+for act in 0..<acts {
+    var grid = seed(seedCount, actSeeds[act])
+    for f in 0..<actFrames {
+        var frame = [UInt8](repeating: 0, count: bytesPerFrame)
+        for i in 0..<cells where grid[i] { frame[i >> 3] |= (1 << (i & 7)) }
+        data.append(contentsOf: frame)
+        if f > 0 && f % 120 == 0 {
+            let inject = seed(12, actSeeds[act] &* 131 &+ f)
+            for i in 0..<cells where inject[i] { grid[i] = true }
+        }
+        grid = step(grid)
     }
-    grid = step(grid)
 }
 
 let json: [String: Any] = ["cols": cols, "rows": rows, "frames": frames,
