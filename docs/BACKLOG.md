@@ -109,6 +109,21 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 - **Design doc rename** — `docs/superpowers/specs/2026-07-05-spatialcanvas-design.md`
   still uses the old "SpatialCanvas" name.
 
+## Done recently (2026-07-12)
+
+- **Auto surface detection** — a **Detect Surfaces** toolbar button imports a
+  room photo and proposes large flat quad surfaces via a hybrid, plane-first
+  detector: gradient-barrier region segmentation for walls/planes plus Vision
+  `VNDetectRectanglesRequest` for objects (screens, doors, panels). Candidates
+  are clamped to the frame, filtered by minimum area (the "skip small" knob),
+  fill ratio, and rectangularity, then de-duplicated and ranked planes-first.
+  A keep/discard review sheet (`SurfaceDetectionReviewView`) overlays the quads
+  on the photo; kept quads become ordinary editable surfaces via
+  `ProjectStore.addDetectedSurfaces`. Pure geometry + ranking live in
+  `LumoraKit/SurfaceDetection/` (unit-tested); the detector is validated against
+  the five bundled `Resources/surface-detection` samples. No backdrop, no
+  fiducials, no homography. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-12-auto-surface-detection*`.
+
 ## Done recently (2026-07-06)
 
 - **Polygon (N-point) + ellipse surfaces** — `SurfaceShape` (quad / polygon /
@@ -127,17 +142,23 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 - **Grid default** — new surfaces spawn with the `grid` alignment effect.
 - **20 new effects** (see above).
 
-## Paused — ready to build on request
+## Superseded
 
-- **Marker calibration & auto-surface detection** — project four corner
-  fiducials, photograph the scene, import the photo, auto-detect object
-  rectangles via Vision, map them through a photo→canvas homography into
-  editable quad surfaces with a keep/discard review step (also delivers
-  room-photo-import backdrop). Spec + full implementation plan are written and
-  approved; do NOT start until the user asks to resume.
-  - Spec: `docs/superpowers/specs/2026-07-11-marker-calibration-auto-surfaces-design.md`
-  - Plan: `docs/superpowers/plans/2026-07-11-marker-calibration-auto-surfaces.md`
-    (5 TDD tasks; execute via subagent-driven-development on a feature branch).
+- **Marker calibration & auto-surface detection (fiducial approach)** —
+  **superseded** on 2026-07-12 by the shipped hybrid detector below. A research
+  spike showed Vision rectangle detection only finds bordered objects and is
+  blind to blank walls, so the fiducial/homography route was dropped in favor of
+  a photo-import hybrid (region planes + Vision objects). Old docs kept for
+  reference: `docs/superpowers/specs/2026-07-11-marker-calibration-auto-surfaces-design.md`,
+  `docs/superpowers/plans/2026-07-11-marker-calibration-auto-surfaces.md`.
+
+## Auto surface detection follow-ups
+
+- **Plane-fit quality** — region segmentation still emits some loose/skewed
+  wall+floor quads on near-uniform cream rooms (soft wall/floor seam). Review
+  discards them, but a horizon/seam split or an inscribed-rectangle fit would
+  raise auto quality. Thresholds live in `SurfaceDetector.Options`
+  (`gradientBarrier`, `minFillRatio`, `minRectangularity`, `ranker`).
 
 ## Working preferences (for next session)
 
