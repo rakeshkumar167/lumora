@@ -1688,77 +1688,82 @@ private struct EffectView: View {
             let y = (baseY + cos(time * 0.5 + fi * 1.3) * 0.1) * Double(size.height)
             sites.append((x, y, hue))
         }
-        let cell: CGFloat = 5   // finer sampling → high-definition cell edges
-        var y: CGFloat = 0
-        while y < size.height {
-            var x: CGFloat = 0
-            while x < size.width {
-                let cx = Double(x + cell / 2), cy = Double(y + cell / 2)
-                var nearest = Double.greatestFiniteMagnitude
-                var second = Double.greatestFiniteMagnitude
-                var nearestHue = 0.0
-                for s in sites {
-                    let dx = s.x - cx, dy = s.y - cy
-                    let d2 = dx * dx + dy * dy
-                    if d2 < nearest {
-                        second = nearest
-                        nearest = d2
-                        nearestHue = s.hue
-                    } else if d2 < second {
-                        second = d2
-                    }
-                }
-                let rect = CGRect(x: x, y: y, width: cell, height: cell)
-                let edge = sqrt(second) - sqrt(nearest)
-                let hue = fract(nearestHue + time * 0.05)
-                if edge < Double(cell) * 1.2 {
-                    // Bright hued seam between cells instead of a dead black gap.
-                    ctx.fill(Path(rect), with: .color(Color(hue: hue, saturation: 0.35, brightness: 1.0)))
-                } else {
-                    // Vivid, fully saturated fill; slight lift toward each cell's core.
-                    let bright = 0.9 + 0.1 * min(edge / (Double(cell) * 4), 1.0)
-                    ctx.fill(Path(rect), with: .color(Color(hue: hue, saturation: 1.0, brightness: bright)))
-                }
-                x += cell
+        // Build each cell as an exact convex polygon by clipping the canvas
+        // rect against the perpendicular bisector with every other site
+        // (O(sites²) — cheap — and crisp vector edges, no pixel sampling).
+        for s in sites {
+            var poly = [CGPoint(x: 0, y: 0), CGPoint(x: size.width, y: 0),
+                        CGPoint(x: size.width, y: size.height), CGPoint(x: 0, y: size.height)]
+            for o in sites {
+                if o.x == s.x && o.y == s.y { continue }
+                // Keep the half-plane closer to `s`: n·p <= c.
+                let nx = o.x - s.x, ny = o.y - s.y
+                let c = (o.x * o.x + o.y * o.y - s.x * s.x - s.y * s.y) / 2
+                poly = Self.clipHalfPlane(poly, nx: nx, ny: ny, c: c)
+                if poly.count < 3 { break }
             }
-            y += cell
+            guard poly.count >= 3 else { continue }
+            var path = Path()
+            path.addLines(poly)
+            path.closeSubpath()
+            let hue = fract(s.hue + time * 0.05)
+            ctx.fill(path, with: .color(Color(hue: hue, saturation: 0.9, brightness: 1.0)))
+            // Dark seam between cells for definition.
+            ctx.stroke(path, with: .color(.black.opacity(0.35)), lineWidth: 1.5)
         }
+    }
+
+    /// Sutherland–Hodgman clip of a convex polygon to the half-plane n·p ≤ c.
+    private static func clipHalfPlane(_ poly: [CGPoint], nx: Double, ny: Double, c: Double) -> [CGPoint] {
+        guard poly.count >= 3 else { return [] }
+        var out: [CGPoint] = []
+        out.reserveCapacity(poly.count + 1)
+        for i in 0..<poly.count {
+            let a = poly[i], b = poly[(i + 1) % poly.count]
+            let da = nx * Double(a.x) + ny * Double(a.y) - c
+            let db = nx * Double(b.x) + ny * Double(b.y) - c
+            let ain = da <= 0, bin = db <= 0
+            if ain { out.append(a) }
+            if ain != bin {
+                let t = da / (da - db)
+                out.append(CGPoint(x: a.x + CGFloat(t) * (b.x - a.x),
+                                   y: a.y + CGFloat(t) * (b.y - a.y)))
+            }
+        }
+        return out
     }
 
     private func drawMetaballs(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
-        let ballCount = 6
-        var balls: [(x: Double, y: Double, r: Double)] = []
-        balls.reserveCapacity(ballCount)
-        for i in 0..<ballCount {
+        let minDim = Double(min(size.width, size.height))
+        let w = Double(size.width), h = Double(size.height)
+        var balls: [CGRect] = []
+        balls.reserveCapacity(6)
+        for i in 0..<6 {
             let fi = Double(i)
-            let bx = Double(size.width) / 2 + cos(time * (0.6 + fi * 0.1) + fi) * Double(size.width) * 0.35
-            let by = Double(size.height) / 2 + sin(time * (0.5 + fi * 0.13) + fi * 1.3) * Double(size.height) * 0.35
-            let br = 18.0 + fi * 3
-            balls.append((bx, by, br))
+            let ox: Double = cos(time * (0.6 + fi * 0.1) + fi) * w * 0.35
+            let oy: Double = sin(time * (0.5 + fi * 0.13) + fi * 1.3) * h * 0.35
+            let bx: Double = w / 2 + ox
+            let by: Double = h / 2 + oy
+            let br: Double = minDim * (0.07 + fi * 0.012)
+            balls.append(CGRect(x: bx - br, y: by - br, width: br * 2, height: br * 2))
         }
-        let cell: CGFloat = 10
-        var y: CGFloat = 0
-        while y < size.height {
-            var x: CGFloat = 0
-            while x < size.width {
-                let cx = Double(x + cell / 2), cy = Double(y + cell / 2)
-                var sum = 0.0
-                for b in balls {
-                    let dx = b.x - cx, dy = b.y - cy
-                    sum += (b.r * b.r) / (dx * dx + dy * dy + 1)
-                }
-                if sum > 1 {
-                    let t = min((sum - 1) / 2, 1.0)
-                    let r = color.r + (1 - color.r) * t
-                    let g = color.g + (1 - color.g) * t
-                    let b = color.b + (1 - color.b) * t
-                    let rect = CGRect(x: x, y: y, width: cell, height: cell)
-                    ctx.fill(Path(rect), with: .color(Color(red: r, green: g, blue: b)))
-                }
-                x += cell
+        // Classic "gooey" metaballs: draw soft circles, blur them, then
+        // alpha-threshold so overlapping blobs merge with smooth vector edges —
+        // no per-pixel sampling, so no pixelation and far cheaper.
+        let blur = minDim * 0.06
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: blur))
+            layer.addFilter(.alphaThreshold(min: 0.5, color: color.color))
+            for b in balls { layer.fill(Path(ellipseIn: b), with: .color(color.color)) }
+        }
+        // Soft inner highlight: a smaller, brighter blurred pass on top.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: blur * 0.6))
+            layer.addFilter(.alphaThreshold(min: 0.75, color: .white.opacity(0.22)))
+            for b in balls {
+                layer.fill(Path(ellipseIn: b.insetBy(dx: b.width * 0.12, dy: b.height * 0.12)), with: .color(.white))
             }
-            y += cell
         }
     }
 
