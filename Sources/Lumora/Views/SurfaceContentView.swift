@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -270,6 +270,7 @@ private struct EffectView: View {
     var name: String = ""
     var marquee: MarqueeConfig? = nil
     var christmas: ChristmasLightsConfig? = nil
+    var game: GameOfLifeConfig? = nil
     var outline: EffectOutline = .rect
 
     var body: some View {
@@ -288,7 +289,7 @@ private struct EffectView: View {
             fieldEffects
         case .vectorGrid, .particleMesh:
             geometryEffects
-        case .livingTexture:
+        case .livingTexture, .gameOfLife:
             ambientEffects
         case .outlineGlow:
             edgeEffects
@@ -1276,6 +1277,9 @@ private struct EffectView: View {
         case .livingTexture:
             Canvas { ctx, size in drawLivingTexture(ctx: ctx, size: size) }
 
+        case .gameOfLife:
+            Canvas { ctx, size in drawGameOfLife(ctx: ctx, size: size) }
+
         default: EmptyView()
         }
     }
@@ -1934,6 +1938,54 @@ private struct EffectView: View {
         return Color(red: a.0 + (b.0 - a.0) * f,
                      green: a.1 + (b.1 - a.1) * f,
                      blue: a.2 + (b.2 - a.2) * f)
+    }
+
+    /// Conway's Game of Life, driven from the global clock: seed ~20 soups,
+    /// step to the current generation, and colour the whole generation with a
+    /// hue that advances through the rainbow. Re-seeds every cycle.
+    private func drawGameOfLife(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.04)))
+        let cfg = game ?? GameOfLifeConfig()
+        let cell: Double = max(8, cfg.cellSize)
+        let cols: Int = min(90, max(4, Int(Double(size.width) / cell)))
+        let rows: Int = min(60, max(4, Int(Double(size.height) / cell)))
+        let cw: CGFloat = size.width / CGFloat(cols)
+        let ch: CGFloat = size.height / CGFloat(rows)
+
+        let cycleGens: Int = 36
+        let speed: Double = max(0.2, cfg.genPerSecond)
+        let gen: Int = Int(time * speed)
+        let cycle: Int = gen / cycleGens
+        let genInCycle: Int = gen % cycleGens
+
+        var grid = GameOfLife.seed(cols: cols, rows: rows, seeds: 20,
+                                   seedValue: cycle &* 2654435761 &+ 12345)
+        var g = 0
+        while g < genInCycle { grid = GameOfLife.step(grid, cols: cols, rows: rows); g += 1 }
+
+        let hue: Double = fract(Double(gen) * 0.055)   // rainbow toggle per generation
+        let live = Color(hue: hue, saturation: 0.85, brightness: 1)
+
+        // Soft glow behind the cells.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: cw * 0.4))
+            layer.blendMode = .plusLighter
+            for y in 0..<rows {
+                for x in 0..<cols where grid[y * cols + x] {
+                    let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
+                    layer.fill(Path(ellipseIn: r.insetBy(dx: cw * 0.1, dy: ch * 0.1)),
+                               with: .color(live.opacity(0.5)))
+                }
+            }
+        }
+        // Crisp cells on top.
+        for y in 0..<rows {
+            for x in 0..<cols where grid[y * cols + x] {
+                let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
+                ctx.fill(Path(roundedRect: r.insetBy(dx: cw * 0.12, dy: ch * 0.12), cornerRadius: cw * 0.22),
+                         with: .color(live))
+            }
+        }
     }
 
     private func drawLivingTexture(ctx: GraphicsContext, size: CGSize) {

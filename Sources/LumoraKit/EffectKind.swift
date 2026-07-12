@@ -45,6 +45,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case vectorGrid
     case particleMesh
     case livingTexture
+    case gameOfLife
     case outlineGlow
     case analogClock
     case digitalClock
@@ -61,7 +62,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesColor: Bool {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
-             .voronoi, .vectorGrid, .livingTexture, .fire, .bubbles, .fireworks,
+             .voronoi, .vectorGrid, .livingTexture, .gameOfLife, .fire, .bubbles, .fireworks,
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget:
             return false
@@ -130,6 +131,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .vectorGrid: return "Vector Grid"
         case .particleMesh: return "Particle Mesh"
         case .livingTexture: return "Living Texture"
+        case .gameOfLife: return "Game of Life"
         case .outlineGlow: return "Outline Glow"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
@@ -164,7 +166,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .fields
         case .vectorGrid, .particleMesh:
             return .curvesGrids
-        case .livingTexture:
+        case .livingTexture, .gameOfLife:
             return .ambient
         case .outlineGlow:
             return .edge

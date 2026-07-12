@@ -79,7 +79,8 @@ struct PropertiesPanelView: View {
             Section("Media") {
                 MediaEditor(media: surface.media,
                             marquee: surface.marquee,
-                            christmas: surface.christmasLights)
+                            christmas: surface.christmasLights,
+                            game: surface.gameOfLife)
             }
         }
         .formStyle(.grouped)
@@ -91,6 +92,7 @@ private struct MediaEditor: View {
     @Binding var media: MediaAssignment
     @Binding var marquee: MarqueeConfig?
     @Binding var christmas: ChristmasLightsConfig?
+    @Binding var game: GameOfLifeConfig?
     @ObservedObject private var weather = WeatherStore.shared
 
     /// String-light effects that take a bulb/sag config (the tree does not).
@@ -176,6 +178,9 @@ private struct MediaEditor: View {
             }
             if Self.stringLightKinds.contains(effectKind) {
                 stringLightControls
+            }
+            if effectKind == .gameOfLife {
+                gameOfLifeControls
             }
             if effectKind.usesColor {
                 Text("Color").font(.caption).foregroundStyle(.secondary)
@@ -315,6 +320,32 @@ private struct MediaEditor: View {
                     set: { var c = cfg; c.bulbScale = $0; christmas = c }
                 ),
                 in: 0.3...3.0
+            )
+        }
+    }
+
+    /// Generation-speed and cell-size controls for the Game of Life effect.
+    @ViewBuilder
+    private var gameOfLifeControls: some View {
+        let cfg = game ?? GameOfLifeConfig()
+        VStack(alignment: .leading) {
+            Text("Speed: \(String(format: "%.1f", cfg.genPerSecond)) gen/s").font(.caption)
+            Slider(
+                value: Binding(
+                    get: { cfg.genPerSecond },
+                    set: { var c = cfg; c.genPerSecond = $0; game = c }
+                ),
+                in: 0.5...15
+            )
+        }
+        VStack(alignment: .leading) {
+            Text("Cell Size: \(Int(cfg.cellSize)) px").font(.caption)
+            Slider(
+                value: Binding(
+                    get: { cfg.cellSize },
+                    set: { var c = cfg; c.cellSize = $0; game = c }
+                ),
+                in: 8...60
             )
         }
     }
