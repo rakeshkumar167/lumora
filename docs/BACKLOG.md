@@ -91,6 +91,23 @@ with edge extraction cached off-thread. Vision/CoreImage use bottom-left origin 
 y is flipped to top-left. Open follow-up: **skeletonization (thinning)** for
 true single-line centrelines (thick strokes still trace as boundary loops).
 
+## Licensing (to draft)
+
+- **Add a non-commercial license.** Decision: use **PolyForm Noncommercial
+  License 1.0.0** (source-available, non-commercial only — not OSI open source;
+  pairs with PolyForm Commercial if we later sell commercial rights). To do:
+  add a `LICENSE` file with the canonical PolyForm text (fetch from
+  polyformproject.org, don't paraphrase), fill the copyright name + year, and
+  add a short "License" note to the README.
+  - Only the **source code** is covered (human-authored, copyrightable). The
+    bundled imagery (`scripts/circuit-template.jpg`, `christmas-tree*.png`,
+    splash art) is **AI-generated (OpenAI)** — per OpenAI's terms it's fine to
+    ship, but purely AI-generated output generally can't be copyright-owned, so
+    don't claim it as exclusive IP. Add a `NOTICE`/README line: "Bundled imagery
+    is AI-generated (OpenAI); source code under PolyForm Noncommercial 1.0.0."
+  - Caveat to check before any commercial move: ensure no generated image
+    reproduces a real logo/trademark/character; consult a lawyer if stakes rise.
+
 ## Other pending features
 
 - **Per-surface playback settings** — loop toggle, mute/volume, speed, fill mode
