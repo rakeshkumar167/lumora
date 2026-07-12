@@ -1570,7 +1570,9 @@ private struct EffectView: View {
         let launchX: Double = (0.14 + Double(hash01(seed, 1)) * 0.72) * w
         let burstY: Double = (0.10 + Double(hash01(seed, 2)) * 0.30) * h
         let hue: Double = Double(hash01(seed, 3))
-        let grand: Bool = Double(hash01(seed, 9)) > 0.72   // ~28% are grand
+        let roll: Double = Double(hash01(seed, 9))
+        let mega: Bool = roll > 0.90               // ~10% — rare, ~2× a grand burst
+        let grand: Bool = roll > 0.64 && !mega     // ~26%
 
         if lt < launchDur {
             // Rising rocket with a flickering spark trail.
@@ -1578,11 +1580,13 @@ private struct EffectView: View {
             let ease: Double = 1 - (1 - p) * (1 - p)       // ease-out rise
             let y: Double = h + (burstY - h) * ease
             // Longer, brighter rising spark trail.
-            for k in 0..<16 {
+            let trailN: Int = mega ? 24 : 16
+            let launchR: Double = mega ? 4.6 : (grand ? 3.4 : 2.6)
+            for k in 0..<trailN {
                 let ky: Double = y + Double(k) * 6
-                let r: Double = (grand ? 3.4 : 2.6) - Double(k) * 0.18
+                let r: Double = launchR - Double(k) * 0.18
                 if r <= 0 { continue }
-                let a: Double = (1 - Double(k) / 16) * (1 - p * 0.15) * (0.6 + 0.4 * Double(hash01(seed, k + 30)))
+                let a: Double = (1 - Double(k) / Double(trailN)) * (1 - p * 0.15) * (0.6 + 0.4 * Double(hash01(seed, k + 30)))
                 let rect = CGRect(x: launchX - r, y: ky - r, width: r * 2, height: r * 2)
                 layer.fill(Path(ellipseIn: rect),
                            with: .color(Color(red: 1, green: 0.85, blue: 0.5).opacity(a)))
@@ -1595,20 +1599,20 @@ private struct EffectView: View {
         let bt: Double = (lt - launchDur) / burstDur       // 0 … 1
         let dragPow: Double = 3                             // strong ease-out = air drag
         let expand: Double = 1 - pow(1 - bt, dragPow)
-        let btPrev: Double = max(0, bt - 0.12)             // longer look-back → longer visible trails
+        let btPrev: Double = max(0, bt - (mega ? 0.18 : 0.12))   // longer look-back → longer visible trails
         let expandPrev: Double = 1 - pow(1 - btPrev, dragPow)
-        let maxR: Double = minDim * (grand ? 0.42 : 0.26)
-        let gravity: Double = minDim * (grand ? 0.32 : 0.22)
+        let maxR: Double = minDim * (mega ? 0.80 : (grand ? 0.42 : 0.26))
+        let gravity: Double = minDim * (mega ? 0.42 : (grand ? 0.32 : 0.22))
         let drop: Double = gravity * bt * bt
         let dropPrev: Double = gravity * btPrev * btPrev
-        let fade: Double = pow(max(0, 1 - bt), grand ? 0.85 : 1.05)   // slower fade → trails linger
-        let particles = grand ? 132 : 70
+        let fade: Double = pow(max(0, 1 - bt), mega ? 0.7 : (grand ? 0.85 : 1.05))   // slower fade → trails linger
+        let particles = mega ? 240 : (grand ? 132 : 70)
 
         // Bright ignition flash.
         let flashDur: Double = 0.15
         if bt < flashDur {
             let ff: Double = 1 - bt / flashDur
-            let fr: Double = maxR * (grand ? 0.75 : 0.55) * (0.25 + bt / flashDur)
+            let fr: Double = maxR * (mega ? 0.7 : (grand ? 0.75 : 0.55)) * (0.25 + bt / flashDur)
             let rect = CGRect(x: launchX - fr, y: burstY - fr, width: fr * 2, height: fr * 2)
             layer.fill(Path(ellipseIn: rect),
                        with: .radialGradient(Gradient(colors: [Color.white.opacity(ff), .clear]),
@@ -1616,9 +1620,20 @@ private struct EffectView: View {
         }
 
         for pI in 0..<particles {
-            // Grand bursts split into an inner + outer ring with a hue offset.
-            let inner: Bool = grand && (pI % 2 == 0)
-            let ring: Double = inner ? 0.6 : 1.0
+            // Bigger tiers split into concentric rings with a hue offset per ring.
+            let ring: Double
+            let ringHue: Double
+            if mega {
+                switch pI % 3 {
+                case 0: ring = 1.0;  ringHue = 0
+                case 1: ring = 0.72; ringHue = 0.10
+                default: ring = 0.48; ringHue = 0.20
+                }
+            } else if grand && pI % 2 == 0 {
+                ring = 0.6; ringHue = 0.12
+            } else {
+                ring = 1.0; ringHue = 0
+            }
             let ang: Double = Double(pI) / Double(particles) * 2 * .pi + Double(hash01(seed, pI + 10)) * 0.22
             // Wide speed spread → a filled, spherical burst rather than a thin ring.
             let spd: Double = (0.28 + Double(hash01(seed, pI + 50)) * 0.72) * ring
@@ -1628,11 +1643,11 @@ private struct EffectView: View {
             let py: Double = burstY + sin(ang) * dist + drop
             let pxPrev: Double = launchX + cos(ang) * distPrev
             let pyPrev: Double = burstY + sin(ang) * distPrev + dropPrev
-            let ph: Double = fract(hue + (inner ? 0.12 : 0) + (Double(hash01(seed, pI)) - 0.5) * 0.1)
+            let ph: Double = fract(hue + ringHue + (Double(hash01(seed, pI)) - 0.5) * 0.1)
             let twinkle: Double = 0.72 + 0.28 * sin(time * 40 + Double(pI) * 1.3)
             let alpha: Double = fade * twinkle
             let col = Color(hue: ph, saturation: 0.82, brightness: 1)
-            let lwid: Double = (grand ? 3.0 : 2.4) * (0.5 + 0.5 * fade)
+            let lwid: Double = (mega ? 3.6 : (grand ? 3.0 : 2.4)) * (0.5 + 0.5 * fade)
             // Motion-blur streak from the previous position to the current one.
             var streak = Path()
             streak.move(to: CGPoint(x: pxPrev, y: pyPrev))
@@ -1643,6 +1658,19 @@ private struct EffectView: View {
             let hr: Double = lwid * 0.95
             let rect = CGRect(x: px - hr, y: py - hr, width: hr * 2, height: hr * 2)
             layer.fill(Path(ellipseIn: rect), with: .color(col.opacity(alpha)))
+            // Extra long, tapered comet tail for the grandest (mega) bursts.
+            if mega {
+                let btPrev2: Double = max(0, bt - 0.34)
+                let expandPrev2: Double = 1 - pow(1 - btPrev2, dragPow)
+                let dropPrev2: Double = gravity * btPrev2 * btPrev2
+                let px2: Double = launchX + cos(ang) * maxR * spd * expandPrev2
+                let py2: Double = burstY + sin(ang) * maxR * spd * expandPrev2 + dropPrev2
+                var tail = Path()
+                tail.move(to: CGPoint(x: px2, y: py2))
+                tail.addLine(to: CGPoint(x: pxPrev, y: pyPrev))
+                layer.stroke(tail, with: .color(col.opacity(min(1, alpha * 0.45))),
+                             style: StrokeStyle(lineWidth: lwid * 0.6, lineCap: .round))
+            }
         }
     }
 
