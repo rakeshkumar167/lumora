@@ -1005,32 +1005,7 @@ private struct EffectView: View {
                 }
             }
         case .kaleidoscope:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let segments = 8
-                let maxR = Double(min(size.width, size.height)) / 2
-                var basePattern = Path()
-                for i in 0..<5 {
-                    let angle = 0.3 + Double(i) * 0.35 + sin(time * 0.6 + Double(i)) * 0.15
-                    let r = maxR * (0.2 + 0.15 * Double(i)) * (0.7 + 0.3 * sin(time + Double(i) * 1.3))
-                    let pt = point(.zero, angle, r)
-                    let s: CGFloat = 14
-                    basePattern.addEllipse(in: CGRect(x: pt.x - s, y: pt.y - s, width: s * 2, height: s * 2))
-                }
-                for seg in 0..<segments {
-                    let baseAngle = Double(seg) / Double(segments) * 2 * .pi + time * 0.1
-                    ctx.drawLayer { layer in
-                        layer.translateBy(x: center.x, y: center.y)
-                        layer.rotate(by: .radians(baseAngle))
-                        if seg % 2 == 1 {
-                            layer.scaleBy(x: -1, y: 1)
-                        }
-                        let tint = seg % 2 == 0 ? color.color : accent.color
-                        layer.fill(basePattern, with: .color(tint.opacity(0.85)))
-                    }
-                }
-            }
+            Canvas { ctx, size in drawKaleidoscope(ctx: ctx, size: size) }
 
         case .prismFalls:
             // Horizontal colour bands falling continuously through the full bright
@@ -1541,6 +1516,47 @@ private struct EffectView: View {
         for pt in pts.dropFirst() { p.addLine(to: CGPoint(x: pt.x * s, y: pt.y * s)) }
         p.closeSubpath()
         return p
+    }
+
+    private struct KaleidoMotif { var ang: Double; var r: Double; var s: CGFloat; var hue: Double; var core: Bool }
+
+    /// A dense, rainbow kaleidoscope: one wedge packed with multi-hued motifs
+    /// spanning the full radius, mirrored across every segment.
+    private func drawKaleidoscope(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let segments = 12
+        let wedge = 2 * Double.pi / Double(segments)
+        let maxR = Double(min(size.width, size.height)) / 2
+        var motifs: [KaleidoMotif] = []
+        let n = 18
+        for i in 0..<n {
+            let fi = Double(i)
+            let spread: Double = 0.2 + 0.8 * fract(sin(fi * 3.3) * 43758.5453)
+            let ang: Double = 0.05 + (wedge - 0.1) * spread + sin(time * 0.4 + fi) * 0.05
+            let r: Double = maxR * (0.08 + 0.9 * fi / Double(n)) * (0.82 + 0.18 * sin(time * 0.7 + fi * 1.1))
+            let s: CGFloat = CGFloat(maxR * (0.045 + 0.085 * (0.5 + 0.5 * sin(time * 0.9 + fi * 2.1))))
+            let hue: Double = fract(fi / Double(n) + time * 0.06)
+            motifs.append(KaleidoMotif(ang: ang, r: r, s: s, hue: hue, core: i % 3 == 0))
+        }
+        for seg in 0..<segments {
+            ctx.drawLayer { layer in
+                layer.translateBy(x: center.x, y: center.y)
+                layer.rotate(by: .radians(Double(seg) * wedge + time * 0.1))
+                if seg % 2 == 1 { layer.scaleBy(x: -1, y: 1) }   // mirror alternate wedges
+                for m in motifs {
+                    let p = point(.zero, m.ang, m.r)
+                    let col = Color(hue: m.hue, saturation: 0.9, brightness: 1)
+                    layer.fill(Path(ellipseIn: CGRect(x: p.x - m.s, y: p.y - m.s, width: m.s * 2, height: m.s * 2)),
+                               with: .color(col.opacity(0.85)))
+                    if m.core {
+                        let cs = m.s * 0.45
+                        layer.fill(Path(ellipseIn: CGRect(x: p.x - cs, y: p.y - cs, width: cs * 2, height: cs * 2)),
+                                   with: .color(.white.opacity(0.7)))
+                    }
+                }
+            }
+        }
     }
 
     private func drawFireworks(ctx: GraphicsContext, size: CGSize) {
