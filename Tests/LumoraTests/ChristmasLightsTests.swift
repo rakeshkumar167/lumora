@@ -39,6 +39,15 @@ final class ChristmasLightsTests: XCTestCase {
         XCTAssertGreaterThan(bulbs[10].y, pinY + 1)        // dip inside swag 1
     }
 
+    func testConfigDecodesWithMissingFields() throws {
+        // A config saved before `bulbScale` existed must still load.
+        let json = #"{"bulbCount":20,"sagCount":2}"#.data(using: .utf8)!
+        let cfg = try JSONDecoder().decode(ChristmasLightsConfig.self, from: json)
+        XCTAssertEqual(cfg.bulbCount, 20)
+        XCTAssertEqual(cfg.sagCount, 2)
+        XCTAssertEqual(cfg.bulbScale, 1.0, accuracy: 1e-9)
+    }
+
     func testGeometryIsHeightIndependent() {
         let cfg = ChristmasLightsConfig(bulbCount: 12, sagCount: 2)
         let short = ChristmasLights.strands(in: CGSize(width: 600, height: 150), config: cfg)[0].bulbs

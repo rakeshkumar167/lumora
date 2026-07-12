@@ -325,7 +325,8 @@ private struct EffectView: View {
                 ctx.fill(Path(CGRect(origin: .zero, size: size)),
                          with: .color(Color(red: 0.03, green: 0.04, blue: 0.07)))
                 let round = (kind == .warmBulbs)
-                for strand in ChristmasLights.strands(in: size, config: christmas ?? ChristmasLightsConfig()) {
+                let cfg = christmas ?? ChristmasLightsConfig()
+                for strand in ChristmasLights.strands(in: size, config: cfg) {
                     let bulbs = strand.bulbs
                     // The hanging wire runs through the attach points; bulbs dangle below.
                     var wire = Path()
@@ -333,9 +334,10 @@ private struct EffectView: View {
                     ctx.stroke(wire, with: .color(Color(white: 0.35).opacity(0.6)),
                                lineWidth: max(1.2, size.width * 0.0018))
                     // Bulb size scales with spacing between bulbs (width-driven so
-                    // it doesn't grow when the surface is stretched taller).
+                    // it doesn't grow when the surface is stretched taller), times
+                    // the user's size multiplier.
                     let spacing = bulbs.count > 1 ? hypot(bulbs[1].x - bulbs[0].x, bulbs[1].y - bulbs[0].y) : 24
-                    let r = min(spacing * (round ? 0.40 : 0.34), size.width * 0.045)
+                    let r = min(spacing * (round ? 0.40 : 0.34), size.width * 0.045) * CGFloat(cfg.bulbScale)
                     for (i, b) in bulbs.enumerated() {
                         let (col, bright) = bulbState(index: i, count: bulbs.count)
                         drawBulb(ctx, at: b, color: col, brightness: bright, radius: r, round: round)

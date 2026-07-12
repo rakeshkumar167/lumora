@@ -307,6 +307,16 @@ private struct MediaEditor: View {
         ) {
             Text("Sags: \(cfg.sagCount)").font(.caption)
         }
+        VStack(alignment: .leading) {
+            Text("Bulb Size: \(Int(cfg.bulbScale * 100))%").font(.caption)
+            Slider(
+                value: Binding(
+                    get: { cfg.bulbScale },
+                    set: { var c = cfg; c.bulbScale = $0; christmas = c }
+                ),
+                in: 0.3...3.0
+            )
+        }
     }
 
     private func setKind(_ newKind: Kind) {
