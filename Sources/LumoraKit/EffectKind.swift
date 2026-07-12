@@ -56,6 +56,9 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case sacredGeometry
     case fractalZoom
     case tessellationMorph
+    case torus3D
+    case sphere3D
+    case pointCloud3D
     case outlineGlow
     case analogClock
     case digitalClock
@@ -75,7 +78,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .voronoi, .vectorGrid, .livingTexture, .gameOfLife, .flowingPlasma, .fire, .bubbles, .fireworks,
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
-             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
+             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
+             .torus3D, .sphere3D, .pointCloud3D:
             return false
         default:
             return true
@@ -154,6 +158,9 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .sacredGeometry: return "Sacred Geometry"
         case .fractalZoom: return "Recursive Fractal Zoom"
         case .tessellationMorph: return "Tessellation Morph"
+        case .torus3D: return "3D Torus"
+        case .sphere3D: return "3D Sphere"
+        case .pointCloud3D: return "3D Point Cloud"
         case .outlineGlow: return "Outline Glow"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
@@ -191,6 +198,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .curvesGrids
         case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace:
             return .ambient
+        case .torus3D, .sphere3D, .pointCloud3D:
+            return .threeD
         case .outlineGlow:
             return .edge
         case .analogClock, .digitalClock, .weatherWidget:
@@ -212,6 +221,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case fields
     case curvesGrids
     case ambient
+    case threeD
     case edge
     case clocks
     case christmas
@@ -228,6 +238,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .fields: return "Fields"
         case .curvesGrids: return "Curves & Grids"
         case .ambient: return "Ambient & Illusion"
+        case .threeD: return "3D"
         case .edge: return "Edge"
         case .clocks: return "Clocks & Info"
         case .christmas: return "Christmas Lights"

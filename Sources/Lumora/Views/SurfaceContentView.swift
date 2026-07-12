@@ -294,6 +294,8 @@ private struct EffectView: View {
             geometryEffects
         case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace:
             ambientEffects
+        case .torus3D, .sphere3D, .pointCloud3D:
+            threeDEffects
         case .outlineGlow:
             edgeEffects
         case .analogClock, .digitalClock, .weatherWidget:
@@ -1314,6 +1316,18 @@ private struct EffectView: View {
         }
     }
 
+    @ViewBuilder private var threeDEffects: some View {
+        switch kind {
+        case .torus3D:
+            Canvas { ctx, size in drawTorus3D(ctx: ctx, size: size) }
+        case .sphere3D:
+            Canvas { ctx, size in drawSphere3D(ctx: ctx, size: size) }
+        case .pointCloud3D:
+            Canvas { ctx, size in drawPointCloud3D(ctx: ctx, size: size) }
+        default: EmptyView()
+        }
+    }
+
     @ViewBuilder private var edgeEffects: some View {
         switch kind {
         case .outlineGlow:
@@ -2093,6 +2107,110 @@ private struct EffectView: View {
             let hr: CGFloat = 5
             layer.fill(Path(ellipseIn: CGRect(x: head.x - hr, y: head.y - hr, width: hr * 2, height: hr * 2)),
                        with: .color(.white.opacity(0.95)))
+        }
+    }
+
+    // MARK: - 3D effects (software projection)
+
+    /// Shaded parametric surface: build an (nu×nv) quad mesh from `pt`, rotate,
+    /// perspective-project, depth-sort (painter's), and fill each quad with a
+    /// lambert-shaded, hued colour.
+    private func render3DSurface(_ ctx: GraphicsContext, _ size: CGSize, nu: Int, nv: Int,
+                                 ax: Double, ay: Double, scaleF: Double,
+                                 pt: (Int, Int) -> (Vec3, Double)) {
+        let scale = Double(min(size.width, size.height)) * scaleF
+        let camDist = 5.0
+        var rp = [[Vec3]](repeating: [Vec3](repeating: Vec3(), count: nv + 1), count: nu + 1)
+        var hue = [[Double]](repeating: [Double](repeating: 0, count: nv + 1), count: nu + 1)
+        for iu in 0...nu {
+            for iv in 0...nv {
+                let (p, h) = pt(iu, iv)
+                rp[iu][iv] = rot3(p, ax, ay); hue[iu][iv] = h
+            }
+        }
+        func proj(_ p: Vec3) -> CGPoint {
+            let f = camDist / max(p.z + camDist, 0.1)
+            return CGPoint(x: size.width / 2 + p.x * f * scale, y: size.height / 2 + p.y * f * scale)
+        }
+        let L = normalize3(Vec3(x: -0.35, y: -0.5, z: -0.8))
+        struct Q { var pts: [CGPoint]; var depth: Double; var shade: Double; var hue: Double }
+        var quads: [Q] = []
+        quads.reserveCapacity(nu * nv)
+        for iu in 0..<nu {
+            for iv in 0..<nv {
+                let a = rp[iu][iv], b = rp[iu + 1][iv], c = rp[iu + 1][iv + 1], d = rp[iu][iv + 1]
+                let e1 = Vec3(x: b.x - a.x, y: b.y - a.y, z: b.z - a.z)
+                let e2 = Vec3(x: d.x - a.x, y: d.y - a.y, z: d.z - a.z)
+                var n = normalize3(Vec3(x: e1.y * e2.z - e1.z * e2.y,
+                                        y: e1.z * e2.x - e1.x * e2.z,
+                                        z: e1.x * e2.y - e1.y * e2.x))
+                if n.z > 0 { n = Vec3(x: -n.x, y: -n.y, z: -n.z) }   // orient toward camera
+                let lam = max(0.0, n.x * L.x + n.y * L.y + n.z * L.z)
+                let depth = (a.z + b.z + c.z + d.z) / 4
+                quads.append(Q(pts: [proj(a), proj(b), proj(c), proj(d)],
+                               depth: depth, shade: 0.18 + 0.82 * lam, hue: hue[iu][iv]))
+            }
+        }
+        quads.sort { $0.depth > $1.depth }   // far first (painter's)
+        for q in quads {
+            var p = Path(); p.move(to: q.pts[0])
+            for i in 1..<4 { p.addLine(to: q.pts[i]) }
+            p.closeSubpath()
+            let col = Color(hue: q.hue, saturation: 0.85, brightness: q.shade)
+            ctx.fill(p, with: .color(col))
+            ctx.stroke(p, with: .color(col), lineWidth: 0.5)   // seal seams between quads
+        }
+    }
+
+    private func drawTorus3D(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let R = 1.4, r = 0.52, nu = 64, nv = 26
+        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.5, ay: time * 0.7, scaleF: 0.13) { iu, iv in
+            let u = Double(iu) / Double(nu) * 2 * .pi
+            let v = Double(iv) / Double(nv) * 2 * .pi
+            return (Vec3(x: (R + r * cos(v)) * cos(u), y: (R + r * cos(v)) * sin(u), z: r * sin(v)),
+                    fract(u / (2 * .pi) + time * 0.05))
+        }
+    }
+
+    private func drawSphere3D(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let nu = 52, nv = 30
+        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.3, ay: time * 0.6, scaleF: 0.16) { iu, iv in
+            let u = Double(iu) / Double(nu) * 2 * .pi
+            let v = Double(iv) / Double(nv) * .pi
+            let rad = 1.5 + 0.18 * sin(v * 6 + time * 2)   // travelling ripple
+            return (Vec3(x: rad * sin(v) * cos(u), y: rad * cos(v), z: rad * sin(v) * sin(u)),
+                    fract(v / .pi + time * 0.04))
+        }
+    }
+
+    private func drawPointCloud3D(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let n = 1400
+        let scale = Double(min(size.width, size.height)) * 0.30
+        let camDist = 5.0
+        var pts: [(CGPoint, Double, Double)] = []
+        pts.reserveCapacity(n)
+        for i in 0..<n {
+            let th = Double(hash01(i, 1)) * 2 * .pi
+            let ph = acos(2 * Double(hash01(i, 2)) - 1)
+            let rr = 1.4 + 0.5 * sin(time * 0.6 + Double(i) * 0.05)   // pulsing = movement
+            var p = Vec3(x: rr * sin(ph) * cos(th), y: rr * sin(ph) * sin(th), z: rr * cos(ph))
+            p = rot3(p, time * 0.22, time * 0.4)
+            let f = camDist / max(p.z + camDist, 0.1)
+            let sp = CGPoint(x: size.width / 2 + p.x * f * scale, y: size.height / 2 + p.y * f * scale)
+            pts.append((sp, f, fract(0.6 + Double(i) * 0.0007 + time * 0.03)))
+        }
+        pts.sort { $0.1 < $1.1 }
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for (sp, f, hue) in pts {
+                let rad = max(0.4, (f - 0.55) * 3.2)
+                let col = Color(hue: hue, saturation: 0.8, brightness: 1)
+                layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
+                           with: .color(col.opacity(min(1, f * 0.85))))
+            }
         }
     }
 
@@ -3014,4 +3132,23 @@ private struct ContourTraceContent: View {
         }
         .task(id: config.images) { model.load(config.images) }
     }
+}
+
+// MARK: - 3D math (software projection helpers)
+
+/// A 3-D point / vector used by the 3D effects.
+private struct Vec3 { var x = 0.0, y = 0.0, z = 0.0 }
+
+/// Rotate `p` by `ax` about X then `ay` about Y.
+private func rot3(_ p: Vec3, _ ax: Double, _ ay: Double) -> Vec3 {
+    let cx = cos(ax), sx = sin(ax)
+    let y1 = p.y * cx - p.z * sx
+    let z1 = p.y * sx + p.z * cx
+    let cy = cos(ay), sy = sin(ay)
+    return Vec3(x: p.x * cy + z1 * sy, y: y1, z: -p.x * sy + z1 * cy)
+}
+
+private func normalize3(_ v: Vec3) -> Vec3 {
+    let l = (v.x * v.x + v.y * v.y + v.z * v.z).squareRoot()
+    return l < 1e-9 ? v : Vec3(x: v.x / l, y: v.y / l, z: v.z / l)
 }
