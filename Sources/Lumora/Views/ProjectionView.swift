@@ -6,6 +6,7 @@ import SwiftUI
 /// scaled to fill the projector display. No room photo, no editing handles.
 struct ProjectionRootView: View {
     @EnvironmentObject var store: ProjectStore
+    @State private var startRef: Double?
 
     var body: some View {
         let size = store.canvasSize
@@ -15,16 +16,22 @@ struct ProjectionRootView: View {
                 Color.black
                 TimelineView(.animation) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
-                    ZStack(alignment: .topLeading) {
-                        ForEach(store.surfacesInDrawOrder) { surface in
-                            if surface.isVisible {
-                                SurfaceContentView(surface: surface, canvasSize: size, time: t)
-                            }
-                        }
+                    // Which scene is playing now (auto-advance + loop by duration).
+                    let elapsed = t - (startRef ?? t)
+                    let index = SceneTimeline.index(at: elapsed, durations: store.scenes.map(\.duration))
+                    let scene = store.scenes.indices.contains(index) ? store.scenes[index] : nil
 
-                        ForEach(store.lightLines) { line in
-                            if line.isVisible {
-                                LightLineView(line: line, canvasSize: size, time: t)
+                    ZStack(alignment: .topLeading) {
+                        if let scene {
+                            ForEach(scene.surfacesInDrawOrder) { surface in
+                                if surface.isVisible {
+                                    SurfaceContentView(surface: surface, canvasSize: size, time: t)
+                                }
+                            }
+                            ForEach(scene.lightLines) { line in
+                                if line.isVisible {
+                                    LightLineView(line: line, canvasSize: size, time: t)
+                                }
                             }
                         }
                     }
@@ -36,7 +43,10 @@ struct ProjectionRootView: View {
         }
         .ignoresSafeArea()
         .background(ProjectionWindowConfigurator())
-        .onAppear { store.projecting = true }
+        .onAppear {
+            store.projecting = true
+            startRef = Date.timeIntervalSinceReferenceDate   // start at scene 1
+        }
         .onDisappear { store.projecting = false }
     }
 }

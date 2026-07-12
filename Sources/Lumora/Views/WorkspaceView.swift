@@ -38,6 +38,9 @@ struct WorkspaceView: View {
                 SurfaceListView()
                     .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
             }
+
+            Divider()
+            SceneStripView()
         }
         .sheet(isPresented: $showReview) {
             if let img = reviewImage {

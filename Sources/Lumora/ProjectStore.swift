@@ -146,18 +146,8 @@ final class ProjectStore: ObservableObject {
         )
     }
 
-    /// Surfaces ordered for compositing: lower `zIndex` first (drawn behind),
-    /// ties keep their array order (stable).
-    var surfacesInDrawOrder: [Surface] {
-        let indexed: [(offset: Int, element: Surface)] = Array(surfaces.enumerated())
-        let sorted = indexed.sorted { lhs, rhs in
-            if lhs.element.zIndex != rhs.element.zIndex {
-                return lhs.element.zIndex < rhs.element.zIndex
-            }
-            return lhs.offset < rhs.offset
-        }
-        return sorted.map { $0.element }
-    }
+    /// Active scene's surfaces ordered for compositing (lower `zIndex` behind).
+    var surfacesInDrawOrder: [Surface] { activeScene?.surfacesInDrawOrder ?? [] }
 
     func addSurface() {
         var surface = Surface.defaultRect(name: "Surface \(surfaces.count + 1)")

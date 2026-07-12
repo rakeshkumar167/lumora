@@ -21,6 +21,19 @@ public struct ProjectScene: Identifiable, Equatable, Codable {
         self.duration = duration
     }
 
+    /// Surfaces ordered for compositing: lower `zIndex` first (drawn behind),
+    /// ties keep array order (stable).
+    public var surfacesInDrawOrder: [Surface] {
+        let indexed = Array(surfaces.enumerated())
+        let sorted = indexed.sorted { lhs, rhs in
+            if lhs.element.zIndex != rhs.element.zIndex {
+                return lhs.element.zIndex < rhs.element.zIndex
+            }
+            return lhs.offset < rhs.offset
+        }
+        return sorted.map { $0.element }
+    }
+
     private enum CodingKeys: String, CodingKey { case id, name, surfaces, lightLines, duration }
 
     public init(from decoder: Decoder) throws {
