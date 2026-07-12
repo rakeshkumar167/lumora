@@ -23,6 +23,10 @@ struct RoomCanvasView: View {
                         .resizable()
                         .frame(width: size.width, height: size.height)
 
+                    // Faint editor-only alignment grid. Lives here (not in
+                    // ProjectionView), so it is never sent to the projector.
+                    CanvasGrid(size: size)
+
                     ForEach(store.surfacesInDrawOrder) { surface in
                         if surface.isVisible {
                             SurfaceContentView(surface: surface, canvasSize: size, time: t)
@@ -49,6 +53,33 @@ struct RoomCanvasView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
+    }
+}
+
+/// A faint square reference grid drawn across the editing canvas. Editor-only
+/// (never part of the projected output) and non-interactive so it doesn't
+/// intercept surface gestures.
+private struct CanvasGrid: View {
+    let size: CGSize
+
+    var body: some View {
+        Canvas { ctx, _ in
+            let cols: CGFloat = 24
+            let cell = size.width / cols
+            guard cell > 3 else { return }
+            var path = Path()
+            var x = cell
+            while x < size.width - 0.5 {
+                path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: size.height)); x += cell
+            }
+            var y = cell
+            while y < size.height - 0.5 {
+                path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)); y += cell
+            }
+            ctx.stroke(path, with: .color(.black.opacity(0.06)), lineWidth: 0.5)
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
     }
 }
 
