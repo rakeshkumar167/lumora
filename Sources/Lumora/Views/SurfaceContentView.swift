@@ -1955,30 +1955,21 @@ private struct EffectView: View {
                      blue: a.2 + (b.2 - a.2) * f)
     }
 
-    /// Conway's Game of Life, driven from the global clock: seed ~20 soups,
-    /// step to the current generation, and colour the whole generation with a
-    /// hue that advances through the rainbow. Re-seeds every cycle.
+    /// Game of Life played back from a pre-baked pattern (no live simulation).
+    /// Loops through ~2 min of curated generations, resetting to the start at
+    /// the end, and colours each generation with a rainbow-advancing hue.
     private func drawGameOfLife(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.04)))
-        let cfg = game ?? GameOfLifeConfig()
-        let cell: Double = max(8, cfg.cellSize)
-        let cols: Int = min(90, max(4, Int(Double(size.width) / cell)))
-        let rows: Int = min(60, max(4, Int(Double(size.height) / cell)))
+        guard let pat = GameOfLifePattern.shared, pat.frameCount > 0 else { return }
+        let cols = pat.cols, rows = pat.rows
         let cw: CGFloat = size.width / CGFloat(cols)
         let ch: CGFloat = size.height / CGFloat(rows)
 
-        let cycleGens: Int = 36
+        let cfg = game ?? GameOfLifeConfig()
         let speed: Double = max(0.2, cfg.genPerSecond)
-        let gen: Int = Int(time * speed)
-        let cycle: Int = gen / cycleGens
-        let genInCycle: Int = gen % cycleGens
-
-        var grid = GameOfLife.seed(cols: cols, rows: rows, seeds: 20,
-                                   seedValue: cycle &* 2654435761 &+ 12345)
-        var g = 0
-        while g < genInCycle { grid = GameOfLife.step(grid, cols: cols, rows: rows); g += 1 }
-
-        let hue: Double = fract(Double(gen) * 0.055)   // rainbow toggle per generation
+        let g: Int = Int(time * speed)
+        let frame: Int = g % pat.frameCount            // loop → reset at the end
+        let hue: Double = fract(Double(g) * 0.03)       // rainbow toggle per generation
         let live = Color(hue: hue, saturation: 0.85, brightness: 1)
 
         // Soft glow behind the cells.
@@ -1986,7 +1977,7 @@ private struct EffectView: View {
             layer.addFilter(.blur(radius: cw * 0.4))
             layer.blendMode = .plusLighter
             for y in 0..<rows {
-                for x in 0..<cols where grid[y * cols + x] {
+                for x in 0..<cols where pat.isLive(frame: frame, x: x, y: y) {
                     let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
                     layer.fill(Path(ellipseIn: r.insetBy(dx: cw * 0.1, dy: ch * 0.1)),
                                with: .color(live.opacity(0.5)))
@@ -1995,7 +1986,7 @@ private struct EffectView: View {
         }
         // Crisp cells on top.
         for y in 0..<rows {
-            for x in 0..<cols where grid[y * cols + x] {
+            for x in 0..<cols where pat.isLive(frame: frame, x: x, y: y) {
                 let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
                 ctx.fill(Path(roundedRect: r.insetBy(dx: cw * 0.12, dy: ch * 0.12), cornerRadius: cw * 0.22),
                          with: .color(live))

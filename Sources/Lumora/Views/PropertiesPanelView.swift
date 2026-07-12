@@ -339,7 +339,8 @@ private struct MediaEditor: View {
         }
     }
 
-    /// Generation-speed and cell-size controls for the Game of Life effect.
+    /// Playback-speed control for the Game of Life effect. (The pattern is
+    /// pre-baked at a fixed grid, so cell size follows the surface.)
     @ViewBuilder
     private var gameOfLifeControls: some View {
         let cfg = game ?? GameOfLifeConfig()
@@ -351,16 +352,6 @@ private struct MediaEditor: View {
                     set: { var c = cfg; c.genPerSecond = $0; game = c }
                 ),
                 in: 0.5...15
-            )
-        }
-        VStack(alignment: .leading) {
-            Text("Cell Size: \(Int(cfg.cellSize)) px").font(.caption)
-            Slider(
-                value: Binding(
-                    get: { cfg.cellSize },
-                    set: { var c = cfg; c.cellSize = $0; game = c }
-                ),
-                in: 8...60
             )
         }
     }
