@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -271,6 +271,7 @@ private struct EffectView: View {
     var marquee: MarqueeConfig? = nil
     var christmas: ChristmasLightsConfig? = nil
     var game: GameOfLifeConfig? = nil
+    var leaves: FallingLeavesConfig? = nil
     var outline: EffectOutline = .rect
 
     var body: some View {
@@ -289,7 +290,7 @@ private struct EffectView: View {
             fieldEffects
         case .vectorGrid, .particleMesh:
             geometryEffects
-        case .livingTexture, .gameOfLife:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow:
             ambientEffects
         case .outlineGlow:
             edgeEffects
@@ -915,15 +916,17 @@ private struct EffectView: View {
         case .fallingLeaves:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.05)))
+                let leafScale = CGFloat(leaves?.leafScale ?? 1.0)
                 for i in 0..<30 {
-                    let speed = 0.2 + Double(hash01(i, 1)) * 0.3
+                    // Gentler descent than before (~1/3 the old speed).
+                    let speed = 0.06 + Double(hash01(i, 1)) * 0.1
                     let fallT = fract(Double(hash01(i, 2)) + time * speed)
                     let y = Double(size.height) * fallT - 20
                     let baseX = Double(hash01(i, 3)) * Double(size.width)
-                    let sway = sin(time * 1.1 + Double(i) * 1.7) * 30
+                    let sway = sin(time * 0.7 + Double(i) * 1.7) * 26
                     let x = baseX + sway
-                    let rot = time * (0.5 + Double(hash01(i, 4))) + Double(i)
-                    let s: CGFloat = 9 + CGFloat(hash01(i, 5)) * 8
+                    let rot = time * (0.25 + Double(hash01(i, 4)) * 0.5) + Double(i)
+                    let s: CGFloat = (9 + CGFloat(hash01(i, 5)) * 8) * leafScale
                     let tint = i % 2 == 0 ? color.color : accent.color
                     ctx.drawLayer { layer in
                         layer.translateBy(x: CGFloat(x), y: CGFloat(y))
@@ -1279,6 +1282,18 @@ private struct EffectView: View {
 
         case .gameOfLife:
             Canvas { ctx, size in drawGameOfLife(ctx: ctx, size: size) }
+
+        case .flowingPlasma:
+            Canvas { ctx, size in drawFlowingPlasma(ctx: ctx, size: size) }
+
+        case .driftingNebula:
+            Canvas { ctx, size in drawDriftingNebula(ctx: ctx, size: size) }
+
+        case .perlinFlow:
+            Canvas { ctx, size in drawPerlinFlow(ctx: ctx, size: size) }
+
+        case .reactionDiffusion:
+            ReactionDiffusionContent(color: color, accent: accent, time: time)
 
         default: EmptyView()
         }
@@ -1988,6 +2003,104 @@ private struct EffectView: View {
         }
     }
 
+    /// Flowing plasma: rainbow radial-gradient blobs drifting on Lissajous
+    /// paths, blended additively into a smooth, colourful field.
+    private func drawFlowingPlasma(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let w = Double(size.width), h = Double(size.height)
+        let minDim = min(w, h)
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            let n = 6
+            for i in 0..<n {
+                let fi = Double(i)
+                let hue: Double = fract(fi / Double(n) + time * 0.05)
+                let cx: Double = w * 0.5 + cos(time * (0.3 + fi * 0.07) + fi * 1.3) * w * 0.42
+                let cy: Double = h * 0.5 + sin(time * (0.25 + fi * 0.09) + fi * 2.1) * h * 0.42
+                let r: Double = minDim * (0.5 + 0.2 * sin(time * 0.4 + fi))
+                let col = Color(hue: hue, saturation: 0.9, brightness: 1)
+                layer.fill(Path(ellipseIn: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)),
+                           with: .radialGradient(Gradient(colors: [col.opacity(0.6), .clear]),
+                                                 center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: r))
+            }
+        }
+    }
+
+    /// Drifting nebula: soft coloured clouds (primary/accent) slowly drifting,
+    /// with a field of twinkling stars.
+    private func drawDriftingNebula(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .color(Color(red: 0.02, green: 0.02, blue: 0.06)))
+        let w = Double(size.width), h = Double(size.height)
+        let minDim = min(w, h)
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            layer.addFilter(.blur(radius: minDim * 0.05))
+            let n = 14
+            for i in 0..<n {
+                let fi = Double(i)
+                let drift: Double = time * 0.015 * (0.5 + Double(hash01(i, 7)))
+                let px: Double = fract(Double(hash01(i, 1)) + drift) * w
+                let py: Double = (Double(hash01(i, 2)) * 0.8 + 0.1) * h + sin(time * 0.1 + fi) * h * 0.03
+                let r: Double = minDim * (0.16 + 0.26 * Double(hash01(i, 3)))
+                let col = i % 2 == 0 ? color.color : accent.color
+                layer.fill(Path(ellipseIn: CGRect(x: px - r, y: py - r, width: r * 2, height: r * 2)),
+                           with: .radialGradient(Gradient(colors: [col.opacity(0.28), .clear]),
+                                                 center: CGPoint(x: px, y: py), startRadius: 0, endRadius: r))
+            }
+        }
+        // Stars.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for i in 0..<90 {
+                let sx = Double(hash01(i, 11)) * w
+                let sy = Double(hash01(i, 13)) * h
+                let tw = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 2.0 + Double(i) * 1.7))
+                let sr = 0.6 + 1.4 * Double(hash01(i, 17))
+                layer.fill(Path(ellipseIn: CGRect(x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2)),
+                           with: .color(.white.opacity(tw)))
+            }
+        }
+    }
+
+    /// Cheap pseudo-Perlin flow angle at a scaled coordinate + time.
+    private func flowAngle(_ x: Double, _ y: Double, _ t: Double) -> Double {
+        let n = sin(x * 1.7 + t) + sin(y * 1.3 - t * 0.8)
+            + sin((x + y) * 0.9 + t * 0.5) + sin((x - y) * 1.1 - t * 0.3)
+        return n * 0.9
+    }
+
+    /// Perlin-style flow field: a grid of short streaks oriented by an animated
+    /// noise field, coloured primary→accent along the field angle.
+    private func drawPerlinFlow(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.04)))
+        let spacing: CGFloat = 26
+        let len: CGFloat = spacing * 0.7
+        let t = time * 0.25
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            var gy = spacing / 2
+            while gy < size.height {
+                var gx = spacing / 2
+                while gx < size.width {
+                    let ang = flowAngle(Double(gx) * 0.012, Double(gy) * 0.012, t)
+                    let dx = CGFloat(cos(ang)) * len, dy = CGFloat(sin(ang)) * len
+                    let a = CGPoint(x: gx - dx / 2, y: gy - dy / 2)
+                    let b = CGPoint(x: gx + dx / 2, y: gy + dy / 2)
+                    var streak = Path(); streak.move(to: a); streak.addLine(to: b)
+                    layer.stroke(streak, with: .linearGradient(
+                        Gradient(colors: [color.color.opacity(0.15), accent.color.opacity(0.95)]),
+                        startPoint: a, endPoint: b), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    // bright head
+                    layer.fill(Path(ellipseIn: CGRect(x: b.x - 1.6, y: b.y - 1.6, width: 3.2, height: 3.2)),
+                               with: .color(accent.color.opacity(0.9)))
+                    gx += spacing
+                }
+                gy += spacing
+            }
+        }
+    }
+
     private func drawLivingTexture(ctx: GraphicsContext, size: CGSize) {
         let w = Double(size.width), h = Double(size.height)
         ctx.fill(Path(CGRect(origin: .zero, size: size)),
@@ -2424,6 +2537,106 @@ private final class ContourTraceModel: ObservableObject {
 /// Contour trace: a single glowing pen tip draws detected contours one at a time
 /// (bottom→top); drawn strokes persist into the full outline, which holds and
 /// fades before repeating. A `Canvas` so it warps with the surface.
+/// Live Gray–Scott reaction–diffusion. Persists its grids across frames via
+/// `@StateObject`; the view redraws every frame because `time` changes.
+private final class ReactionDiffusionModel: ObservableObject {
+    private(set) var cols = 0
+    private(set) var rows = 0
+    private var u: [Double] = []
+    private var v: [Double] = []
+    private var started = false
+
+    var field: [Double] { v }
+
+    func ensure(cols: Int, rows: Int) {
+        guard cols > 0, rows > 0 else { return }
+        if cols == self.cols, rows == self.rows, !u.isEmpty { return }
+        self.cols = cols; self.rows = rows
+        let count = cols * rows
+        u = [Double](repeating: 1, count: count)
+        v = [Double](repeating: 0, count: count)
+        var seed: UInt64 = 88172645463325252
+        func rnd() -> Double { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; return Double(seed % 100000) / 100000 }
+        for _ in 0..<18 {
+            let cx = Int(rnd() * Double(cols)), cy = Int(rnd() * Double(rows))
+            for dy in -3...3 { for dx in -3...3 {
+                let x = (cx + dx + cols) % cols, y = (cy + dy + rows) % rows
+                v[y * cols + x] = 1
+            } }
+        }
+        started = true
+    }
+
+    func advance() {
+        guard started else { return }
+        step(iterations: 10)
+    }
+
+    private func step(iterations: Int) {
+        let du = 0.16, dv = 0.08, f = 0.06, k = 0.062
+        let c = cols, r = rows
+        guard c > 0, r > 0, u.count == c * r else { return }
+        for _ in 0..<iterations {
+            var nu = u, nv = v
+            for y in 0..<r {
+                let cur = y * c, up = ((y - 1 + r) % r) * c, dn = ((y + 1) % r) * c
+                for x in 0..<c {
+                    let l = (x - 1 + c) % c, rt = (x + 1) % c
+                    let i = cur + x
+                    let uu = u[i], vv = v[i]
+                    let lapU: Double = 0.2 * (u[cur + l] + u[cur + rt] + u[up + x] + u[dn + x])
+                        + 0.05 * (u[up + l] + u[up + rt] + u[dn + l] + u[dn + rt]) - uu
+                    let lapV: Double = 0.2 * (v[cur + l] + v[cur + rt] + v[up + x] + v[dn + x])
+                        + 0.05 * (v[up + l] + v[up + rt] + v[dn + l] + v[dn + rt]) - vv
+                    let uvv = uu * vv * vv
+                    nu[i] = uu + (du * lapU - uvv + f * (1 - uu))
+                    nv[i] = vv + (dv * lapV + uvv - (f + k) * vv)
+                }
+            }
+            u = nu; v = nv
+        }
+    }
+}
+
+private struct ReactionDiffusionContent: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+    @StateObject private var model = ReactionDiffusionModel()
+
+    var body: some View {
+        Canvas { ctx, size in
+            let cell = max(8.0, Double(min(size.width, size.height)) / 64)
+            let cols = min(110, max(8, Int(Double(size.width) / cell)))
+            let rows = min(70, max(8, Int(Double(size.height) / cell)))
+            model.ensure(cols: cols, rows: rows)
+            let cw = size.width / CGFloat(cols), ch = size.height / CGFloat(rows)
+            let v = model.field
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .color(Color(red: accent.r * 0.25, green: accent.g * 0.25, blue: accent.b * 0.25)))
+            guard v.count == cols * rows else { return }
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: cw * 0.6))
+                for y in 0..<rows {
+                    for x in 0..<cols {
+                        let val = v[y * cols + x]
+                        if val > 0.12 {
+                            let cx = (Double(x) + 0.5) * Double(cw), cy = (Double(y) + 0.5) * Double(ch)
+                            let rr = Double(cw) * 0.8
+                            let col = Color(red: accent.r + (color.r - accent.r) * val,
+                                            green: accent.g + (color.g - accent.g) * val,
+                                            blue: accent.b + (color.b - accent.b) * val)
+                            layer.fill(Path(ellipseIn: CGRect(x: cx - rr, y: cy - rr, width: rr * 2, height: rr * 2)),
+                                       with: .color(col.opacity(min(1, val * 1.5))))
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: time) { _, _ in model.advance() }
+    }
+}
+
 private struct ContourTraceContent: View {
     let config: ContourTraceConfig
     let time: Double

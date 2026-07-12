@@ -46,6 +46,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case particleMesh
     case livingTexture
     case gameOfLife
+    case flowingPlasma
+    case reactionDiffusion
+    case driftingNebula
+    case perlinFlow
     case outlineGlow
     case analogClock
     case digitalClock
@@ -62,7 +66,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     public var usesColor: Bool {
         switch self {
         case .colorWash, .rainbowSweep, .colorBars, .starfieldWarp, .aurora, .tvStatic, .prismFalls,
-             .voronoi, .vectorGrid, .livingTexture, .gameOfLife, .fire, .bubbles, .fireworks,
+             .voronoi, .vectorGrid, .livingTexture, .gameOfLife, .flowingPlasma, .fire, .bubbles, .fireworks,
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget:
             return false
@@ -79,6 +83,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .halftoneDots, .truchet, .concentricPolygons, .lightning,
              .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
+             .reactionDiffusion, .driftingNebula, .perlinFlow,
              .outlineGlow, .analogClock, .digitalClock:
             return true
         default:
@@ -132,6 +137,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .particleMesh: return "Particle Mesh"
         case .livingTexture: return "Living Texture"
         case .gameOfLife: return "Game of Life"
+        case .flowingPlasma: return "Flowing Plasma"
+        case .reactionDiffusion: return "Reaction Diffusion"
+        case .driftingNebula: return "Drifting Nebula"
+        case .perlinFlow: return "Perlin Flow Field"
         case .outlineGlow: return "Outline Glow"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
@@ -166,7 +175,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .fields
         case .vectorGrid, .particleMesh:
             return .curvesGrids
-        case .livingTexture, .gameOfLife:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow:
             return .ambient
         case .outlineGlow:
             return .edge

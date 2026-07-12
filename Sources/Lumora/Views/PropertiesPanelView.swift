@@ -80,7 +80,8 @@ struct PropertiesPanelView: View {
                 MediaEditor(media: surface.media,
                             marquee: surface.marquee,
                             christmas: surface.christmasLights,
-                            game: surface.gameOfLife)
+                            game: surface.gameOfLife,
+                            leaves: surface.fallingLeaves)
             }
         }
         .formStyle(.grouped)
@@ -93,6 +94,7 @@ private struct MediaEditor: View {
     @Binding var marquee: MarqueeConfig?
     @Binding var christmas: ChristmasLightsConfig?
     @Binding var game: GameOfLifeConfig?
+    @Binding var leaves: FallingLeavesConfig?
     @ObservedObject private var weather = WeatherStore.shared
 
     /// String-light effects that take a bulb/sag config (the tree does not).
@@ -181,6 +183,19 @@ private struct MediaEditor: View {
             }
             if effectKind == .gameOfLife {
                 gameOfLifeControls
+            }
+            if effectKind == .fallingLeaves {
+                let cfg = leaves ?? FallingLeavesConfig()
+                VStack(alignment: .leading) {
+                    Text("Leaf Size: \(Int(cfg.leafScale * 100))%").font(.caption)
+                    Slider(
+                        value: Binding(
+                            get: { cfg.leafScale },
+                            set: { var c = cfg; c.leafScale = $0; leaves = c }
+                        ),
+                        in: 0.4...4.0
+                    )
+                }
             }
             if effectKind.usesColor {
                 Text("Color").font(.caption).foregroundStyle(.secondary)
