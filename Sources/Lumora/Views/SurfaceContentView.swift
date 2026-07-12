@@ -1955,41 +1955,52 @@ private struct EffectView: View {
                      blue: a.2 + (b.2 - a.2) * f)
     }
 
-    /// Game of Life played back from a pre-baked pattern (no live simulation).
-    /// Loops through ~2 min of curated generations, resetting to the start at
-    /// the end, and colours each generation with a rainbow-advancing hue.
+    /// "Neon Life" — Conway's Life played from the pre-baked pattern (no live
+    /// simulation), styled after the reference effect: a diagonal rainbow keyed
+    /// to cell position that drifts over time, plus glowing trails built from a
+    /// few previous baked generations so cells leave neon after-images. Loops
+    /// (~2 min) and resets at the end.
     private func drawGameOfLife(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.04)))
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
         guard let pat = GameOfLifePattern.shared, pat.frameCount > 0 else { return }
         let cols = pat.cols, rows = pat.rows
+        let fc = pat.frameCount
         let cw: CGFloat = size.width / CGFloat(cols)
         let ch: CGFloat = size.height / CGFloat(rows)
 
         let cfg = game ?? GameOfLifeConfig()
         let speed: Double = max(0.2, cfg.genPerSecond)
         let g: Int = Int(time * speed)
-        let frame: Int = g % pat.frameCount            // loop → reset at the end
-        let hue: Double = fract(Double(g) * 0.03)       // rainbow toggle per generation
-        let live = Color(hue: hue, saturation: 0.85, brightness: 1)
 
-        // Soft glow behind the cells.
+        // Diagonal rainbow keyed to position, drifting with time (neon look).
+        func hueAt(_ x: Int, _ y: Int) -> Double { fract(Double(x + y) * 0.02 + time * 0.06) }
+
+        // Glowing neon trails: draw a few previous generations, fading with age.
+        let trailN = 5
         ctx.drawLayer { layer in
-            layer.addFilter(.blur(radius: cw * 0.4))
             layer.blendMode = .plusLighter
-            for y in 0..<rows {
-                for x in 0..<cols where pat.isLive(frame: frame, x: x, y: y) {
-                    let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
-                    layer.fill(Path(ellipseIn: r.insetBy(dx: cw * 0.1, dy: ch * 0.1)),
-                               with: .color(live.opacity(0.5)))
+            layer.addFilter(.blur(radius: min(cw, ch) * 0.5))
+            for age in stride(from: trailN - 1, through: 0, by: -1) {
+                let frame = ((g - age) % fc + fc) % fc
+                let op = pow(0.55, Double(age))   // 1, 0.55, 0.30, 0.17, 0.09
+                for y in 0..<rows {
+                    for x in 0..<cols where pat.isLive(frame: frame, x: x, y: y) {
+                        let col = Color(hue: hueAt(x, y), saturation: 1, brightness: 1)
+                        let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
+                        layer.fill(Path(ellipseIn: r.insetBy(dx: cw * 0.15, dy: ch * 0.15)),
+                                   with: .color(col.opacity(0.5 * op)))
+                    }
                 }
             }
         }
-        // Crisp cells on top.
+        // Crisp bright current cells on top.
+        let frame = g % fc
         for y in 0..<rows {
             for x in 0..<cols where pat.isLive(frame: frame, x: x, y: y) {
+                let col = Color(hue: hueAt(x, y), saturation: 1, brightness: 1)
                 let r = CGRect(x: CGFloat(x) * cw, y: CGFloat(y) * ch, width: cw, height: ch)
-                ctx.fill(Path(roundedRect: r.insetBy(dx: cw * 0.12, dy: ch * 0.12), cornerRadius: cw * 0.22),
-                         with: .color(live))
+                ctx.fill(Path(roundedRect: r.insetBy(dx: cw * 0.14, dy: ch * 0.14), cornerRadius: cw * 0.25),
+                         with: .color(col))
             }
         }
     }
