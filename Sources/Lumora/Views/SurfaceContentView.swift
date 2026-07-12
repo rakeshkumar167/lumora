@@ -922,13 +922,12 @@ private struct EffectView: View {
                     let sway = sin(time * 1.1 + Double(i) * 1.7) * 30
                     let x = baseX + sway
                     let rot = time * (0.5 + Double(hash01(i, 4))) + Double(i)
-                    let s: CGFloat = 8 + CGFloat(hash01(i, 5)) * 6
+                    let s: CGFloat = 9 + CGFloat(hash01(i, 5)) * 8
                     let tint = i % 2 == 0 ? color.color : accent.color
                     ctx.drawLayer { layer in
                         layer.translateBy(x: CGFloat(x), y: CGFloat(y))
                         layer.rotate(by: .radians(rot))
-                        let leaf = Path(ellipseIn: CGRect(x: -s, y: -s / 2, width: s * 2, height: s))
-                        layer.fill(leaf, with: .color(tint.opacity(0.85)))
+                        layer.fill(Self.mapleLeafPath(scale: s), with: .color(tint.opacity(0.9)))
                     }
                 }
             }
@@ -964,8 +963,20 @@ private struct EffectView: View {
                 let count = 16
                 let gap: CGFloat = 5
                 let barWidth = (size.width - gap * CGFloat(count + 1)) / CGFloat(count)
+                // Shared kick that all bars react to, like a beat.
+                let beat = pow(max(0, sin(time * 3.0)), 4)
                 for i in 0..<count {
-                    let level = 0.15 + 0.85 * pow(abs(sin(time * 2.5 + Double(i) * 0.7)), 2)
+                    // Layer three per-bar random frequencies so bars bounce
+                    // unpredictably instead of marching in a visible wave.
+                    let s1: Double = Double(hash01(i, 7))
+                    let s2: Double = Double(hash01(i, 17))
+                    let s3: Double = Double(hash01(i, 41))
+                    let a: Double = sin(time * (2.3 + s1 * 4.0) + s1 * 6.283)
+                    let b: Double = sin(time * (5.1 + s2 * 6.0) + s2 * 6.283)
+                    let c: Double = sin(time * (9.7 + s3 * 8.0) + s3 * 6.283)
+                    let mix: Double = 0.5 + 0.5 * (0.6 * a + 0.3 * b + 0.1 * c)
+                    let kick: Double = 0.30 * beat * (0.4 + 0.6 * s2)
+                    let level: Double = min(1.0, max(0.05, 0.12 + 0.66 * mix + kick))
                     let h = size.height * CGFloat(level)
                     let x = gap + CGFloat(i) * (barWidth + gap)
                     let rect = CGRect(x: x, y: size.height - h, width: barWidth, height: h)
@@ -1511,6 +1522,26 @@ private struct EffectView: View {
     private static let fireworkShells = 5
     /// Multiplier on the fireworks clock; < 1 slows the whole cycle down.
     private static let fireworkSpeed: Double = 0.6
+
+    /// Stylized 5-lobe maple-leaf outline, normalized to roughly [-1, 1]
+    /// (y-down), tip up and stem at the bottom.
+    private static let mapleUnit: [CGPoint] = [
+        CGPoint(x: 0.00, y: -1.00), CGPoint(x: 0.16, y: -0.55), CGPoint(x: 0.55, y: -0.62),
+        CGPoint(x: 0.34, y: -0.28), CGPoint(x: 0.95, y: -0.20), CGPoint(x: 0.52, y: 0.05),
+        CGPoint(x: 0.62, y: 0.45), CGPoint(x: 0.22, y: 0.30), CGPoint(x: 0.16, y: 0.85),
+        CGPoint(x: 0.00, y: 1.00), CGPoint(x: -0.16, y: 0.85), CGPoint(x: -0.22, y: 0.30),
+        CGPoint(x: -0.62, y: 0.45), CGPoint(x: -0.52, y: 0.05), CGPoint(x: -0.95, y: -0.20),
+        CGPoint(x: -0.34, y: -0.28), CGPoint(x: -0.55, y: -0.62), CGPoint(x: -0.16, y: -0.55),
+    ]
+
+    private static func mapleLeafPath(scale s: CGFloat) -> Path {
+        var p = Path()
+        let pts = mapleUnit
+        p.move(to: CGPoint(x: pts[0].x * s, y: pts[0].y * s))
+        for pt in pts.dropFirst() { p.addLine(to: CGPoint(x: pt.x * s, y: pt.y * s)) }
+        p.closeSubpath()
+        return p
+    }
 
     private func drawFireworks(ctx: GraphicsContext, size: CGSize) {
         // Night sky.
