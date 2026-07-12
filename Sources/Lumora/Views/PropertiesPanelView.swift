@@ -77,7 +77,9 @@ struct PropertiesPanelView: View {
             }
 
             Section("Media") {
-                MediaEditor(media: surface.media, marquee: surface.marquee)
+                MediaEditor(media: surface.media,
+                            marquee: surface.marquee,
+                            christmas: surface.christmasLights)
             }
         }
         .formStyle(.grouped)
@@ -88,7 +90,12 @@ struct PropertiesPanelView: View {
 private struct MediaEditor: View {
     @Binding var media: MediaAssignment
     @Binding var marquee: MarqueeConfig?
+    @Binding var christmas: ChristmasLightsConfig?
     @ObservedObject private var weather = WeatherStore.shared
+
+    /// String-light effects that take a bulb/sag config (the tree does not).
+    private static let stringLightKinds: Set<EffectKind> =
+        [.chasingLights, .multiColorLights, .twinklingLights, .warmBulbs]
 
     /// Curated fonts offered for the Marquee Text effect. Empty family name =
     /// the system monospaced default.
@@ -166,6 +173,9 @@ private struct MediaEditor: View {
             }
             if effectKind == .marqueeText {
                 marqueeControls
+            }
+            if Self.stringLightKinds.contains(effectKind) {
+                stringLightControls
             }
             if effectKind.usesColor {
                 Text("Color").font(.caption).foregroundStyle(.secondary)
@@ -272,6 +282,31 @@ private struct MediaEditor: View {
             get: { cfg.rainbow },
             set: { var c = cfg; c.rainbow = $0; marquee = c }
         ))
+    }
+
+    /// Bulb-count and sag-count controls for the Christmas string-light effects.
+    @ViewBuilder
+    private var stringLightControls: some View {
+        let cfg = christmas ?? ChristmasLightsConfig()
+        VStack(alignment: .leading) {
+            Text("Bulbs: \(cfg.bulbCount)").font(.caption)
+            Slider(
+                value: Binding(
+                    get: { Double(cfg.bulbCount) },
+                    set: { var c = cfg; c.bulbCount = Int($0.rounded()); christmas = c }
+                ),
+                in: 5...80, step: 1
+            )
+        }
+        Stepper(
+            value: Binding(
+                get: { cfg.sagCount },
+                set: { var c = cfg; c.sagCount = $0; christmas = c }
+            ),
+            in: 1...8
+        ) {
+            Text("Sags: \(cfg.sagCount)").font(.caption)
+        }
     }
 
     private func setKind(_ newKind: Kind) {

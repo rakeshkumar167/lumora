@@ -21,6 +21,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var zIndex: Int
     /// Customization for the Marquee Text effect (nil = defaults).
     public var marquee: MarqueeConfig?
+    /// Customization for the Christmas string-light effects (nil = defaults).
+    public var christmasLights: ChristmasLightsConfig?
 
     public init(
         id: UUID = UUID(),
@@ -32,7 +34,8 @@ public struct Surface: Identifiable, Equatable, Codable {
         isVisible: Bool = true,
         opacity: Double = 1,
         zIndex: Int = 10,
-        marquee: MarqueeConfig? = nil
+        marquee: MarqueeConfig? = nil,
+        christmasLights: ChristmasLightsConfig? = nil
     ) {
         self.id = id
         self.name = name
@@ -44,10 +47,11 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.opacity = opacity
         self.zIndex = zIndex
         self.marquee = marquee
+        self.christmasLights = christmasLights
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -64,6 +68,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         opacity = try c.decode(Double.self, forKey: .opacity)
         zIndex = try c.decodeIfPresent(Int.self, forKey: .zIndex) ?? 10
         marquee = try c.decodeIfPresent(MarqueeConfig.self, forKey: .marquee)
+        christmasLights = try c.decodeIfPresent(ChristmasLightsConfig.self, forKey: .christmasLights)
     }
 
     /// The shape's center (normalized), used as the rotation pivot.

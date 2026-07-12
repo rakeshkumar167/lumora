@@ -21,25 +21,32 @@ public enum ChristmasLights {
         public init(bulbs: [CGPoint]) { self.bulbs = bulbs }
     }
 
-    private static let bulbSpacing: CGFloat = 86   // wider spacing → fewer, more-spaced bulbs
     private static let insetFraction: CGFloat = 0.06
 
-    /// A single horizontal strand hung across the surface, sagging in the
-    /// middle. Bulb count scales with width (min 3). The wire is pinned near the
-    /// mid-height at both ends and dips down between them.
-    public static func strands(in size: CGSize) -> [Strand] {
+    /// A single horizontal strand hung across the surface in one or more
+    /// drooping swags. The wire pins to the **top** and its droop depth is
+    /// driven by width, so stretching the surface taller neither moves nor
+    /// scales the lights. Bulb and swag counts come from `config`.
+    public static func strands(in size: CGSize, config: ChristmasLightsConfig = .init()) -> [Strand] {
         guard size.width > 0, size.height > 0 else { return [] }
-        let bulbCount = max(3, Int((size.width / bulbSpacing).rounded()))
-        let y0 = 0.42 * size.height          // pin height (near center, room to sag)
-        let sag = 0.13 * size.height         // droop depth at mid-span
+        let bulbCount = max(2, config.bulbCount)
+        let sagCount = max(1, config.sagCount)
         let inset = size.width * insetFraction
         let left = inset, right = size.width - inset
+        let span = max(1, right - left)
+
+        // Everything vertical is derived from width → height-independent.
+        let sagSpan = span / CGFloat(sagCount)   // horizontal width of one swag
+        let sagDepth = sagSpan * 0.28            // how far each swag droops
+        let pinY = sagDepth * 0.45 + size.width * 0.012   // wire pins just below the top
 
         var bulbs: [CGPoint] = []
         for i in 0..<bulbCount {
-            let t = CGFloat(i) / CGFloat(bulbCount - 1)      // 0…1
-            let x = left + (right - left) * t
-            let y = y0 + sag * 4 * t * (1 - t)               // 0 at ends, max mid
+            let t = bulbCount == 1 ? 0.5 : CGFloat(i) / CGFloat(bulbCount - 1)   // 0…1 across width
+            let x = left + span * t
+            // Position within the current swag (0 at a top pin, 0.5 at the dip).
+            let localT = (t * CGFloat(sagCount)).truncatingRemainder(dividingBy: 1)
+            let y = pinY + sagDepth * 4 * localT * (1 - localT)   // 0 at swag ends, max mid
             bulbs.append(CGPoint(x: x, y: y))
         }
         return [Strand(bulbs: bulbs)]
