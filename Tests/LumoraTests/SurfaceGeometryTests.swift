@@ -47,6 +47,11 @@ final class SurfaceGeometryTests: XCTestCase {
         XCTAssertEqual(o, [CGPoint(x: 0, y: 0), CGPoint(x: 4, y: 0), CGPoint(x: 4, y: 3), CGPoint(x: 0, y: 3)])
     }
 
+    func testBoundingBoxArea() {
+        let tri = [CGPoint(x: 0, y: 0), CGPoint(x: 4, y: 0), CGPoint(x: 2, y: 3)]
+        XCTAssertEqual(SurfaceGeometry.boundingBoxArea(tri), 12.0, accuracy: 1e-9) // 4 x 3 bbox
+    }
+
     func testContains() {
         let sq = [CGPoint(x: 0, y: 0), CGPoint(x: 10, y: 0), CGPoint(x: 10, y: 10), CGPoint(x: 0, y: 10)]
         XCTAssertTrue(SurfaceGeometry.contains(CGPoint(x: 5, y: 5), in: sq))

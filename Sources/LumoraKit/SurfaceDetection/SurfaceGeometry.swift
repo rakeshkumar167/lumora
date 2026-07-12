@@ -13,6 +13,17 @@ public enum SurfaceGeometry {
         return abs(a) / 2
     }
 
+    /// Area of the axis-aligned bounding box enclosing the points.
+    public static func boundingBoxArea(_ pts: [CGPoint]) -> Double {
+        guard let first = pts.first else { return 0 }
+        var minX = first.x, minY = first.y, maxX = first.x, maxY = first.y
+        for p in pts {
+            minX = min(minX, p.x); minY = min(minY, p.y)
+            maxX = max(maxX, p.x); maxY = max(maxY, p.y)
+        }
+        return Double((maxX - minX) * (maxY - minY))
+    }
+
     public static func centroid(_ pts: [CGPoint]) -> CGPoint {
         guard !pts.isEmpty else { return .zero }
         var x = 0.0, y = 0.0
