@@ -4,7 +4,7 @@ import Vision
 /// Detects large flat quad surfaces in a room photo. AppKit-free.
 ///
 /// Two passes feed one ranker:
-///  - region segmentation with a gradient barrier -> planes (walls/floors)
+///  - region growing with a gradient barrier -> planes (walls/floors)
 ///  - Vision rectangle detection -> objects (screens, doors, panels)
 public enum SurfaceDetector {
     public struct Options {
@@ -12,19 +12,25 @@ public enum SurfaceDetector {
         public var maxVisionWidth: Int    // cap fed to Vision (speed)
         public var ranker: SurfaceRanker.Config
         public var gradientBarrier: Double // edge strength that blocks region growth
-        public var quantizeLevels: Int
+        /// Luminance distance to the region's running mean that still joins the
+        /// region. Loose: one wall under a lighting gradient stays one region.
+        public var lumTolerance: Double
+        /// Chroma distance ((R-G, G-B) plane) to the region's running mean.
+        /// Tight: differently painted surfaces of similar brightness stay apart.
+        public var chromaTolerance: Double
         public var minFillRatio: Double        // reject loose quad fits
         public var minRectangularity: Double   // reject degenerate/triangular quads
 
         public init(workingWidth: Int = 380, maxVisionWidth: Int = 1400,
-                    ranker: SurfaceRanker.Config = .init(), gradientBarrier: Double = 42,
-                    quantizeLevels: Int = 6, minFillRatio: Double = 0.62,
-                    minRectangularity: Double = 0.58) {
+                    ranker: SurfaceRanker.Config = .init(), gradientBarrier: Double = 30,
+                    lumTolerance: Double = 34, chromaTolerance: Double = 16,
+                    minFillRatio: Double = 0.55, minRectangularity: Double = 0.58) {
             self.workingWidth = workingWidth
             self.maxVisionWidth = maxVisionWidth
             self.ranker = ranker
             self.gradientBarrier = gradientBarrier
-            self.quantizeLevels = quantizeLevels
+            self.lumTolerance = lumTolerance
+            self.chromaTolerance = chromaTolerance
             self.minFillRatio = minFillRatio
             self.minRectangularity = minRectangularity
         }
@@ -34,11 +40,12 @@ public enum SurfaceDetector {
         let img = resized(image, maxDimension: options.maxVisionWidth)
         var candidates = regionPlaneCandidates(img, options: options)
         candidates += objectCandidates(img, minAreaFraction: options.ranker.minAreaFraction)
-        // Surfaces must lie within the photo; Vision can return corners slightly
-        // past the frame, so clamp before ranking.
+        // Surfaces must lie within the photo; the quad fit and Vision can both
+        // place corners past the frame, so clamp and re-measure before ranking.
         candidates = candidates.map { q in
             var q = q
             q.corners = q.corners.map { CGPoint(x: min(max($0.x, 0), 1), y: min(max($0.y, 0), 1)) }
+            q.areaFraction = SurfaceGeometry.polygonArea(q.corners)
             return q
         }
         return SurfaceRanker.filterMergeRank(candidates, config: options.ranker)
@@ -49,7 +56,8 @@ public enum SurfaceDetector {
     static func regionPlaneCandidates(_ image: CGImage, options: Options) -> [DetectedQuad] {
         let W = options.workingWidth
         let H = max(1, Int(Double(W) * Double(image.height) / Double(image.width)))
-        guard let px = pixelsTopLeft(image, width: W, height: H) else { return [] }
+        guard var px = pixelsTopLeft(image, width: W, height: H) else { return [] }
+        boxBlur(&px, width: W, height: H)   // denoise before measuring gradients
 
         var lum = [Double](repeating: 0, count: W * H)
         for i in 0..<(W * H) {
@@ -64,39 +72,41 @@ public enum SurfaceDetector {
                 grad[y * W + x] = (gx * gx + gy * gy).squareRoot()
             }
         }
-        let levels = options.quantizeLevels
-        func bin(_ i: Int) -> Int {
-            let r = Int(px[i * 4]) * (levels - 1) / 255
-            let g = Int(px[i * 4 + 1]) * (levels - 1) / 255
-            let b = Int(px[i * 4 + 2]) * (levels - 1) / 255
-            return (r * levels + g) * levels + b
-        }
 
-        var label = [Int](repeating: -1, count: W * H)
+        var visited = [Bool](repeating: false, count: W * H)
         var stack: [Int] = []
-        var id = 0
         var out: [DetectedQuad] = []
         let minPix = Double(W * H) * options.ranker.minAreaFraction
         for start in 0..<(W * H) {
-            if label[start] != -1 { continue }
-            let target = bin(start)
-            stack.removeAll(keepingCapacity: true); stack.append(start); label[start] = id
+            if visited[start] { continue }
+            if grad[start] > options.gradientBarrier { visited[start] = true; continue } // edges never seed
+            visited[start] = true
+            stack.removeAll(keepingCapacity: true); stack.append(start)
             var pts: [CGPoint] = []
             var count = 0
+            var sumR = 0.0, sumG = 0.0, sumB = 0.0
             while let cur = stack.popLast() {
                 let cx = cur % W, cy = cur / W
                 pts.append(CGPoint(x: cx, y: cy)); count += 1
+                sumR += Double(px[cur * 4]); sumG += Double(px[cur * 4 + 1]); sumB += Double(px[cur * 4 + 2])
+                let inv = 1.0 / Double(count)
+                let mR = sumR * inv, mG = sumG * inv, mB = sumB * inv
+                let mLum = 0.299 * mR + 0.587 * mG + 0.114 * mB
                 for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
                     let nx = cx + dx, ny = cy + dy
                     if nx < 0 || ny < 0 || nx >= W || ny >= H { continue }
                     let ni = ny * W + nx
+                    if visited[ni] { continue }
                     if grad[ni] > options.gradientBarrier { continue }     // barrier
-                    if label[ni] == -1 && bin(ni) == target { label[ni] = id; stack.append(ni) }
+                    let r = Double(px[ni * 4]), g = Double(px[ni * 4 + 1]), b = Double(px[ni * 4 + 2])
+                    if abs(lum[ni] - mLum) > options.lumTolerance { continue }
+                    let dRG = (r - g) - (mR - mG), dGB = (g - b) - (mG - mB)
+                    if (dRG * dRG + dGB * dGB).squareRoot() > options.chromaTolerance { continue }
+                    visited[ni] = true; stack.append(ni)
                 }
             }
-            id += 1
             if Double(count) < minPix { continue }
-            let quad = SurfaceGeometry.reduceToQuad(SurfaceGeometry.convexHull(pts))
+            let quad = SurfaceGeometry.enclosingQuad(SurfaceGeometry.convexHull(pts))
             guard quad.count == 4 else { continue }
             let qa = SurfaceGeometry.polygonArea(quad)
             guard qa > 0, Double(count) / qa >= options.minFillRatio else { continue }
@@ -118,8 +128,8 @@ public enum SurfaceDetector {
         req.minimumSize = 0.15
         req.minimumAspectRatio = 0.1
         req.maximumObservations = 30
-        req.quadratureTolerance = 35
-        req.minimumConfidence = 0.3   // drop weak/garbage rectangles
+        req.quadratureTolerance = 20  // lax enough for perspective, rejects skewed junk
+        req.minimumConfidence = 0.45  // drop weak/garbage rectangles
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         try? handler.perform([req])
         let obs = req.results ?? []
@@ -135,15 +145,38 @@ public enum SurfaceDetector {
 
     // MARK: - Raster helpers
 
-    /// Rasterize into a top-left-origin RGBA8 buffer (flips the default
-    /// bottom-left CG context so row 0 is the top of the image).
+    /// In-place 3x3 box blur on the RGB channels (separable, edge-clamped).
+    private static func boxBlur(_ px: inout [UInt8], width W: Int, height H: Int) {
+        var tmp = px
+        for y in 0..<H {
+            let row = y * W
+            for x in 0..<W {
+                let x0 = max(0, x - 1), x1 = min(W - 1, x + 1)
+                for ch in 0..<3 {
+                    let s = Int(px[(row + x0) * 4 + ch]) + Int(px[(row + x) * 4 + ch]) + Int(px[(row + x1) * 4 + ch])
+                    tmp[(row + x) * 4 + ch] = UInt8(s / 3)
+                }
+            }
+        }
+        for y in 0..<H {
+            let y0 = max(0, y - 1) * W, y1 = min(H - 1, y + 1) * W, yc = y * W
+            for x in 0..<W {
+                for ch in 0..<3 {
+                    let s = Int(tmp[(y0 + x) * 4 + ch]) + Int(tmp[(yc + x) * 4 + ch]) + Int(tmp[(y1 + x) * 4 + ch])
+                    px[(yc + x) * 4 + ch] = UInt8(s / 3)
+                }
+            }
+        }
+    }
+
+    /// Rasterize into a top-left-origin RGBA8 buffer. CGBitmapContext memory
+    /// already stores row 0 as the top scanline, so no flip is applied — an
+    /// extra flip here would vertically mirror the raster.
     private static func pixelsTopLeft(_ image: CGImage, width w: Int, height h: Int) -> [UInt8]? {
         let cs = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                   space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.interpolationQuality = .high
-        ctx.translateBy(x: 0, y: CGFloat(h))
-        ctx.scaleBy(x: 1, y: -1)
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         guard let data = ctx.data else { return nil }
         let p = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
