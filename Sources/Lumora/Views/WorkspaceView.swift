@@ -9,6 +9,11 @@ struct WorkspaceView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
 
+    @State private var reviewImage: NSImage?
+    @State private var reviewQuads: [DetectedQuad] = []
+    @State private var showReview = false
+    @State private var detecting = false
+
     private var lumoraType: UTType { UTType(filenameExtension: "lumora") ?? .json }
 
     var body: some View {
@@ -28,6 +33,19 @@ struct WorkspaceView: View {
 
             PropertiesPanelView()
                 .frame(minWidth: 250, idealWidth: 270, maxWidth: 320)
+        }
+        .sheet(isPresented: $showReview) {
+            if let img = reviewImage {
+                SurfaceDetectionReviewView(
+                    image: img,
+                    quads: reviewQuads,
+                    onAdd: { corners in
+                        store.addDetectedSurfaces(corners)
+                        showReview = false
+                    },
+                    onCancel: { showReview = false }
+                )
+            }
         }
     }
 
@@ -56,6 +74,14 @@ struct WorkspaceView: View {
             } label: {
                 Label("Add Line", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
             }
+
+            Button {
+                detectSurfaces()
+            } label: {
+                Label("Detect Surfaces", systemImage: "viewfinder.rectangular")
+            }
+            .disabled(detecting)
+            .help("Import a room photo and auto-detect large flat surfaces as editable quads.")
 
             Divider().frame(height: 16)
 
@@ -96,6 +122,27 @@ struct WorkspaceView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    /// Pick a room photo, run detection off the main thread, then present the
+    /// keep/discard review sheet.
+    private func detectSurfaces() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.jpeg, .png, .heic, .image]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url,
+              let nsImage = NSImage(contentsOf: url),
+              let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        detecting = true
+        Task {
+            let quads = SurfaceDetector.detect(in: cg)
+            await MainActor.run {
+                reviewImage = nsImage
+                reviewQuads = quads
+                detecting = false
+                showReview = true
+            }
+        }
     }
 
     // MARK: - Save / Open

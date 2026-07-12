@@ -85,6 +85,20 @@ final class ProjectStore: ObservableObject {
         selectSurface(surface.id)
     }
 
+    /// Append one editable quad surface per detected corner set (normalized,
+    /// TL,TR,BR,BL) and select the first one added.
+    func addDetectedSurfaces(_ quads: [[CGPoint]]) {
+        guard !quads.isEmpty else { return }
+        var firstID: Surface.ID?
+        for pts in quads {
+            var s = Surface(name: "Surface \(surfaces.count + 1)", points: pts, shape: .quad)
+            s.media = .effect(.grid, .cyan, RGBAColor(r: 0.05, g: 0.06, b: 0.09))
+            surfaces.append(s)
+            if firstID == nil { firstID = s.id }
+        }
+        if let firstID { selectSurface(firstID) }
+    }
+
     // MARK: - Save / Open
 
     /// The current editable state as a saveable document.
