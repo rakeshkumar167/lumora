@@ -2019,107 +2019,79 @@ private struct EffectView: View {
         }
     }
 
-    /// Progressive path from `pts` up to `fraction` of its total length, plus
-    /// the current head point (for a glowing trace tip).
-    private func partialPath(_ pts: [CGPoint], fraction: Double) -> (Path, CGPoint) {
-        var path = Path()
-        guard let first = pts.first else { return (path, .zero) }
-        path.move(to: first)
-        if pts.count < 2 || fraction <= 0 { return (path, first) }
-        var lengths: [Double] = []
-        var total = 0.0
-        for i in 1..<pts.count {
-            let l = Double(hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y))
-            lengths.append(l); total += l
-        }
-        let target = total * fraction
-        var acc = 0.0
-        var head = first
-        for i in 1..<pts.count {
-            let l = lengths[i - 1]
-            if acc + l <= target || l == 0 {
-                path.addLine(to: pts[i]); head = pts[i]; acc += l
-            } else {
-                let t = CGFloat((target - acc) / l)
-                let p = CGPoint(x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t,
-                                y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t)
-                path.addLine(to: p); head = p; break
-            }
-        }
-        return (path, head)
-    }
-
-    /// A modern PCB: deterministic Manhattan/45° traces routed on a grid with
-    /// vias, slowly "traced in" (progressive reveal) then held, looping.
+    /// A real PCB layout (trace paths extracted from a circuit image and baked
+    /// into circuit.json) progressively "traced out" along a continuous pen
+    /// walk, with a glowing head, then held — looping. Trace = primary colour,
+    /// board = accent tint.
     private func drawCircuit(ctx: GraphicsContext, size: CGSize) {
-        let w = Double(size.width), h = Double(size.height)
-        let minDim = min(w, h)
         ctx.fill(Path(CGRect(origin: .zero, size: size)),
                  with: .color(Color(red: accent.r * 0.12, green: accent.g * 0.15, blue: accent.b * 0.12)))
-        let step = max(16.0, minDim / 22)
-        let cols = max(2, Int(w / step)), rows = max(2, Int(h / step))
+        guard let pat = CircuitPattern.shared, !pat.paths.isEmpty else { return }
+        let W = size.width, H = size.height
         let trace = color.color
-        let traceCount = 44
-        let cycle = 16.0
+        func P(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * W, y: p.y * H) }
+
+        // Pixel length of each path + total (cheap to recompute; ~1.8k points).
+        var pathLens: [Double] = []
+        pathLens.reserveCapacity(pat.paths.count)
+        var total = 0.0
+        for pl in pat.paths {
+            var l = 0.0
+            for k in 1..<pl.count { l += Double(hypot((pl[k].x - pl[k - 1].x) * W, (pl[k].y - pl[k - 1].y) * H)) }
+            pathLens.append(l); total += l
+        }
+        guard total > 0 else { return }
+
+        let cycle = 20.0
         let ct = time.truncatingRemainder(dividingBy: cycle) / cycle
-        let reveal = min(1.0, ct / 0.7)   // draw over first 70% of the cycle
+        let reveal = min(1.0, ct / 0.82)   // trace over 82% of the cycle, then hold
+        let target = reveal * total
 
-        func node(_ gx: Int, _ gy: Int) -> CGPoint { CGPoint(x: Double(gx) * step, y: Double(gy) * step) }
-        func buildTrace(_ sd: Int) -> [CGPoint] {
-            var gx = Int(hash01(sd, 1) * Double(cols))
-            var gy = Int(hash01(sd, 2) * Double(rows))
-            var pts = [node(gx, gy)]
-            let segs = 3 + Int(hash01(sd, 3) * 6)
-            for s in 0..<segs {
-                let roll = hash01(sd, s * 7 + 4)
-                var dx = 0, dy = 0
-                if roll < 0.38 { dx = hash01(sd, s + 9) < 0.5 ? 1 : -1 }
-                else if roll < 0.76 { dy = hash01(sd, s + 11) < 0.5 ? 1 : -1 }
-                else { dx = hash01(sd, s + 13) < 0.5 ? 1 : -1; dy = hash01(sd, s + 17) < 0.5 ? 1 : -1 }
-                let n = 1 + Int(hash01(sd, s + 19) * 4)
-                gx = min(max(gx + dx * n, 0), cols); gy = min(max(gy + dy * n, 0), rows)
-                pts.append(node(gx, gy))
-            }
-            return pts
+        // Dim full circuit so the whole board is visible while it traces in.
+        var base = Path()
+        for pl in pat.paths {
+            base.move(to: P(pl[0]))
+            for k in 1..<pl.count { base.addLine(to: P(pl[k])) }
         }
-        let traces = (0..<traceCount).map { buildTrace($0 * 131 + 7) }
+        ctx.stroke(base, with: .color(trace.opacity(0.12)), lineWidth: 1.2)
 
-        // Faint full circuit + vias so the board reads as populated.
-        for pts in traces {
-            var p = Path(); p.addLines(pts)
-            ctx.stroke(p, with: .color(trace.opacity(0.10)),
-                       style: StrokeStyle(lineWidth: max(1, step * 0.05), lineCap: .round, lineJoin: .round))
-            for pt in pts {
-                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - 2, y: pt.y - 2, width: 4, height: 4)),
-                         with: .color(trace.opacity(0.14)))
-            }
-        }
-
-        // Bright revealed portion with glow + a head spark, staggered per trace.
+        // Bright revealed portion with glow + a head spark.
         ctx.drawLayer { layer in
             layer.blendMode = .plusLighter
             layer.addFilter(.blur(radius: 1.5))
-            for (i, pts) in traces.enumerated() {
-                let start = Double(i) / Double(traceCount) * 0.5
-                let frac = min(1.0, max(0.0, (reveal - start) / 0.5))
-                if frac <= 0 { continue }
-                let (path, head) = partialPath(pts, fraction: frac)
-                layer.stroke(path, with: .color(trace.opacity(0.9)),
-                             style: StrokeStyle(lineWidth: max(1.5, step * 0.08), lineCap: .round, lineJoin: .round))
-                let shown = min(pts.count - 1, Int(ceil(frac * Double(pts.count - 1))))
-                if shown >= 0 {
-                    for k in 0...shown {
-                        let pt = pts[k]; let pr = step * 0.09
-                        layer.fill(Path(ellipseIn: CGRect(x: pt.x - pr, y: pt.y - pr, width: pr * 2, height: pr * 2)),
-                                   with: .color(trace.opacity(0.85)))
+            var revealed = Path()
+            var acc = 0.0
+            var head = P(pat.paths[0][0])
+            outer: for (pi, pl) in pat.paths.enumerated() {
+                let plen = pathLens[pi]
+                if acc + plen <= target {
+                    revealed.move(to: P(pl[0]))
+                    for k in 1..<pl.count { revealed.addLine(to: P(pl[k])) }
+                    acc += plen
+                    head = P(pl[pl.count - 1])
+                } else {
+                    revealed.move(to: P(pl[0]))
+                    var a2 = acc
+                    for k in 1..<pl.count {
+                        let a = P(pl[k - 1]), b = P(pl[k])
+                        let seg = Double(hypot(b.x - a.x, b.y - a.y))
+                        if a2 + seg <= target {
+                            revealed.addLine(to: b); a2 += seg; head = b
+                        } else {
+                            let t = seg > 0 ? CGFloat((target - a2) / seg) : 0
+                            let hp = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+                            revealed.addLine(to: hp); head = hp
+                            break
+                        }
                     }
-                }
-                if frac < 1 {
-                    let hr = step * 0.16
-                    layer.fill(Path(ellipseIn: CGRect(x: head.x - hr, y: head.y - hr, width: hr * 2, height: hr * 2)),
-                               with: .color(.white.opacity(0.9)))
+                    break outer
                 }
             }
+            layer.stroke(revealed, with: .color(trace.opacity(0.95)),
+                         style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            let hr: CGFloat = 5
+            layer.fill(Path(ellipseIn: CGRect(x: head.x - hr, y: head.y - hr, width: hr * 2, height: hr * 2)),
+                       with: .color(.white.opacity(0.95)))
         }
     }
 
