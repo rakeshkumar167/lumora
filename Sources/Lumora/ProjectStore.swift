@@ -13,10 +13,12 @@ enum EditTool: String, CaseIterable, Identifiable {
 
 /// Owns the editable project state. All surface mutations flow through here.
 final class ProjectStore: ObservableObject {
-    @Published var surfaces: [Surface]
+    /// Ordered scenes. Surface/line edits operate on the active scene.
+    @Published var scenes: [ProjectScene]
+    /// The scene currently shown in the editor.
+    @Published var activeSceneIndex: Int = 0
     @Published var selectedID: Surface.ID?
     @Published var tool: EditTool = .arrow
-    @Published var lightLines: [LightLine] = []
     @Published var selectedLineID: LightLine.ID?
     /// Whether the projection output window is currently open.
     @Published var projecting: Bool = false
@@ -25,10 +27,76 @@ final class ProjectStore: ObservableObject {
     let canvasSize: CGSize
 
     init(surfaces: [Surface], roomImage: NSImage, canvasSize: CGSize) {
-        self.surfaces = surfaces
+        self.scenes = [ProjectScene(name: "Scene 1", surfaces: surfaces)]
         self.roomImage = roomImage
         self.canvasSize = canvasSize
         self.selectedID = surfaces.first?.id
+    }
+
+    // MARK: - Active scene proxies
+
+    /// Surfaces of the active scene. Every surface method/binding/view reads and
+    /// writes through here, so they operate on whichever scene is being edited.
+    var surfaces: [Surface] {
+        get { scenes.indices.contains(activeSceneIndex) ? scenes[activeSceneIndex].surfaces : [] }
+        set {
+            guard scenes.indices.contains(activeSceneIndex) else { return }
+            scenes[activeSceneIndex].surfaces = newValue
+        }
+    }
+
+    /// Light lines of the active scene.
+    var lightLines: [LightLine] {
+        get { scenes.indices.contains(activeSceneIndex) ? scenes[activeSceneIndex].lightLines : [] }
+        set {
+            guard scenes.indices.contains(activeSceneIndex) else { return }
+            scenes[activeSceneIndex].lightLines = newValue
+        }
+    }
+
+    // MARK: - Scenes
+
+    var activeScene: ProjectScene? {
+        scenes.indices.contains(activeSceneIndex) ? scenes[activeSceneIndex] : nil
+    }
+
+    /// Switch the edited scene and reset selection to its first surface.
+    func selectScene(_ index: Int) {
+        guard scenes.indices.contains(index) else { return }
+        activeSceneIndex = index
+        selectedID = scenes[index].surfaces.first?.id
+        selectedLineID = nil
+    }
+
+    /// Append a new empty scene and make it active.
+    func addScene() {
+        scenes.append(ProjectScene(name: "Scene \(scenes.count + 1)"))
+        selectScene(scenes.count - 1)
+    }
+
+    /// Remove a scene (never below one); keep a valid active scene.
+    func deleteScene(_ index: Int) {
+        guard scenes.count > 1, scenes.indices.contains(index) else { return }
+        scenes.remove(at: index)
+        selectScene(min(activeSceneIndex, scenes.count - 1))
+    }
+
+    /// Reorder a scene, keeping it the active one.
+    func moveScene(from: Int, to: Int) {
+        guard scenes.indices.contains(from), to >= 0, to < scenes.count, from != to else { return }
+        let s = scenes.remove(at: from)
+        scenes.insert(s, at: to)
+        activeSceneIndex = to
+    }
+
+    func renameScene(_ index: Int, _ name: String) {
+        guard scenes.indices.contains(index) else { return }
+        scenes[index].name = name
+    }
+
+    func setSceneDuration(_ index: Int, _ seconds: TimeInterval) {
+        guard scenes.indices.contains(index) else { return }
+        scenes[index].duration = max(1, seconds)
     }
 
     /// A ready-to-demo project: a generated room with two animated surfaces
@@ -115,14 +183,12 @@ final class ProjectStore: ObservableObject {
     // MARK: - Save / Open
 
     /// The current editable state as a saveable document.
-    func makeProject() -> Project { Project(surfaces: surfaces, lightLines: lightLines) }
+    func makeProject() -> Project { Project(scenes: scenes) }
 
-    /// Replace all surfaces and light lines with those from a loaded project.
+    /// Replace all scenes with those from a loaded project.
     func load(_ project: Project) {
-        surfaces = project.surfaces
-        lightLines = project.lightLines
-        selectedID = surfaces.first?.id
-        selectedLineID = nil
+        scenes = project.scenes.isEmpty ? [ProjectScene(name: "Scene 1")] : project.scenes
+        selectScene(0)
     }
 
     /// Change a surface's shape, preserving its location/size (bounding box).
