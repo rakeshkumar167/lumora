@@ -54,24 +54,30 @@ struct ProjectionRootView: View {
 /// Moves the projection window to a second display (if present) and enters
 /// fullscreen — matching single-projector output. Esc exits fullscreen.
 private struct ProjectionWindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.title = "Projection"
+    func makeNSView(context: Context) -> NSView { ConfigView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 
-            // Prefer a display other than the one the editor is on (the projector).
-            if let projector = NSScreen.screens.first(where: { $0 != NSScreen.main }) ?? NSScreen.main {
-                window.setFrame(projector.frame, display: true)
-            }
-
-            if !window.styleMask.contains(.fullScreen) {
+    /// Configures its host window every time it attaches to one — so the
+    /// move-to-projector + fullscreen reapplies on each Start (not only the
+    /// first). A one-shot in `makeNSView` doesn't re-run when the window is
+    /// closed and reopened, which left the second Start windowed.
+    final class ConfigView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            // Let the (re)opened window settle before moving/fullscreening it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let window = self?.window else { return }
+                window.title = "Projection"
                 window.collectionBehavior.insert(.fullScreenPrimary)
-                window.toggleFullScreen(nil)
+                // Prefer a display other than the editor's (the projector).
+                let projector = NSScreen.screens.first { $0 != NSScreen.main } ?? NSScreen.main
+                guard let projector else { return }
+                if !window.styleMask.contains(.fullScreen) {
+                    window.setFrame(projector.frame, display: true)
+                    window.toggleFullScreen(nil)
+                }
             }
         }
-        return view
     }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
