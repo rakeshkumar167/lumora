@@ -16,17 +16,18 @@ enum AppAssets {
 /// can be clicked to skip.
 struct SplashView: View {
     var body: some View {
-        ZStack {
-            Color.black
-            if let banner = AppAssets.splash {
-                Image(nsImage: banner)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .padding(32)
-                    .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+        Color.black
+            .overlay {
+                if let banner = AppAssets.splash {
+                    // Fill the window edge-to-edge with the banner (crop to cover)
+                    // so only the splash art shows — no padding or letterboxing.
+                    Image(nsImage: banner)
+                        .resizable()
+                        .scaledToFill()
+                }
             }
-        }
-        .ignoresSafeArea()
+            .clipped()
+            .ignoresSafeArea()
     }
 }
 
