@@ -276,13 +276,13 @@ private struct EffectView: View {
         switch kind {
         case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep, .radialPulse, .aurora, .plasma, .strobe:
             gradientEffects
-        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .moire, .truchet, .concentricPolygons:
+        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons:
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks:
             natureEffects
         case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh:
             motionEffects
-        case .tvStatic, .crtScanlines, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
+        case .tvStatic, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
         case .voronoi, .metaballs, .hexGrid:
             fieldEffects
@@ -741,33 +741,6 @@ private struct EffectView: View {
                 }
             }
 
-        case .moire:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let spacing: CGFloat = 14
-                var p1 = Path()
-                var x: CGFloat = 0
-                while x <= size.width {
-                    p1.move(to: CGPoint(x: x, y: 0))
-                    p1.addLine(to: CGPoint(x: x, y: size.height))
-                    x += spacing
-                }
-                ctx.stroke(p1, with: .color(color.color.opacity(0.6)), lineWidth: 1)
-                ctx.drawLayer { layer in
-                    layer.translateBy(x: center.x, y: center.y)
-                    layer.rotate(by: .radians(time * 0.15))
-                    layer.translateBy(x: -center.x, y: -center.y)
-                    var p2 = Path()
-                    var xx: CGFloat = -size.width
-                    while xx <= size.width * 2 {
-                        p2.move(to: CGPoint(x: xx, y: -size.height))
-                        p2.addLine(to: CGPoint(x: xx, y: size.height * 2))
-                        xx += spacing
-                    }
-                    layer.stroke(p2, with: .color(color.color.opacity(0.6)), lineWidth: 1)
-                }
-            }
         case .truchet:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
@@ -1173,22 +1146,6 @@ private struct EffectView: View {
                 }
             }
 
-        case .crtScanlines:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(color.color))
-                var y: CGFloat = 0
-                while y < size.height {
-                    ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)),
-                             with: .color(Color.black.opacity(0.25)))
-                    y += 3
-                }
-                let barY = CGFloat(fract(time * 0.2)) * size.height
-                let barRect = CGRect(x: 0, y: barY - 30, width: size.width, height: 60)
-                ctx.drawLayer { layer in
-                    layer.addFilter(.blur(radius: 20))
-                    layer.fill(Path(barRect), with: .color(.white.opacity(0.25)))
-                }
-            }
         case .matrixRain:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))

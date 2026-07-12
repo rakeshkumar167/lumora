@@ -22,7 +22,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case snow
     case lava
     case halftoneDots
-    case moire
     case truchet
     case concentricPolygons
     case fire
@@ -32,7 +31,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case fallingLeaves
     case fireworks
     case tvStatic
-    case crtScanlines
     case matrixRain
     case pixelDissolve
     case tunnel
@@ -109,7 +107,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .snow: return "Snow"
         case .lava: return "Lava Lamp"
         case .halftoneDots: return "Halftone Dots"
-        case .moire: return "Moiré"
         case .truchet: return "Truchet Tiles"
         case .concentricPolygons: return "Concentric Polygons"
         case .fire: return "Fire"
@@ -119,7 +116,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .fallingLeaves: return "Falling Leaves"
         case .fireworks: return "Fireworks"
         case .tvStatic: return "TV Static"
-        case .crtScanlines: return "CRT Scanlines"
         case .matrixRain: return "Matrix Rain"
         case .pixelDissolve: return "Pixel Dissolve"
         case .tunnel: return "Tunnel"
@@ -153,7 +149,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .radialPulse, .aurora, .plasma, .strobe:
             return .gradients
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
-             .moire, .truchet, .concentricPolygons:
+             .truchet, .concentricPolygons:
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks:
@@ -161,7 +157,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .waves, .equalizer, .tunnel, .kaleidoscope,
              .prismFalls, .liquidSlosh:
             return .motion
-        case .tvStatic, .crtScanlines, .matrixRain, .pixelDissolve,
+        case .tvStatic, .matrixRain, .pixelDissolve,
              .dvdBounce, .marqueeText:
             return .retro
         case .voronoi, .metaballs, .hexGrid:
