@@ -11,10 +11,6 @@ let package = Package(
         .executableTarget(
             name: "Lumora",
             dependencies: ["LumoraKit"],
-            // Surface-detection sample photos are dev fixtures read by file path
-            // in tests, not bundled assets — exclude them so their basenames
-            // don't collide with the backdrop samples under Resources/.
-            exclude: ["Resources/surface-detection"],
             resources: [.process("Resources")]
         ),
         // Minimal tests — homography math only (the correctness-critical piece).
