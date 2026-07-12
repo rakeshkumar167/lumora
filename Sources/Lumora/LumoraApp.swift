@@ -12,12 +12,33 @@ struct LumoraApp: App {
                 .environmentObject(store)
                 .frame(minWidth: 900, minHeight: 600)
         }
+        .commands {
+            // Replace the default (help-book) Help item with our in-app help.
+            CommandGroup(replacing: .help) {
+                HelpMenuButton()
+            }
+        }
 
         // Fullscreen projection output (send to a second display / projector).
         Window("Projection", id: "projection") {
             ProjectionRootView()
                 .environmentObject(store)
         }
+
+        // In-app help window, opened from the Help menu.
+        Window("Lumora Help", id: "help") {
+            HelpView()
+        }
+        .defaultSize(width: 520, height: 620)
+    }
+}
+
+/// Help-menu item that opens the in-app help window.
+private struct HelpMenuButton: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("Lumora Help") { openWindow(id: "help") }
+            .keyboardShortcut("?", modifiers: .command)
     }
 }
 
