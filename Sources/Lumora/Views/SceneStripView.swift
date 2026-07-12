@@ -1,3 +1,4 @@
+import Combine
 import LumoraKit
 import SwiftUI
 
@@ -10,8 +11,8 @@ struct SceneStripView: View {
     @FocusState private var nameFocused: Bool
     @State private var previewing = false
     @State private var previewElapsed: Double = 0
-
-    private let tick = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+    /// Only alive while previewing, so nothing ticks when idle.
+    @State private var previewTimer: AnyCancellable?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -35,7 +36,7 @@ struct SceneStripView: View {
         .padding(.horizontal, 12)
         .frame(height: 60)
         .background(.bar)
-        .onReceive(tick) { _ in advancePreview() }
+        .onDisappear { previewTimer = nil }
     }
 
     // MARK: - Chip
@@ -116,6 +117,13 @@ struct SceneStripView: View {
             Button {
                 previewing.toggle()
                 previewElapsed = 0
+                if previewing {
+                    previewTimer = Timer.publish(every: 0.2, on: .main, in: .common)
+                        .autoconnect()
+                        .sink { _ in advancePreview() }
+                } else {
+                    previewTimer = nil
+                }
             } label: {
                 Image(systemName: previewing ? "pause.fill" : "play.fill")
             }
