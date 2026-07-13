@@ -76,7 +76,7 @@ private struct CanvasGrid: View {
             while y < size.height - 0.5 {
                 path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)); y += cell
             }
-            ctx.stroke(path, with: .color(.black.opacity(0.06)), lineWidth: 0.5)
+            ctx.stroke(path, with: .color(.black.opacity(0.12)), lineWidth: 0.5)
         }
         .frame(width: size.width, height: size.height)
         .allowsHitTesting(false)
