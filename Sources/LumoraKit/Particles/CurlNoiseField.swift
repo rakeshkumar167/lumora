@@ -25,9 +25,13 @@ public struct CurlNoiseField {
         return CGVector(dx: dpsi_dy, dy: -dpsi_dx)
     }
 
-    /// Smooth scalar potential in roughly `[-1, 1]`.
+    /// Smooth scalar potential in roughly `[-1, 1]`. Two octaves: a low
+    /// frequency for school-scale swirls plus a finer one for fish-scale wiggle.
+    /// The sum is still a scalar, so its curl stays divergence-free.
     func potential(_ x: Double, _ y: Double, _ t: Double) -> Double {
-        valueNoise(x * frequency, y * frequency, t * timeScale) * 2 - 1
+        let lo = valueNoise(x * frequency, y * frequency, t * timeScale)
+        let hi = valueNoise(x * frequency * 2.3 + 11.5, y * frequency * 2.3 + 4.2, t * timeScale * 1.6)
+        return ((lo * 0.65 + hi * 0.35) * 2 - 1)
     }
 
     // MARK: - 3-D value noise

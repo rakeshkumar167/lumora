@@ -53,6 +53,7 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key><string>Lumora listens to music from your microphone to drive the Audio Reactive Particles effect.</string>
 </dict>
 </plist>
 PLIST

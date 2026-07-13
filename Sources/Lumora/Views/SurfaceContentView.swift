@@ -283,7 +283,7 @@ private struct EffectView: View {
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
             patternEffects
-        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks:
+        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles:
             natureEffects
         case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh:
             motionEffects
@@ -808,6 +808,11 @@ private struct EffectView: View {
 
     @ViewBuilder private var natureEffects: some View {
         switch kind {
+        case .particleSwarm:
+            ParticleSwarmView(mode: .swarm, color: color, accent: accent, time: time)
+        case .audioParticles:
+            ParticleSwarmView(mode: .audio, color: color, accent: accent, time: time)
+
         case .sparkle:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))

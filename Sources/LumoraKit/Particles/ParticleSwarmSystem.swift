@@ -13,11 +13,9 @@ public final class ParticleSwarmSystem {
     public var count: Int { positions.count }
 
     // Motion gains (normalized units per second).
-    private let baseSpeed = 0.18
-    private let cohesionGain = 0.22
-    private let turbulenceGain = 0.16
-    private let steer = 0.22
-    private let maxSpeed = 0.7
+    private let baseSpeed = 0.22
+    private let turbulenceGain = 0.10
+    private let maxSpeed = 0.8
 
     public init(count: Int, seed: UInt64 = 0x9E37) {
         var rng = seed | 1
@@ -41,19 +39,19 @@ public final class ParticleSwarmSystem {
     public func step(rawDt: Double, drivers: SwarmDrivers, field: CurlNoiseField, time: Double) {
         let dt = min(max(rawDt, 0), 0.05)
         guard dt > 0 else { return }
-        // Two slowly drifting attractors the school leans toward.
-        let ax = 0.5 + 0.33 * sin(time * 0.13)
-        let ay = 0.5 + 0.33 * cos(time * 0.17)
+        // Cohesion controls velocity persistence: more cohesion → smoother, more
+        // aligned lanes (the "school" feel). It never pulls toward a point — a
+        // positional attractor is a density sink and would clump the swarm,
+        // fighting the divergence-free field that keeps density even.
+        let steer = 0.34 - 0.24 * min(max(drivers.cohesion, 0), 1)
 
         for i in 0..<positions.count {
             let x = Double(positions[i].x), y = Double(positions[i].y)
             let f = field.flow(x: x, y: y, t: time)
 
-            // Desired velocity (units/sec): flow + cohesion pull + turbulence.
+            // Desired velocity (units/sec): flow + a little turbulence.
             var dvx = Double(f.dx) * baseSpeed * drivers.speed
             var dvy = Double(f.dy) * baseSpeed * drivers.speed
-            dvx += (ax - x) * cohesionGain * drivers.cohesion
-            dvy += (ay - y) * cohesionGain * drivers.cohesion
             let phase = time * (1.4 + seeds[i]) + seeds[i] * 100
             dvx += sin(phase) * turbulenceGain * drivers.turbulence
             dvy += cos(phase * 1.27) * turbulenceGain * drivers.turbulence
