@@ -21,7 +21,7 @@ public enum SurfaceRanker {
         /// nested inside a wall is two surfaces, not a duplicate.
         public var duplicateAreaRatio: Double
 
-        public init(minAreaFraction: Double = 0.05, maxAreaFraction: Double = 0.93,
+        public init(minAreaFraction: Double = 0.03, maxAreaFraction: Double = 0.93,
                     maxResults: Int = 8, planeBoost: Double = 1.35,
                     overlapThreshold: Double = 0.45, duplicateAreaRatio: Double = 0.5) {
             self.minAreaFraction = minAreaFraction

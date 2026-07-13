@@ -3,7 +3,8 @@ import LumoraKit
 import SwiftUI
 
 /// Sheet that previews auto-detected surfaces on the room photo and lets the
-/// user keep/discard each before adding them to the canvas.
+/// user keep/discard each — and drag corner handles to fix up the detected
+/// outline — before adding them to the canvas.
 struct SurfaceDetectionReviewView: View {
     let image: NSImage
     let quads: [DetectedQuad]
@@ -11,6 +12,8 @@ struct SurfaceDetectionReviewView: View {
     let onCancel: () -> Void
 
     @State private var keep: [Bool]
+    /// Editable copies of the detected corners (normalized, top-left origin).
+    @State private var corners: [[CGPoint]]
 
     init(image: NSImage, quads: [DetectedQuad],
          onAdd: @escaping ([[CGPoint]]) -> Void, onCancel: @escaping () -> Void) {
@@ -19,6 +22,7 @@ struct SurfaceDetectionReviewView: View {
         self.onAdd = onAdd
         self.onCancel = onCancel
         _keep = State(initialValue: Array(repeating: true, count: quads.count))
+        _corners = State(initialValue: quads.map(\.corners))
     }
 
     private let palette: [Color] = [.red, .green, .blue, .orange, .purple, .teal, .yellow, .pink]
@@ -30,6 +34,11 @@ struct SurfaceDetectionReviewView: View {
                 Text(quads.isEmpty ? "No surfaces detected"
                      : "Detected \(quads.count) surface\(quads.count == 1 ? "" : "s")")
                     .font(.headline)
+                if !quads.isEmpty {
+                    Text("· drag corners to adjust")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
             }
             .padding()
@@ -39,16 +48,20 @@ struct SurfaceDetectionReviewView: View {
                 ZStack {
                     Image(nsImage: image).resizable().scaledToFit()
                     Canvas { ctx, _ in
-                        for (i, q) in quads.enumerated() where i < keep.count && keep[i] {
+                        for (i, quad) in corners.enumerated() where i < keep.count && keep[i] {
                             let col = palette[i % palette.count]
-                            let pts = q.corners.map {
-                                CGPoint(x: fit.minX + Double($0.x) * fit.width,
-                                        y: fit.minY + Double($0.y) * fit.height)
-                            }
+                            let pts = quad.map { point($0, in: fit) }
                             var path = Path()
                             path.move(to: pts[0]); for p in pts.dropFirst() { path.addLine(to: p) }; path.closeSubpath()
                             ctx.fill(path, with: .color(col.opacity(0.16)))
                             ctx.stroke(path, with: .color(col), lineWidth: 3)
+                        }
+                    }
+                    ForEach(corners.indices, id: \.self) { i in
+                        if i < keep.count && keep[i] {
+                            ForEach(corners[i].indices, id: \.self) { j in
+                                handle(quad: i, corner: j, fit: fit)
+                            }
                         }
                     }
                 }
@@ -79,9 +92,9 @@ struct SurfaceDetectionReviewView: View {
                 Button("Cancel", role: .cancel) { onCancel() }
                 Spacer()
                 Button("Add \(keptCount) Surface\(keptCount == 1 ? "" : "s")") {
-                    let selected = quads.enumerated()
+                    let selected = corners.enumerated()
                         .filter { $0.offset < keep.count && keep[$0.offset] }
-                        .map { $0.element.corners }
+                        .map { $0.element }
                     onAdd(selected)
                 }
                 .keyboardShortcut(.defaultAction)
@@ -90,6 +103,31 @@ struct SurfaceDetectionReviewView: View {
             .padding()
         }
         .frame(width: 760, height: 660)
+    }
+
+    private func handle(quad i: Int, corner j: Int, fit: CGRect) -> some View {
+        let col = palette[i % palette.count]
+        return Circle()
+            .fill(col)
+            .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+            .frame(width: 13, height: 13)
+            .frame(width: 28, height: 28)          // generous hit target
+            .contentShape(Circle())
+            .position(point(corners[i][j], in: fit))
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard fit.width > 0, fit.height > 0 else { return }
+                        corners[i][j] = CGPoint(
+                            x: min(max((value.location.x - fit.minX) / fit.width, 0), 1),
+                            y: min(max((value.location.y - fit.minY) / fit.height, 0), 1))
+                    }
+            )
+    }
+
+    private func point(_ normalized: CGPoint, in fit: CGRect) -> CGPoint {
+        CGPoint(x: fit.minX + normalized.x * fit.width,
+                y: fit.minY + normalized.y * fit.height)
     }
 
     private func binding(_ i: Int) -> Binding<Bool> {
