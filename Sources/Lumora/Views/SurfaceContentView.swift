@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, outline: effectOutline)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -274,6 +274,7 @@ private struct EffectView: View {
     var leaves: FallingLeavesConfig? = nil
     var treeImage: Int = 0
     var three: ThreeDConfig? = nil
+    var paint: PaintDripConfig? = nil
     var outline: EffectOutline = .rect
 
     var body: some View {
@@ -285,7 +286,7 @@ private struct EffectView: View {
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles:
             natureEffects
-        case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh:
+        case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh, .pendulumPaint:
             motionEffects
         case .tvStatic, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
@@ -1134,8 +1135,138 @@ private struct EffectView: View {
                 for p in pts { surf.addLine(to: p) }
                 ctx.stroke(surf, with: .color(.white.opacity(0.55)), lineWidth: 1.5)
             }
+
+        case .pendulumPaint:
+            Canvas { ctx, size in drawPendulumPaint(ctx: ctx, size: size) }
+
         default: EmptyView()
         }
+    }
+
+    /// Pendulum Paint: a hidden rotating, swaying paint bucket lays a
+    /// harmonograph trail that accumulates into a painting, then holds, fades,
+    /// and re-seeds a different figure. Pure function of `time` (see
+    /// `PendulumPaint`). Trail is drawn in contiguous bands so hue and paint
+    /// thickness (pooling where the path moves slowly) can vary along the arc.
+    private func drawPendulumPaint(ctx: GraphicsContext, size: CGSize) {
+        let W = size.width, H = size.height
+        // Dark canvas backing so layered paint reads with depth.
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.07)))
+        let rainbow = paint?.rainbow ?? true
+
+        // Cycle: draw → hold → fade, then next figure.
+        let cycleLen = 90.0
+        let idx = Int(floor(time / cycleLen))
+        let ct = time.truncatingRemainder(dividingBy: cycleLen) / cycleLen   // 0..1
+        let drawEnd = 0.72, holdEnd = 0.90
+        let reveal = min(1.0, ct / drawEnd)
+        let fade: Double = ct <= holdEnd ? 1.0 : max(0.0, 1.0 - (ct - holdEnd) / (1.0 - holdEnd))
+        guard fade > 0.001 else { return }
+
+        let norm = PendulumPaint.samples(cycle: idx)
+        guard norm.count > 2 else { return }
+        let pts = norm.map { CGPoint(x: $0.x * W, y: $0.y * H) }
+
+        // Cumulative arc length in pixels.
+        var cum = [Double](repeating: 0, count: pts.count)
+        for i in 1..<pts.count {
+            cum[i] = cum[i - 1] + Double(hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y))
+        }
+        let total = cum[pts.count - 1]
+        guard total > 0 else { return }
+        let target = reveal * total
+        let medianSeg = total / Double(pts.count - 1)
+
+        let baseW = max(1.5, min(W, H) * 0.011)
+
+        // Later paint reads slightly lighter (layered on top) when single-color.
+        func lighten(_ t: Double) -> Color {
+            let f = 0.35 * t
+            return Color(red: color.r + (1 - color.r) * f,
+                         green: color.g + (1 - color.g) * f,
+                         blue: color.b + (1 - color.b) * f)
+        }
+
+        // Walk the trail in contiguous index chunks; each chunk strokes once with
+        // its own hue + width, truncated at the revealed head.
+        let bands = 64
+        let chunk = max(1, (pts.count - 1) / bands)
+        var head = pts[0]
+        var i = 0
+        stroke: while i < pts.count - 1 {
+            let a = i
+            let b = min(i + chunk, pts.count - 1)
+            i = b
+            if cum[a] >= target { break }
+
+            var path = Path()
+            path.move(to: pts[a])
+            var last = pts[a]
+            for k in (a + 1)...b {
+                if cum[k] <= target {
+                    path.addLine(to: pts[k]); last = pts[k]
+                } else {
+                    // Interpolate the exact head position within this segment.
+                    let segStart = cum[k - 1], segLen = cum[k] - segStart
+                    let f = segLen > 0 ? CGFloat((target - segStart) / segLen) : 0
+                    let hp = CGPoint(x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * f,
+                                     y: pts[k - 1].y + (pts[k].y - pts[k - 1].y) * f)
+                    path.addLine(to: hp); last = hp; head = hp
+                    strokeBand(ctx, path, a: a, b: b, cum: cum, total: total, idx: idx,
+                               baseW: baseW, medianSeg: medianSeg, rainbow: rainbow,
+                               fade: fade, lighten: lighten)
+                    break stroke
+                }
+            }
+            head = last
+            strokeBand(ctx, path, a: a, b: b, cum: cum, total: total, idx: idx,
+                       baseW: baseW, medianSeg: medianSeg, rainbow: rainbow,
+                       fade: fade, lighten: lighten)
+        }
+
+        // Wet paint head: a glowing dab riding the tip while the painting is
+        // still being laid down.
+        if reveal < 1.0 {
+            let u = target / total
+            let hue = (u * 1.5 + Double(idx) * 0.11).truncatingRemainder(dividingBy: 1.0)
+            let headColor = rainbow ? Color(hue: hue, saturation: 0.85, brightness: 1.0) : lighten(0.6)
+            ctx.drawLayer { layer in
+                layer.blendMode = .plusLighter
+                layer.addFilter(.blur(radius: baseW * 1.6))
+                let r = baseW * 2.4
+                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: 2 * r, height: 2 * r)),
+                           with: .color(headColor.opacity(0.9 * fade)))
+                let rc = baseW * 0.9
+                layer.fill(Path(ellipseIn: CGRect(x: head.x - rc, y: head.y - rc, width: 2 * rc, height: 2 * rc)),
+                           with: .color(.white.opacity(0.9 * fade)))
+            }
+        }
+    }
+
+    /// Stroke one band of the pendulum-paint trail: hue by arc position, width
+    /// thicker where the path moves slowly (paint pooling), with a lighter core.
+    private func strokeBand(_ ctx: GraphicsContext, _ path: Path, a: Int, b: Int,
+                            cum: [Double], total: Double, idx: Int,
+                            baseW: CGFloat, medianSeg: Double, rainbow: Bool,
+                            fade: Double, lighten: (Double) -> Color) {
+        let u = (cum[a] + (cum[b] - cum[a]) * 0.5) / total       // arc position 0..1
+        let avgSeg = max(1e-6, (cum[b] - cum[a]) / Double(max(1, b - a)))
+        // Slow (small avgSeg) → thicker paint. Clamp so it stays sane.
+        let poolFactor = min(2.4, max(0.7, medianSeg / avgSeg))
+        let w = baseW * CGFloat(poolFactor)
+
+        let paintColor: Color
+        if rainbow {
+            let hue = (u * 1.5 + Double(idx) * 0.11).truncatingRemainder(dividingBy: 1.0)
+            paintColor = Color(hue: hue, saturation: 0.82, brightness: 0.95)
+        } else {
+            paintColor = lighten(u)
+        }
+        ctx.stroke(path, with: .color(paintColor.opacity(0.92 * fade)),
+                   style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
+        // Lighter core for a wet sheen.
+        ctx.stroke(path, with: .color(.white.opacity(0.16 * fade)),
+                   style: StrokeStyle(lineWidth: max(1, w * 0.35), lineCap: .round, lineJoin: .round))
     }
 
     @ViewBuilder private var retroEffects: some View {

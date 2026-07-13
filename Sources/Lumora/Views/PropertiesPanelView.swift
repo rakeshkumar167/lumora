@@ -83,7 +83,8 @@ struct PropertiesPanelView: View {
                             game: surface.gameOfLife,
                             leaves: surface.fallingLeaves,
                             treeImage: surface.christmasTreeImage,
-                            three: surface.threeD)
+                            three: surface.threeD,
+                            paint: surface.paintDrip)
             }
         }
         .formStyle(.grouped)
@@ -99,6 +100,7 @@ private struct MediaEditor: View {
     @Binding var leaves: FallingLeavesConfig?
     @Binding var treeImage: Int
     @Binding var three: ThreeDConfig?
+    @Binding var paint: PaintDripConfig?
     @ObservedObject private var weather = WeatherStore.shared
 
     /// The 3D effects that take a speed (and, for the cloud, colour) config.
@@ -221,6 +223,15 @@ private struct MediaEditor: View {
                         Text("Color").font(.caption).foregroundStyle(.secondary)
                         colorControls(current: primary) { media = .effect(effectKind, $0, accent) }
                     }
+                }
+            }
+            if effectKind == .pendulumPaint {
+                let cfg = paint ?? PaintDripConfig()
+                Toggle("Rainbow", isOn: Binding(get: { cfg.rainbow },
+                                                set: { var c = cfg; c.rainbow = $0; paint = c }))
+                if !cfg.rainbow {
+                    Text("Color").font(.caption).foregroundStyle(.secondary)
+                    colorControls(current: primary) { media = .effect(effectKind, $0, accent) }
                 }
             }
             if effectKind == .fallingLeaves {

@@ -41,6 +41,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case marqueeText
     case prismFalls
     case liquidSlosh
+    case pendulumPaint
     case voronoi
     case metaballs
     case hexGrid
@@ -81,7 +82,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .torus3D, .sphere3D, .pointCloud3D:
+             .torus3D, .sphere3D, .pointCloud3D, .pendulumPaint:
             return false
         default:
             return true
@@ -146,6 +147,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .marqueeText: return "Marquee Text"
         case .prismFalls: return "Prism Falls"
         case .liquidSlosh: return "Liquid Slosh"
+        case .pendulumPaint: return "Pendulum Paint"
         case .voronoi: return "Voronoi Cells"
         case .metaballs: return "Metaballs"
         case .hexGrid: return "Hex Grid"
@@ -193,7 +195,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .particleSwarm, .audioParticles:
             return .nature
         case .waves, .equalizer, .tunnel, .kaleidoscope,
-             .prismFalls, .liquidSlosh:
+             .prismFalls, .liquidSlosh, .pendulumPaint:
             return .motion
         case .tvStatic, .matrixRain, .pixelDissolve,
              .dvdBounce, .marqueeText:
