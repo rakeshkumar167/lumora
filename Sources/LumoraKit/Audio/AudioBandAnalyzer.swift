@@ -23,6 +23,16 @@ public final class AudioBandAnalyzer {
     private var peak: Double
     private var smoothed = AudioLevels.silent
 
+    private let beatDetector = BeatDetector()
+    private var beatCount = 0
+    private var lastBeatStrength = 0.0
+    private var smoothedBins = [Double](repeating: 0, count: 16)
+    /// Log-spaced band edges 20 Hz…8 kHz for the 16 bins (17 edges).
+    private static let binEdges: [Double] = {
+        let lo = 20.0, hi = 8000.0, n = 16
+        return (0...n).map { lo * pow(hi / lo, Double($0) / Double(n)) }
+    }()
+
     public init(attack: Double = 0.6, decay: Double = 0.12,
                 gainDecay: Double = 0.995, peakFloor: Double = 1e-4) {
         self.attack = attack
@@ -35,6 +45,10 @@ public final class AudioBandAnalyzer {
     public func reset() {
         peak = peakFloor
         smoothed = .silent
+        beatDetector.reset()
+        beatCount = 0
+        lastBeatStrength = 0
+        smoothedBins = [Double](repeating: 0, count: 16)
     }
 
     /// Fold `magnitudes` (linear FFT magnitudes, bins `0…Nyquist`) into
@@ -73,6 +87,31 @@ public final class AudioBandAnalyzer {
             mid: smooth(smoothed.mid, target.mid),
             treble: smooth(smoothed.treble, target.treble),
             overall: smooth(smoothed.overall, target.overall))
+
+        // 16 log-spaced spectrum bins, auto-gained by the same running peak and
+        // smoothed with the same attack/decay.
+        var binSum = [Double](repeating: 0, count: 16)
+        var binN = [Int](repeating: 0, count: 16)
+        for (i, mgf) in magnitudes.enumerated() {
+            let hz = Double(i) * hzPerBin
+            if hz < Self.binEdges.first! || hz > Self.binEdges.last! { continue }
+            // Which bin? (linear scan is fine — 16 edges.)
+            var b = 0
+            while b < 16 && hz > Self.binEdges[b + 1] { b += 1 }
+            if b < 16 { binSum[b] += Double(mgf); binN[b] += 1 }
+        }
+        for b in 0..<16 {
+            let raw = binN[b] > 0 ? binSum[b] / Double(binN[b]) : 0
+            let target = clamp(raw * inv)
+            smoothedBins[b] = smooth(smoothedBins[b], target)
+        }
+
+        let beat = beatDetector.process(bass: smoothed.bass)
+        if beat.isBeat { beatCount += 1; lastBeatStrength = beat.strength }
+
+        smoothed.spectrum = smoothedBins
+        smoothed.beatCount = beatCount
+        smoothed.beatStrength = beat.isBeat ? beat.strength : lastBeatStrength
         return smoothed
     }
 
