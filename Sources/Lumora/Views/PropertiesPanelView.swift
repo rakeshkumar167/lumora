@@ -84,7 +84,8 @@ struct PropertiesPanelView: View {
                             leaves: surface.fallingLeaves,
                             treeImage: surface.christmasTreeImage,
                             three: surface.threeD,
-                            paint: surface.paintDrip)
+                            paint: surface.paintDrip,
+                            audioReactive: surface.audioReactive)
             }
         }
         .formStyle(.grouped)
@@ -101,6 +102,7 @@ private struct MediaEditor: View {
     @Binding var treeImage: Int
     @Binding var three: ThreeDConfig?
     @Binding var paint: PaintDripConfig?
+    @Binding var audioReactive: Bool
     @ObservedObject private var weather = WeatherStore.shared
 
     /// The 3D effects that take a speed (and, for the cloud, colour) config.
@@ -245,6 +247,13 @@ private struct MediaEditor: View {
                         ),
                         in: 0.4...4.0
                     )
+                }
+            }
+            if effectKind.supportsAudio {
+                Toggle("Audio Reactive", isOn: $audioReactive)
+                if AudioInputManager.shared.isDenied {
+                    Text("Microphone unavailable — running idle.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             if effectKind.usesColor {

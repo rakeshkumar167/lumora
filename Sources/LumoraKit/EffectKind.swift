@@ -71,6 +71,9 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case multiColorLights
     case twinklingLights
     case warmBulbs
+    /// Chladni plate resonance patterns. Renderer/category/displayName land in
+    /// Task 7; this task only adds the case so `supportsAudio` is exhaustive.
+    case chladni
 
     public var id: String { rawValue }
 
@@ -100,6 +103,18 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace,
              .particleSwarm, .audioParticles,
              .outlineGlow, .analogClock, .digitalClock:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether this effect can react to live microphone audio when the
+    /// surface's Audio Reactive toggle is on. (`audioParticles` is inherently
+    /// audio and is excluded — it has no toggle.)
+    public var supportsAudio: Bool {
+        switch self {
+        case .equalizer, .strobe, .liquidSlosh, .aurora, .plasma, .chladni:
             return true
         default:
             return false
@@ -177,6 +192,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .multiColorLights: return "Multi-Colored Lights"
         case .twinklingLights: return "Twinkling Lights"
         case .warmBulbs: return "Warm Round Bulbs"
+        case .chladni: return "Chladni"
         }
     }
 
@@ -188,7 +204,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .gradients
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
              .truchet, .concentricPolygons,
-             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
+             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
+             .chladni:
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks,

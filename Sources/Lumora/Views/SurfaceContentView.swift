@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, outline: effectOutline)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, outline: effectOutline, audioReactive: surface.audioReactive)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -276,13 +276,15 @@ private struct EffectView: View {
     var three: ThreeDConfig? = nil
     var paint: PaintDripConfig? = nil
     var outline: EffectOutline = .rect
+    var audioReactive: Bool = false
 
     var body: some View {
         switch kind {
         case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep, .radialPulse, .aurora, .plasma, .strobe:
             gradientEffects
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons,
-             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph:
+             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
+             .chladni:
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles:
             natureEffects

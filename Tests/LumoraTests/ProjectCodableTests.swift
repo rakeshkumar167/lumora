@@ -42,6 +42,31 @@ final class ProjectCodableTests: XCTestCase {
         XCTAssertEqual(decoded.scenes[1].name, "Main")
         XCTAssertEqual(decoded, project)
     }
+
+    func testAudioReactiveDefaultsFalseForOldFiles() throws {
+        // JSON without the field (simulates a pre-audio .lumora surface).
+        let json = """
+        {"id":"\(UUID().uuidString)","name":"S","points":[[0,0]],
+         "media":{"color":{"_0":{"r":0,"g":0,"b":0,"a":1}}},"isVisible":true,"opacity":1}
+        """.data(using: .utf8)!
+        let s = try JSONDecoder().decode(Surface.self, from: json)
+        XCTAssertFalse(s.audioReactive)
+    }
+
+    func testAudioReactiveRoundTrips() throws {
+        var s = Surface.defaultRect(name: "S")
+        s.audioReactive = true
+        let data = try JSONEncoder().encode(s)
+        let back = try JSONDecoder().decode(Surface.self, from: data)
+        XCTAssertTrue(back.audioReactive)
+    }
+
+    func testSupportsAudioMatchesSpec() {
+        let yes: [EffectKind] = [.equalizer, .strobe, .liquidSlosh, .aurora, .plasma, .chladni]
+        for k in yes { XCTAssertTrue(k.supportsAudio, "\(k) should support audio") }
+        XCTAssertFalse(EffectKind.grid.supportsAudio)
+        XCTAssertFalse(EffectKind.audioParticles.supportsAudio) // inherently audio; no toggle
+    }
 }
 
 final class SceneTimelineTests: XCTestCase {
