@@ -2676,11 +2676,42 @@ private struct AudioReactiveEffect<Content: View>: View {
     let active: Bool
     var audio: AudioLevelsProviding = AudioInputManager.shared
     @ViewBuilder let content: (AudioLevels) -> Content
+
+    // Tracks whether THIS wrapper instance currently holds a mic retain, held as
+    // a reference type (like `EqualizerAudioState`/`SwarmRenderState`) so the
+    // lifecycle closures reconcile the same token rather than a captured copy.
+    @State private var retainToken = AudioRetainToken()
+
+    /// Keeps the shared mic retain in sync with `active`: retain once when the
+    /// effect becomes active, release once when it stops — exactly balanced
+    /// across any ordering of mount/unmount and toggle.
+    private func reconcile() {
+        if active && !retainToken.retained {
+            audio.retain()
+            retainToken.retained = true
+        } else if !active && retainToken.retained {
+            audio.release()
+            retainToken.retained = false
+        }
+    }
+
     var body: some View {
         content((active && !audio.isDenied) ? audio.currentLevels : .silent)
-            .onAppear { if active { audio.retain() } }
-            .onDisappear { if active { audio.release() } }
+            .onAppear { reconcile() }
+            .onChange(of: active) { reconcile() }
+            .onDisappear {
+                if retainToken.retained {
+                    audio.release()
+                    retainToken.retained = false
+                }
+            }
     }
+}
+
+/// Reference-type retain flag for `AudioReactiveEffect`, held in `@State` so the
+/// lifecycle closures mutate a stable instance instead of a captured value.
+private final class AudioRetainToken {
+    var retained = false
 }
 
 /// The Equalizer effect. When `levels.spectrum` is non-empty (audio active) it
