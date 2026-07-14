@@ -41,7 +41,7 @@ Waves & Motion, …) — for choosing among the 58 built-in generative effects.
 
 <img src="docs/screenshots/04-effect-picker.png" width="700">
 
-Picking an effect (here, Fireflies from *Particles & Nature*) assigns it
+Picking an effect assigns it
 immediately — the surface starts animating in the live preview.
 
 <img src="docs/screenshots/05-effect-applied.png" width="700">
