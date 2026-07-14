@@ -2,6 +2,15 @@
 
 Requirements captured for future sessions.
 
+## Audio reactivity follow-ups
+
+- **Strobe audio mode underwhelms with music** (user feedback 2026-07-15). The
+  beat-gated flash reads as too strobe-y / harsh against real music. Options to
+  revisit: gate flashes to strong beats only (higher `beatStrength` threshold),
+  cross-fade instead of hard-cut between color/accent, or drive brightness as a
+  continuous envelope rather than a binary flash. The lush continuous effects
+  (Aurora, Plasma, Chladni, Liquid Slosh) are the better music visualizers.
+
 ## Effects — DONE ✅
 
 All 20 previously-planned effects are now implemented (2026-07-06), plus a new
