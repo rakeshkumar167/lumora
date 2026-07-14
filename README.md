@@ -16,6 +16,36 @@ swift test         # run the homography unit tests
 Requires macOS 14+ and the Xcode command-line tools (Swift 5.9+). You can also
 open the package folder in Xcode and hit Run.
 
+## Walkthrough
+
+Launch shows a brief splash, then drops you into the workspace: a room canvas
+on the left, the surface list on the right, and a properties panel for
+whichever surface is selected.
+
+<img src="docs/screenshots/01-splash.png" width="700">
+
+The workspace with a couple of surfaces already defined — each one warped
+onto its quad and running its assigned effect.
+
+<img src="docs/screenshots/02-workspace.png" width="700">
+
+**Add Surface** drops a new quad onto the canvas and selects it; the
+properties panel on the left fills in with its name, shape, transform, and
+media controls.
+
+<img src="docs/screenshots/03-add-surface.png" width="700">
+
+Setting a surface's media **Type** to *Effect* exposes the **Effect** picker —
+one menu, organized into categories (Gradients & Washes, Particles & Nature,
+Waves & Motion, …) — for choosing among the 58 built-in generative effects.
+
+<img src="docs/screenshots/04-effect-picker.png" width="700">
+
+Picking an effect (here, Fireflies from *Particles & Nature*) assigns it
+immediately — the surface starts animating in the live preview.
+
+<img src="docs/screenshots/05-effect-applied.png" width="700">
+
 ## What it does
 
 ### Surfaces
