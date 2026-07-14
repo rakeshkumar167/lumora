@@ -674,7 +674,9 @@ private struct EffectView: View {
             }
 
         case .strobe:
-            (Int(time * 3) % 2 == 0 ? color.color : accent.color)
+            AudioReactiveEffect(active: audioReactive) { levels in
+                StrobeView(color: color, accent: accent, time: time, levels: levels)
+            }
 
         default: EmptyView()
         }
@@ -985,35 +987,8 @@ private struct EffectView: View {
             }
 
         case .equalizer:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-                let count = 16
-                let gap: CGFloat = 5
-                let barWidth = (size.width - gap * CGFloat(count + 1)) / CGFloat(count)
-                // Shared kick that all bars react to, like a beat.
-                let beat = pow(max(0, sin(time * 3.0)), 4)
-                for i in 0..<count {
-                    // Layer three per-bar random frequencies so bars bounce
-                    // unpredictably instead of marching in a visible wave.
-                    let s1: Double = Double(hash01(i, 7))
-                    let s2: Double = Double(hash01(i, 17))
-                    let s3: Double = Double(hash01(i, 41))
-                    let a: Double = sin(time * (2.3 + s1 * 4.0) + s1 * 6.283)
-                    let b: Double = sin(time * (5.1 + s2 * 6.0) + s2 * 6.283)
-                    let c: Double = sin(time * (9.7 + s3 * 8.0) + s3 * 6.283)
-                    let mix: Double = 0.5 + 0.5 * (0.6 * a + 0.3 * b + 0.1 * c)
-                    let kick: Double = 0.30 * beat * (0.4 + 0.6 * s2)
-                    let level: Double = min(1.0, max(0.05, 0.12 + 0.66 * mix + kick))
-                    let h = size.height * CGFloat(level)
-                    let x = gap + CGFloat(i) * (barWidth + gap)
-                    let rect = CGRect(x: x, y: size.height - h, width: barWidth, height: h)
-                    let shading = GraphicsContext.Shading.linearGradient(
-                        Gradient(colors: [color.color, accent.color]),
-                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)
-                    )
-                    ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: shading)
-                }
+            AudioReactiveEffect(active: audioReactive) { levels in
+                EqualizerView(color: color, accent: accent, time: time, levels: levels)
             }
 
         case .tunnel:
@@ -2688,6 +2663,160 @@ private struct EffectView: View {
         let v = sin(Double(i) * 12.9898 + Double(salt) * 78.233) * 43758.5453
         return CGFloat(v - floor(v))
     }
+}
+
+/// Wraps an audio-reactive effect: retains the mic only while visible AND the
+/// toggle is on, and hands the current levels to its content. When off/denied,
+/// passes `.silent` so the effect renders its idle (time-driven) path.
+///
+/// The injected `audio` defaults to the shared microphone manager; the offscreen
+/// verify script substitutes a scripted `AudioLevelsProviding`, mirroring
+/// `ParticleSwarmView`.
+private struct AudioReactiveEffect<Content: View>: View {
+    let active: Bool
+    var audio: AudioLevelsProviding = AudioInputManager.shared
+    @ViewBuilder let content: (AudioLevels) -> Content
+    var body: some View {
+        content((active && !audio.isDenied) ? audio.currentLevels : .silent)
+            .onAppear { if active { audio.retain() } }
+            .onDisappear { if active { audio.release() } }
+    }
+}
+
+/// The Equalizer effect. When `levels.spectrum` is non-empty (audio active) it
+/// drives 16 bars from the FFT bins with slow-falling peak-hold caps; otherwise
+/// it renders the original time-driven randomized bars, unchanged. Peak-hold
+/// state lives in a reference-type object so it survives `Canvas` redraws, like
+/// `SwarmRenderState`.
+private struct EqualizerView: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+    let levels: AudioLevels
+
+    @State private var state = EqualizerAudioState()
+
+    private let count = 16
+
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+            let gap: CGFloat = 5
+            let barWidth = (size.width - gap * CGFloat(count + 1)) / CGFloat(count)
+            let audioActive = !levels.spectrum.isEmpty
+
+            // dt from the shared clock, for peak-hold decay (audio path only).
+            let dt: Double = state.lastTime.map { max(0, time - $0) } ?? (1.0 / 60)
+            if audioActive { state.lastTime = time }
+
+            // Shared kick that all bars react to, like a beat (idle path only).
+            let beat = pow(max(0, sin(time * 3.0)), 4)
+            for i in 0..<count {
+                let level: Double
+                if audioActive {
+                    let bin = i < levels.spectrum.count ? levels.spectrum[i] : 0
+                    level = min(1.0, max(0.04, bin))
+                } else {
+                    // Layer three per-bar random frequencies so bars bounce
+                    // unpredictably instead of marching in a visible wave.
+                    let s1: Double = Double(eqHash01(i, 7))
+                    let s2: Double = Double(eqHash01(i, 17))
+                    let s3: Double = Double(eqHash01(i, 41))
+                    let a: Double = sin(time * (2.3 + s1 * 4.0) + s1 * 6.283)
+                    let b: Double = sin(time * (5.1 + s2 * 6.0) + s2 * 6.283)
+                    let c: Double = sin(time * (9.7 + s3 * 8.0) + s3 * 6.283)
+                    let mix: Double = 0.5 + 0.5 * (0.6 * a + 0.3 * b + 0.1 * c)
+                    let kick: Double = 0.30 * beat * (0.4 + 0.6 * s2)
+                    level = min(1.0, max(0.05, 0.12 + 0.66 * mix + kick))
+                }
+                let h = size.height * CGFloat(level)
+                let x = gap + CGFloat(i) * (barWidth + gap)
+                let rect = CGRect(x: x, y: size.height - h, width: barWidth, height: h)
+                let shading = GraphicsContext.Shading.linearGradient(
+                    Gradient(colors: [color.color, accent.color]),
+                    startPoint: CGPoint(x: rect.midX, y: rect.minY),
+                    endPoint: CGPoint(x: rect.midX, y: rect.maxY)
+                )
+                ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: shading)
+
+                // Slow-falling peak-hold cap, drawn as a thin line (audio only).
+                if audioActive {
+                    let peak = max(level, state.peaks[i] - 0.9 * dt)
+                    state.peaks[i] = peak
+                    let py = size.height - size.height * CGFloat(peak)
+                    var cap = Path()
+                    cap.move(to: CGPoint(x: x, y: py))
+                    cap.addLine(to: CGPoint(x: x + barWidth, y: py))
+                    ctx.stroke(cap, with: .color(color.color.opacity(0.9)), lineWidth: 2)
+                }
+            }
+        }
+    }
+
+    private func eqHash01(_ i: Int, _ salt: Int) -> CGFloat {
+        let v = sin(Double(i) * 12.9898 + Double(salt) * 78.233) * 43758.5453
+        return CGFloat(v - floor(v))
+    }
+}
+
+/// Per-view peak-hold state for `EqualizerView`, held as a reference type so it
+/// persists across `Canvas` redraws without value invalidation.
+final class EqualizerAudioState {
+    var peaks = [Double](repeating: 0, count: 16)
+    var lastTime: Double?
+}
+
+/// The Strobe effect. Idle (no spectrum): the original `Int(time*3) % 2` flash
+/// between `color` and `accent`. Audio active: rests on `accent` and flashes to
+/// `color` for a short decay window each time `levels.beatCount` increases, with
+/// flash opacity scaled by `levels.beatStrength`.
+private struct StrobeView: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+    let levels: AudioLevels
+
+    @State private var state = StrobeAudioState()
+
+    /// Seconds a beat flash takes to fade out.
+    private let flashDecay = 0.14
+
+    var body: some View {
+        Canvas { ctx, size in
+            let rect = CGRect(origin: .zero, size: size)
+            if levels.spectrum.isEmpty {
+                // Idle: byte-for-byte the original alternating flash.
+                let c = Int(time * 3) % 2 == 0 ? color.color : accent.color
+                ctx.fill(Path(rect), with: .color(c))
+                return
+            }
+            // Audio: latch a new flash whenever the beat count advances.
+            if levels.beatCount > state.lastBeatCount {
+                state.lastBeatCount = levels.beatCount
+                state.flashTime = time
+                state.flashStrength = levels.beatStrength
+            }
+            var intensity = 0.0
+            if let ft = state.flashTime {
+                let e = time - ft
+                if e >= 0, e < flashDecay {
+                    intensity = (1 - e / flashDecay) * state.flashStrength
+                }
+            }
+            ctx.fill(Path(rect), with: .color(accent.color))
+            if intensity > 0 {
+                ctx.fill(Path(rect), with: .color(color.color.opacity(min(1, intensity))))
+            }
+        }
+    }
+}
+
+/// Per-view flash state for `StrobeView`, a reference type so the last-seen beat
+/// and flash timing survive `Canvas` redraws.
+final class StrobeAudioState {
+    var lastBeatCount = 0
+    var flashTime: Double?
+    var flashStrength = 0.0
 }
 
 /// Clips media to a polygon (given as local, box-relative points) or to an
