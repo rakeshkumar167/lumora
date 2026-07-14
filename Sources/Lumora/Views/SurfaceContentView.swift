@@ -260,6 +260,124 @@ private struct OutlineGlowView: View {
     }
 }
 
+/// Draws an order-6 Hilbert space-filling curve end-to-end with a glowing pen
+/// head, colored by an arc-length rainbow, then holds the finished curve,
+/// fades out, and repeats — flipping orientation each cycle. Fixed rainbow
+/// coloring (no primary/accent color use). Because the effect clock is global,
+/// "draw once from appearance" needs a per-view start time (`startRef`,
+/// captured on appear), mirroring `OutlineGlowView`.
+private struct HilbertCurveView: View {
+    let time: Double
+
+    @State private var startRef: Double?
+
+    private static let order = 6
+    private static let gridSpan = 1 << order              // 64
+    private static let curvePoints = HilbertCurve.points(order: order)
+
+    private let drawDur = 15.0
+    private let holdDur = 3.0
+    private let fadeDur = 1.5
+    private let bandCount = 32
+
+    var body: some View {
+        Canvas { ctx, size in
+            let elapsed = startRef.map { max(0, time - $0) } ?? 0
+            draw(ctx: &ctx, size: size, elapsed: elapsed)
+        }
+        .onAppear { if startRef == nil { startRef = Date().timeIntervalSinceReferenceDate } }
+    }
+
+    private func draw(ctx: inout GraphicsContext, size: CGSize, elapsed: Double) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+
+        let period = drawDur + holdDur + fadeDur
+        let cycleIndex = Int(elapsed / period)
+        let localT = elapsed.truncatingRemainder(dividingBy: period)
+        let mirrored = cycleIndex % 2 == 1
+
+        let headFrac = min(localT / drawDur, 1.0)
+        let total = Self.curvePoints.count
+        let litCount = max(1, Int(headFrac * Double(total)))
+
+        let opacity: Double
+        if localT < drawDur + holdDur {
+            opacity = 1
+        } else {
+            let fadeFrac = (localT - drawDur - holdDur) / fadeDur
+            opacity = max(0, 1 - fadeFrac)
+        }
+        guard opacity > 0.001 else { return }
+
+        // Map integer grid cells (0…gridSpan-1) into a centered square box with
+        // a small margin, mirroring x on alternating cycles.
+        let margin = min(size.width, size.height) * 0.08
+        let boxSize = min(size.width, size.height) - margin * 2
+        let ox = (size.width - boxSize) / 2
+        let oy = (size.height - boxSize) / 2
+        let cell = boxSize / CGFloat(Self.gridSpan - 1)
+        func mapPoint(_ p: CGPoint) -> CGPoint {
+            let gx = mirrored ? CGFloat(Self.gridSpan - 1) - p.x : p.x
+            return CGPoint(x: ox + gx * cell, y: oy + p.y * cell)
+        }
+
+        // Bucket the lit segments into rainbow bands by arc-length (point index)
+        // fraction — one Path per band, so we stroke each band once rather than
+        // issuing thousands of individual stroke calls.
+        var bands = [Path](repeating: Path(), count: bandCount)
+        for i in 1..<litCount {
+            let a = mapPoint(Self.curvePoints[i - 1])
+            let b = mapPoint(Self.curvePoints[i])
+            let frac = Double(i) / Double(total)
+            let bi = min(bandCount - 1, Int(frac * Double(bandCount)))
+            bands[bi].move(to: a)
+            bands[bi].addLine(to: b)
+        }
+        func bandColor(_ bi: Int) -> Color {
+            Color(hue: (Double(bi) + 0.5) / Double(bandCount), saturation: 0.9, brightness: 1)
+        }
+
+        ctx.opacity = opacity
+
+        // Soft wide glow underlayer, brighter mid glow, then a crisp core stroke.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 9))
+            layer.blendMode = .plusLighter
+            for bi in bands.indices where !bands[bi].isEmpty {
+                layer.stroke(bands[bi], with: .color(bandColor(bi).opacity(0.5)),
+                             style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+            }
+        }
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 3))
+            layer.blendMode = .plusLighter
+            for bi in bands.indices where !bands[bi].isEmpty {
+                layer.stroke(bands[bi], with: .color(bandColor(bi).opacity(0.75)),
+                             style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            }
+        }
+        for bi in bands.indices where !bands[bi].isEmpty {
+            ctx.stroke(bands[bi], with: .color(bandColor(bi)),
+                       style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+        }
+
+        // Bright pen head — only while still drawing.
+        if headFrac < 1.0 {
+            let headIdx = min(litCount, total - 1)
+            let head = mapPoint(Self.curvePoints[headIdx])
+            let r: CGFloat = 6
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 6))
+                layer.blendMode = .plusLighter
+                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                           with: .color(.white))
+            }
+            ctx.fill(Path(ellipseIn: CGRect(x: head.x - 3, y: head.y - 3, width: 6, height: 6)),
+                     with: .color(.white))
+        }
+    }
+}
+
 /// The built-in generative animations. Effects that support a second color use
 /// `accent` (see `EffectKind.usesAccent`).
 private struct EffectView: View {
@@ -284,7 +402,7 @@ private struct EffectView: View {
             gradientEffects
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .chladni:
+             .chladni, .hilbertCurve:
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles:
             natureEffects
@@ -807,6 +925,8 @@ private struct EffectView: View {
             Canvas { ctx, size in drawFractalZoom(ctx: ctx, size: size) }
         case .tessellationMorph:
             Canvas { ctx, size in drawTessellation(ctx: ctx, size: size) }
+        case .hilbertCurve:
+            HilbertCurveView(time: time)
         default: EmptyView()
         }
     }

@@ -74,6 +74,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     /// Chladni plate resonance patterns. Renderer/category/displayName land in
     /// Task 7; this task only adds the case so `supportsAudio` is exhaustive.
     case chladni
+    case hilbertCurve
 
     public var id: String { rawValue }
 
@@ -85,7 +86,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .torus3D, .sphere3D, .pointCloud3D, .pendulumPaint:
+             .torus3D, .sphere3D, .pointCloud3D, .pendulumPaint, .hilbertCurve:
             return false
         default:
             return true
@@ -193,6 +194,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .twinklingLights: return "Twinkling Lights"
         case .warmBulbs: return "Warm Round Bulbs"
         case .chladni: return "Chladni"
+        case .hilbertCurve: return "Hilbert Curve"
         }
     }
 
@@ -205,7 +207,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
              .truchet, .concentricPolygons,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .chladni:
+             .chladni, .hilbertCurve:
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks,
