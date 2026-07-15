@@ -45,6 +45,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case voronoi
     case metaballs
     case hexGrid
+    case stainedGlass
     case vectorGrid
     case particleMesh
     case livingTexture
@@ -54,6 +55,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case driftingNebula
     case perlinFlow
     case circuitTrace
+    case caustics
     case infiniteKaleidoscope
     case mandalaExpansion
     case sacredGeometry
@@ -87,7 +89,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .torus3D, .sphere3D, .pointCloud3D, .pendulumPaint, .hilbertCurve:
+             .torus3D, .sphere3D, .pointCloud3D, .pendulumPaint, .hilbertCurve, .stainedGlass:
             return false
         default:
             return true
@@ -102,7 +104,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .halftoneDots, .truchet, .concentricPolygons, .lightning,
              .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
-             .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace,
+             .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics,
              .particleSwarm, .audioParticles,
              .outlineGlow, .growingIvy, .analogClock, .digitalClock:
             return true
@@ -168,6 +170,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .voronoi: return "Voronoi Cells"
         case .metaballs: return "Metaballs"
         case .hexGrid: return "Hex Grid"
+        case .stainedGlass: return "Stained Glass"
         case .vectorGrid: return "Vector Grid"
         case .particleMesh: return "Particle Mesh"
         case .livingTexture: return "Living Texture"
@@ -177,6 +180,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .driftingNebula: return "Drifting Nebula"
         case .perlinFlow: return "Perlin Flow Field"
         case .circuitTrace: return "Circuit Trace"
+        case .caustics: return "Water Caustics"
         case .infiniteKaleidoscope: return "Infinite Kaleidoscope"
         case .mandalaExpansion: return "Mandala Expansion"
         case .sacredGeometry: return "Sacred Geometry"
@@ -221,11 +225,11 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .tvStatic, .matrixRain, .pixelDissolve,
              .dvdBounce, .marqueeText:
             return .retro
-        case .voronoi, .metaballs, .hexGrid:
+        case .voronoi, .metaballs, .hexGrid, .stainedGlass:
             return .fields
         case .vectorGrid, .particleMesh:
             return .curvesGrids
-        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics:
             return .ambient
         case .torus3D, .sphere3D, .pointCloud3D:
             return .threeD

@@ -682,11 +682,11 @@ private struct EffectView: View {
             motionEffects
         case .tvStatic, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
-        case .voronoi, .metaballs, .hexGrid:
+        case .voronoi, .metaballs, .hexGrid, .stainedGlass:
             fieldEffects
         case .vectorGrid, .particleMesh:
             geometryEffects
-        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics:
             ambientEffects
         case .torus3D, .sphere3D, .pointCloud3D:
             threeDEffects
@@ -1779,6 +1779,9 @@ private struct EffectView: View {
         case .hexGrid:
             Canvas { ctx, size in drawHexGrid(ctx: ctx, size: size) }
 
+        case .stainedGlass:
+            Canvas { ctx, size in drawStainedGlass(ctx: ctx, size: size) }
+
         default: EmptyView()
         }
     }
@@ -1817,6 +1820,9 @@ private struct EffectView: View {
 
         case .reactionDiffusion:
             ReactionDiffusionContent(color: color, accent: accent, time: time)
+
+        case .caustics:
+            Canvas { ctx, size in drawCaustics(ctx: ctx, size: size) }
 
         default: EmptyView()
         }
@@ -2380,6 +2386,111 @@ private struct EffectView: View {
         let g = accent.g + (color.g - accent.g) * t
         let b = accent.b + (color.b - accent.b) * t
         return Color(red: r, green: g, blue: b)
+    }
+
+    /// Deterministic, static Voronoi-style cell polygons for `Stained Glass`.
+    /// Self-contained: duplicates the half-plane clipping approach used by
+    /// `drawVoronoi` (reusing the generic `clipHalfPlane` primitive) but seeds
+    /// sites once via `hash01` instead of animating them, so panes stay put
+    /// while only the light sweep moves. Does not touch `drawVoronoi`.
+    private func stainedGlassCells(in size: CGSize, count: Int) -> [[CGPoint]] {
+        var sites: [(x: Double, y: Double)] = []
+        sites.reserveCapacity(count)
+        for i in 0..<count {
+            let x = Double(hash01(i, 11)) * Double(size.width)
+            let y = Double(hash01(i, 29)) * Double(size.height)
+            sites.append((x, y))
+        }
+        var cells: [[CGPoint]] = []
+        cells.reserveCapacity(count)
+        for s in sites {
+            var poly = [CGPoint(x: 0, y: 0), CGPoint(x: size.width, y: 0),
+                        CGPoint(x: size.width, y: size.height), CGPoint(x: 0, y: size.height)]
+            for o in sites {
+                if o.x == s.x && o.y == s.y { continue }
+                let nx = o.x - s.x, ny = o.y - s.y
+                let c = (o.x * o.x + o.y * o.y - s.x * s.x - s.y * s.y) / 2
+                poly = Self.clipHalfPlane(poly, nx: nx, ny: ny, c: c)
+                if poly.count < 3 { break }
+            }
+            if poly.count >= 3 { cells.append(poly) }
+        }
+        return cells
+    }
+
+    private func drawStainedGlass(ctx: GraphicsContext, size: CGSize) {
+        let cells = stainedGlassCells(in: size, count: 26)
+        let palette: [Color] = [
+            Color(red: 0.10, green: 0.20, blue: 0.65), Color(red: 0.65, green: 0.10, blue: 0.20),
+            Color(red: 0.10, green: 0.55, blue: 0.30), Color(red: 0.85, green: 0.65, blue: 0.15),
+            Color(red: 0.45, green: 0.15, blue: 0.60)]
+        let diag = Double(hypot(size.width, size.height))
+        let lc = CGPoint(x: size.width * (0.5 + 0.4 * cos(time * 0.3)),
+                          y: size.height * (0.5 + 0.4 * sin(time * 0.23)))
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
+        for (i, poly) in cells.enumerated() {
+            guard let c0 = poly.first else { continue }
+            var p = Path(); p.addLines(poly); p.closeSubpath()
+            let d = Double(hypot(c0.x - lc.x, c0.y - lc.y))
+            let lit = max(0.35, 1.0 - d / diag)
+            ctx.fill(p, with: .color(palette[i % palette.count].opacity(0.85 * lit)))
+            ctx.stroke(p, with: .color(Color(white: 0.04)), lineWidth: 4)
+        }
+        // Soft bloom centered on the light sweep so lit panes visibly glow.
+        let glowR = diag * 0.16
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 22))
+            layer.blendMode = .plusLighter
+            layer.fill(
+                Path(ellipseIn: CGRect(x: lc.x - glowR, y: lc.y - glowR, width: glowR * 2, height: glowR * 2)),
+                with: .color(.white.opacity(0.20)))
+        }
+    }
+
+    /// Drifting pool-floor light webs: 3 counter-drifting layers of blurred,
+    /// `plusLighter`-blended ridge rings connected by nearest-neighbor "web"
+    /// links, approximating a Worley/caustic ridge network cheaply.
+    /// `color` tints the water base, `accent` tints the caustic web.
+    private func drawCaustics(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(color.color.opacity(0.9)))
+        let w = Double(size.width), h = Double(size.height)
+        for layer in 0..<3 {
+            let n = 12
+            let sp = 0.15 + 0.09 * Double(layer)
+            let dir: Double = layer % 2 == 0 ? 1 : -1
+            let sites: [CGPoint] = (0..<n).map { i in
+                let fi = Double(i)
+                return CGPoint(
+                    x: w * (0.5 + 0.48 * sin(dir * time * sp + fi * 1.7 + Double(layer))),
+                    y: h * (0.5 + 0.48 * cos(dir * time * sp * 1.3 + fi * 2.3)))
+            }
+            // Nearest-neighbor links between sites approximate the connected
+            // ridge network real caustics show, instead of isolated rings.
+            var links = Path()
+            for i in 0..<sites.count {
+                var dists: [(Int, Double)] = []
+                for j in 0..<sites.count where j != i {
+                    let dx = sites[i].x - sites[j].x, dy = sites[i].y - sites[j].y
+                    dists.append((j, Double(dx * dx + dy * dy)))
+                }
+                dists.sort { $0.1 < $1.1 }
+                for (j, _) in dists.prefix(2) {
+                    links.move(to: sites[i])
+                    links.addLine(to: sites[j])
+                }
+            }
+            ctx.drawLayer { l in
+                l.addFilter(.blur(radius: 4 + CGFloat(layer) * 1.2))
+                l.blendMode = .plusLighter
+                l.stroke(links, with: .color(accent.color.opacity(0.16)), lineWidth: 2.5)
+                for s in sites {
+                    let r = 20 + 9 * CGFloat(sin(time * 0.8 + Double(s.x) * 0.015 + Double(layer)))
+                    l.stroke(
+                        Path(ellipseIn: CGRect(x: s.x - r, y: s.y - r, width: r * 2, height: r * 2)),
+                        with: .color(accent.color.opacity(0.30)), lineWidth: 3)
+                }
+            }
+        }
     }
 
     private func drawVectorGrid(ctx: GraphicsContext, size: CGSize) {
