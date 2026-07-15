@@ -33,6 +33,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var threeD: ThreeDConfig?
     /// Customization for the Pendulum Paint effect (nil = defaults).
     public var paintDrip: PaintDripConfig?
+    /// Customization for the Countdown Timer effect (nil = defaults).
+    public var countdown: CountdownConfig?
     /// Whether this surface's effect reacts to live microphone audio (only
     /// meaningful when `EffectKind.supportsAudio` is true for its effect).
     public var audioReactive: Bool
@@ -54,6 +56,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         christmasTreeImage: Int = 0,
         threeD: ThreeDConfig? = nil,
         paintDrip: PaintDripConfig? = nil,
+        countdown: CountdownConfig? = nil,
         audioReactive: Bool = false
     ) {
         self.id = id
@@ -72,11 +75,12 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.christmasTreeImage = christmasTreeImage
         self.threeD = threeD
         self.paintDrip = paintDrip
+        self.countdown = countdown
         self.audioReactive = audioReactive
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, christmasTreeImage, threeD, paintDrip, audioReactive
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, christmasTreeImage, threeD, paintDrip, countdown, audioReactive
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -99,6 +103,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         christmasTreeImage = try c.decodeIfPresent(Int.self, forKey: .christmasTreeImage) ?? 0
         threeD = try c.decodeIfPresent(ThreeDConfig.self, forKey: .threeD)
         paintDrip = try c.decodeIfPresent(PaintDripConfig.self, forKey: .paintDrip)
+        countdown = try c.decodeIfPresent(CountdownConfig.self, forKey: .countdown)
         audioReactive = try c.decodeIfPresent(Bool.self, forKey: .audioReactive) ?? false
     }
 

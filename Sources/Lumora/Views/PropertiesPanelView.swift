@@ -85,6 +85,7 @@ struct PropertiesPanelView: View {
                             treeImage: surface.christmasTreeImage,
                             three: surface.threeD,
                             paint: surface.paintDrip,
+                            countdown: surface.countdown,
                             audioReactive: surface.audioReactive)
             }
         }
@@ -102,6 +103,7 @@ private struct MediaEditor: View {
     @Binding var treeImage: Int
     @Binding var three: ThreeDConfig?
     @Binding var paint: PaintDripConfig?
+    @Binding var countdown: CountdownConfig?
     @Binding var audioReactive: Bool
     @ObservedObject private var weather = WeatherStore.shared
 
@@ -196,6 +198,9 @@ private struct MediaEditor: View {
             }
             if effectKind == .marqueeText {
                 marqueeControls
+            }
+            if effectKind == .countdown {
+                countdownControls
             }
             if effectKind == .christmasTree {
                 Picker("Tree", selection: $treeImage) {
@@ -360,6 +365,24 @@ private struct MediaEditor: View {
         Toggle("Rainbow", isOn: Binding(
             get: { cfg.rainbow },
             set: { var c = cfg; c.rainbow = $0; marquee = c }
+        ))
+    }
+
+    /// Target date/time, caption, and finale controls for the Countdown Timer.
+    @ViewBuilder
+    private var countdownControls: some View {
+        let cfg = countdown ?? CountdownConfig()
+        DatePicker("Target", selection: Binding(
+            get: { cfg.target },
+            set: { var c = cfg; c.target = $0; countdown = c }
+        ), displayedComponents: [.date, .hourAndMinute])
+        TextField("Label", text: Binding(
+            get: { cfg.label },
+            set: { var c = cfg; c.label = $0; countdown = c }
+        ), prompt: Text("Optional caption"))
+        Toggle("Fireworks finale", isOn: Binding(
+            get: { cfg.finale },
+            set: { var c = cfg; c.finale = $0; countdown = c }
         ))
     }
 

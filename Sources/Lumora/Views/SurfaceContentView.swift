@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, outline: effectOutline, audioReactive: surface.audioReactive)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, outline: effectOutline, audioReactive: surface.audioReactive)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -1052,6 +1052,7 @@ private struct EffectView: View {
     var treeImage: Int = 0
     var three: ThreeDConfig? = nil
     var paint: PaintDripConfig? = nil
+    var countdown: CountdownConfig? = nil
     var outline: EffectOutline = .rect
     var audioReactive: Bool = false
 
@@ -1079,7 +1080,7 @@ private struct EffectView: View {
             threeDEffects
         case .outlineGlow, .growingIvy:
             edgeEffects
-        case .analogClock, .digitalClock, .weatherWidget:
+        case .analogClock, .digitalClock, .weatherWidget, .countdown:
             clockEffects
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             christmasEffects
@@ -2320,6 +2321,9 @@ private struct EffectView: View {
 
         case .weatherWidget:
             WeatherWidgetView(time: time)
+
+        case .countdown:
+            CountdownView(color: color, accent: accent, time: time, config: countdown)
 
         default: EmptyView()
         }
