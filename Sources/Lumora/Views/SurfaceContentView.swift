@@ -650,6 +650,226 @@ private struct HilbertCurveView: View {
     }
 }
 
+/// A maze that carves itself corridor-by-corridor (glowing head, primary
+/// color), then a runner traces the BFS solution from start to end (accent
+/// color), holds, fades, and re-seeds with a fresh maze — the app's
+/// generate → hold → vanish cycle. Uses the pure, unit-tested `Maze` generator.
+///
+/// Like `HilbertCurveView` / `OutlineGlowView`, the cycle is anchored to a
+/// per-view `startRef` captured on appear (the effect clock is global, so
+/// `time % period` would snap on assignment). The per-cycle maze + its mapped
+/// cell centers are cached in a reference-type `@State` (`Layout`), rebuilt only
+/// when the cycle index or canvas size changes — not every frame.
+private struct MazeSolveView: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+
+    @State private var startRef: Double?
+
+    private final class Layout {
+        var cycleIndex: Int = .min
+        var size: CGSize = .zero
+        var maze: Maze?
+        var centers: [MazeCell: CGPoint] = [:]
+        var solution: [MazeCell] = []
+    }
+    @State private var layout = Layout()
+
+    private let carveDur = 10.0
+    private let solveDur = 4.0
+    private let holdDur = 3.0
+    private let fadeDur = 2.0
+    private var period: Double { carveDur + solveDur + holdDur + fadeDur }
+
+    var body: some View {
+        Canvas { ctx, size in
+            let elapsed = startRef.map { max(0, time - $0) } ?? 0
+            draw(ctx: &ctx, size: size, elapsed: elapsed)
+        }
+        .onAppear { if startRef == nil { startRef = Date().timeIntervalSinceReferenceDate } }
+    }
+
+    /// Ensure the cached maze matches the current cycle + canvas size.
+    private func rebuildIfNeeded(cycleIndex: Int, size: CGSize) {
+        if layout.cycleIndex == cycleIndex, layout.size == size, layout.maze != nil { return }
+
+        // Grid sized to the box aspect (~18×12 baseline), clamped so cells stay
+        // reasonable for extreme aspect ratios.
+        let aspect = size.height > 0 ? size.width / size.height : 1.5
+        let cols = max(6, min(30, Int((12.0 * aspect).rounded())))
+        let rows = 12
+        let maze = Maze.generate(cols: cols, rows: rows, seed: cycleIndex)
+
+        let margin = min(size.width, size.height) * 0.08
+        let boxW = size.width - margin * 2
+        let boxH = size.height - margin * 2
+        let cellW = boxW / CGFloat(cols)
+        let cellH = boxH / CGFloat(rows)
+        var centers: [MazeCell: CGPoint] = [:]
+        for y in 0..<rows {
+            for x in 0..<cols {
+                let px = margin + (CGFloat(x) + 0.5) * cellW
+                let py = margin + (CGFloat(y) + 0.5) * cellH
+                centers[MazeCell(x: x, y: y)] = CGPoint(x: px, y: py)
+            }
+        }
+
+        layout.cycleIndex = cycleIndex
+        layout.size = size
+        layout.maze = maze
+        layout.centers = centers
+        layout.solution = maze.solve()
+    }
+
+    private func draw(ctx: inout GraphicsContext, size: CGSize, elapsed: Double) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+
+        let cycleIndex = Int(elapsed / period)
+        let localT = elapsed.truncatingRemainder(dividingBy: period)
+        rebuildIfNeeded(cycleIndex: cycleIndex, size: size)
+        guard let maze = layout.maze, !maze.carveOrder.isEmpty else { return }
+        let centers = layout.centers
+
+        // Phase fade (whole scene) for the tail of the cycle.
+        let opacity: Double
+        if localT < carveDur + solveDur + holdDur {
+            opacity = 1
+        } else {
+            let f = (localT - carveDur - solveDur - holdDur) / fadeDur
+            opacity = max(0, 1 - f)
+        }
+        guard opacity > 0.001 else { return }
+        ctx.opacity = opacity
+
+        func center(_ c: MazeCell) -> CGPoint { centers[c] ?? .zero }
+
+        // --- Carve phase: reveal corridors along carveOrder up to carveFrac. ---
+        let carveFrac = min(localT / carveDur, 1.0)
+        let total = maze.carveOrder.count
+        let litCount = max(1, Int(carveFrac * Double(total)))
+
+        var corridors = Path()
+        for i in 0..<min(litCount, total) {
+            let p = maze.carveOrder[i]
+            corridors.move(to: center(p.a))
+            corridors.addLine(to: center(p.b))
+        }
+
+        let glow = color.color
+        // Soft wide glow underlayer, brighter mid glow, then a crisp core stroke.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 8))
+            layer.blendMode = .plusLighter
+            layer.stroke(corridors, with: .color(glow.opacity(0.45)),
+                         style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+        }
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 3))
+            layer.blendMode = .plusLighter
+            layer.stroke(corridors, with: .color(glow.opacity(0.7)),
+                         style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+        }
+        ctx.stroke(corridors, with: .color(glow.opacity(0.95)),
+                   style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+
+        // Bright carve head — only while still carving.
+        if carveFrac < 1.0 {
+            let headPassage = maze.carveOrder[min(litCount, total) - 1]
+            let head = center(headPassage.b)
+            let r: CGFloat = 6
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 6))
+                layer.blendMode = .plusLighter
+                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                           with: .color(.white))
+            }
+            ctx.fill(Path(ellipseIn: CGRect(x: head.x - 3, y: head.y - 3, width: 6, height: 6)),
+                     with: .color(.white))
+        }
+
+        // --- Solve phase: trace the BFS solution once the maze is carved. ---
+        guard localT >= carveDur, layout.solution.count >= 2 else { return }
+        let solution = layout.solution
+        let solveFrac = min((localT - carveDur) / solveDur, 1.0)
+
+        // Mark start and end cells.
+        let acc = accent.color
+        for (cell, isEnd) in [(solution.first!, false), (solution.last!, true)] {
+            let p = center(cell)
+            let r: CGFloat = 7
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 7))
+                layer.blendMode = .plusLighter
+                layer.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
+                           with: .color(isEnd ? acc : glow))
+            }
+        }
+
+        // Solution path built up to the runner along cumulative segment lengths.
+        var segLen: [CGFloat] = []
+        var totalLen: CGFloat = 0
+        for i in 1..<solution.count {
+            let d = hypot(center(solution[i]).x - center(solution[i-1]).x,
+                          center(solution[i]).y - center(solution[i-1]).y)
+            segLen.append(d)
+            totalLen += d
+        }
+        let litLen = CGFloat(solveFrac) * totalLen
+
+        var solved = Path()
+        solved.move(to: center(solution[0]))
+        var acc2: CGFloat = 0
+        var runner = center(solution[0])
+        for i in 1..<solution.count {
+            let a = center(solution[i-1])
+            let b = center(solution[i])
+            let d = segLen[i-1]
+            if acc2 + d <= litLen {
+                solved.addLine(to: b)
+                runner = b
+            } else {
+                let remain = max(0, litLen - acc2)
+                let t = d > 0 ? remain / d : 0
+                let p = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+                solved.addLine(to: p)
+                runner = p
+                break
+            }
+            acc2 += d
+        }
+
+        // Brighter accent-colored solution ribbon (glow + core).
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 10))
+            layer.blendMode = .plusLighter
+            layer.stroke(solved, with: .color(acc.opacity(0.6)),
+                         style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round))
+        }
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 4))
+            layer.blendMode = .plusLighter
+            layer.stroke(solved, with: .color(acc.opacity(0.85)),
+                         style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+        }
+        ctx.stroke(solved, with: .color(acc),
+                   style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+
+        // Bright runner head — only while still tracing.
+        if solveFrac < 1.0 {
+            let r: CGFloat = 8
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 7))
+                layer.blendMode = .plusLighter
+                layer.fill(Path(ellipseIn: CGRect(x: runner.x - r, y: runner.y - r, width: r * 2, height: r * 2)),
+                           with: .color(acc))
+            }
+            ctx.fill(Path(ellipseIn: CGRect(x: runner.x - 3.5, y: runner.y - 3.5, width: 7, height: 7)),
+                     with: .color(.white))
+        }
+    }
+}
+
 /// Colored ink diffusing through water: two-tone blobs spawn at the edges,
 /// are advected by the shared `CurlNoiseField` flow, grow and fade, and heavy
 /// additive blur makes overlaps read as swirling fluid tendrils.
@@ -801,7 +1021,7 @@ private struct EffectView: View {
             gradientEffects
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .chladni, .hilbertCurve:
+             .chladni, .hilbertCurve, .mazeSolve:
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles:
             natureEffects
@@ -1326,6 +1546,8 @@ private struct EffectView: View {
             Canvas { ctx, size in drawTessellation(ctx: ctx, size: size) }
         case .hilbertCurve:
             HilbertCurveView(time: time)
+        case .mazeSolve:
+            MazeSolveView(color: color, accent: accent, time: time)
         default: EmptyView()
         }
     }

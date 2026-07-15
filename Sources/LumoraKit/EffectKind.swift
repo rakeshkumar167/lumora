@@ -80,6 +80,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case hilbertCurve
     case godRays
     case inkFlow
+    case mazeSolve
 
     public var id: String { rawValue }
 
@@ -108,7 +109,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
              .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics,
              .particleSwarm, .audioParticles,
-             .outlineGlow, .growingIvy, .analogClock, .digitalClock, .inkFlow:
+             .outlineGlow, .growingIvy, .analogClock, .digitalClock, .inkFlow, .mazeSolve:
             return true
         default:
             return false
@@ -205,6 +206,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .hilbertCurve: return "Hilbert Curve"
         case .godRays: return "God Rays"
         case .inkFlow: return "Ink in Water"
+        case .mazeSolve: return "Maze Solve"
         }
     }
 
@@ -217,7 +219,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
              .truchet, .concentricPolygons,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .chladni, .hilbertCurve:
+             .chladni, .hilbertCurve, .mazeSolve:
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks,
