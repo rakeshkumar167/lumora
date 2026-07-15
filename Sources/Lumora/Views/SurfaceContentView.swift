@@ -107,7 +107,7 @@ enum EffectOutline {
 // MARK: - Shared outline geometry (used by OutlineGlowView and GrowingIvyView)
 
 /// The surface outline as a closed polyline in Canvas coordinates.
-func outlinePolyline(_ outline: EffectOutline, in size: CGSize) -> [CGPoint] {
+fileprivate func outlinePolyline(_ outline: EffectOutline, in size: CGSize) -> [CGPoint] {
     let w = size.width, h = size.height
     switch outline {
     case .rect:
@@ -127,7 +127,7 @@ func outlinePolyline(_ outline: EffectOutline, in size: CGSize) -> [CGPoint] {
 
 /// Cumulative arc length at each vertex of the closed loop; `cum[i]` is the
 /// length from vertex 0 to vertex i, and `cum[count]` is the full perimeter.
-func closedLengths(_ pts: [CGPoint]) -> (cum: [CGFloat], total: CGFloat) {
+fileprivate func closedLengths(_ pts: [CGPoint]) -> (cum: [CGFloat], total: CGFloat) {
     var cum: [CGFloat] = [0]
     var total: CGFloat = 0
     for i in 0..<pts.count {
@@ -138,7 +138,7 @@ func closedLengths(_ pts: [CGPoint]) -> (cum: [CGFloat], total: CGFloat) {
     return (cum, total)
 }
 
-func closedPath(_ pts: [CGPoint]) -> Path {
+fileprivate func closedPath(_ pts: [CGPoint]) -> Path {
     var p = Path()
     guard let first = pts.first else { return p }
     p.move(to: first)
@@ -148,7 +148,7 @@ func closedPath(_ pts: [CGPoint]) -> Path {
 }
 
 /// Path along the closed loop from vertex 0 up to arc length `length`.
-func subPath(_ pts: [CGPoint], _ cum: [CGFloat], upTo length: CGFloat) -> Path {
+fileprivate func subPath(_ pts: [CGPoint], _ cum: [CGFloat], upTo length: CGFloat) -> Path {
     var path = Path()
     guard let first = pts.first else { return path }
     path.move(to: first)
@@ -169,7 +169,7 @@ func subPath(_ pts: [CGPoint], _ cum: [CGFloat], upTo length: CGFloat) -> Path {
 }
 
 /// The point on the closed loop at arc length `length`.
-func pointAt(_ pts: [CGPoint], _ cum: [CGFloat], length: CGFloat) -> CGPoint {
+fileprivate func pointAt(_ pts: [CGPoint], _ cum: [CGFloat], length: CGFloat) -> CGPoint {
     guard let first = pts.first else { return .zero }
     for i in 0..<pts.count {
         let segEnd = cum[i + 1]
@@ -465,7 +465,7 @@ private struct GrowingIvyView: View {
     /// A teardrop-ish leaf path centered at `center`, rotated by `angle`.
     private func leafPath(center: CGPoint, size: CGFloat, angle: CGFloat) -> Path {
         let rect = CGRect(x: -size * 0.45, y: -size, width: size * 0.9, height: size * 2)
-        var p = Path(ellipseIn: rect)
+        let p = Path(ellipseIn: rect)
         var t = CGAffineTransform(translationX: center.x, y: center.y)
         t = t.rotated(by: angle)
         return p.applying(t)
