@@ -8,3 +8,7 @@ dist/
 
 # macOS
 .DS_Store
+
+# Unreferenced stray asset (kept getting swept into unrelated commits by broad
+# `git add`). Not used by any effect yet; un-ignore if wired into a real effect.
+Sources/Lumora/Resources/santa-claus.png
