@@ -11,6 +11,19 @@ Requirements captured for future sessions.
   continuous envelope rather than a binary flash. The lush continuous effects
   (Aurora, Plasma, Chladni, Liquid Slosh) are the better music visualizers.
 
+## Effect visual polish (revisit)
+
+- **Water Caustics** (user feedback 2026-07-15) — the current ridge-ring
+  approximation reads more like a connected node/molecule diagram than flowing
+  pool-floor caustics. Rework toward a true Worley nearest-site distance-field:
+  compute per-pixel (or coarse-grid) nearest-two-site distance, take the ridge
+  where `d2 - d1` is small, animate sites smoothly; keep it 60fps (coarse grid +
+  blur upscale if needed).
+- **Ink in Water** (user feedback 2026-07-15) — revisit the look; make it read
+  more convincingly as ink diffusing in water (e.g. softer/variable blob edges,
+  finer tendrils via more/smaller sub-blobs per bloom, denser curl advection,
+  slower fade, spawn from varied points not just the lower frame).
+
 ## Effects — DONE ✅
 
 All 20 previously-planned effects are now implemented (2026-07-06), plus a new
