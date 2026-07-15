@@ -78,6 +78,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     /// Task 7; this task only adds the case so `supportsAudio` is exhaustive.
     case chladni
     case hilbertCurve
+    case godRays
+    case inkFlow
 
     public var id: String { rawValue }
 
@@ -106,7 +108,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
              .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics,
              .particleSwarm, .audioParticles,
-             .outlineGlow, .growingIvy, .analogClock, .digitalClock:
+             .outlineGlow, .growingIvy, .analogClock, .digitalClock, .inkFlow:
             return true
         default:
             return false
@@ -201,6 +203,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .warmBulbs: return "Warm Round Bulbs"
         case .chladni: return "Chladni"
         case .hilbertCurve: return "Hilbert Curve"
+        case .godRays: return "God Rays"
+        case .inkFlow: return "Ink in Water"
         }
     }
 
@@ -229,7 +233,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .fields
         case .vectorGrid, .particleMesh:
             return .curvesGrids
-        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics, .godRays, .inkFlow:
             return .ambient
         case .torus3D, .sphere3D, .pointCloud3D:
             return .threeD

@@ -650,6 +650,133 @@ private struct HilbertCurveView: View {
     }
 }
 
+/// Colored ink diffusing through water: two-tone blobs spawn at the edges,
+/// are advected by the shared `CurlNoiseField` flow, grow and fade, and heavy
+/// additive blur makes overlaps read as swirling fluid tendrils.
+///
+/// STATEFUL like `ParticleSwarmView`: the sim lives in a reference-type
+/// `@State` object (`InkFlowState`) so it persists across `Canvas` redraws
+/// without value-invalidation. `dt` is derived from the shared global `time`,
+/// and repeat draws at the same clock value (sizing passes) are skipped — the
+/// upstream `TimelineView(.animation)` drives the frames. Blob count is capped
+/// and blur bounded so it holds 60fps.
+private struct InkFlowView: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+
+    @State private var state = InkFlowState()
+
+    private let field = CurlNoiseField(frequency: 2.4, timeScale: 0.12)
+
+    // Sim tuning.
+    private let spawnInterval = 1.5      // seconds between new blobs
+    private let maxBlobs = 40            // performance cap
+    private let advectSpeed = 0.11       // normalized units/sec along the flow
+    private let growRate = 0.028         // radius growth/sec (normalized)
+    private let lifespan = 9.0           // seconds until fully faded
+
+    var body: some View {
+        Canvas { ctx, size in
+            step(now: time)
+            draw(ctx: ctx, size: size)
+        }
+    }
+
+    // MARK: - Simulation
+
+    private func step(now: Double) {
+        // Skip repeat draws at the same clock value (sizing pass).
+        guard now != state.lastTime else { return }
+        let dt = state.lastTime == nil ? 1.0 / 60 : min(max(now - state.lastTime!, 0), 0.05)
+        state.lastTime = now
+        guard dt > 0 else { return }
+
+        // Spawn on a fixed cadence, alternating primary/accent ink.
+        state.spawnAccum += dt
+        while state.spawnAccum >= spawnInterval && state.blobs.count < maxBlobs {
+            state.spawnAccum -= spawnInterval
+            state.blobs.append(state.makeBlob(seed: state.spawnCount))
+            state.spawnCount += 1
+        }
+
+        // Advect + age each blob; cull when fully faded.
+        for i in state.blobs.indices {
+            let b = state.blobs[i]
+            let f = field.flow(x: b.x, y: b.y, t: now)
+            var nx = b.x + Double(f.dx) * advectSpeed * dt
+            var ny = b.y + Double(f.dy) * advectSpeed * dt
+            // Gentle rise so ink billows upward like it's less dense than water.
+            ny -= 0.012 * dt
+            nx = min(max(nx, -0.1), 1.1)
+            ny = min(max(ny, -0.1), 1.1)
+            state.blobs[i].x = nx
+            state.blobs[i].y = ny
+            state.blobs[i].radius += growRate * dt
+            state.blobs[i].age += dt
+        }
+        state.blobs.removeAll { $0.age >= lifespan }
+    }
+
+    // MARK: - Rendering
+
+    private func draw(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+        let w = size.width, h = size.height
+        let primary = color.color, second = accent.color
+        let minDim = min(w, h)
+
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 18))
+            layer.blendMode = .plusLighter
+            for b in state.blobs {
+                // Fade in quickly, then ease out across the lifespan.
+                let lifeFrac = b.age / lifespan
+                let fadeIn = min(1, b.age / 0.6)
+                let opacity = fadeIn * (1 - lifeFrac) * (1 - lifeFrac) * 0.55
+                guard opacity > 0.003 else { continue }
+                let r = CGFloat(b.radius) * minDim
+                let c = CGPoint(x: CGFloat(b.x) * w, y: CGFloat(b.y) * h)
+                let ink = b.useAccent ? second : primary
+                layer.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                           with: .color(ink.opacity(opacity)))
+            }
+        }
+    }
+}
+
+/// One ink blob: normalized center, current radius (normalized to min-dim),
+/// age in seconds, and which of the two ink colors it uses.
+private struct InkBlob {
+    var x: Double
+    var y: Double
+    var radius: Double
+    var age: Double
+    var useAccent: Bool
+}
+
+/// Reference-type render state so the ink simulation survives view-body
+/// redraws without `@State` value invalidation. One per `InkFlowView` instance.
+private final class InkFlowState {
+    var blobs: [InkBlob] = []
+    var lastTime: Double?
+    var spawnAccum: Double = 0
+    var spawnCount: Int = 0
+
+    /// A fresh blob at a pseudo-random edge/interior point, alternating color.
+    func makeBlob(seed: Int) -> InkBlob {
+        func h(_ salt: Int) -> Double {
+            let v = sin(Double(seed) * 12.9898 + Double(salt) * 78.233) * 43758.5453
+            return v - floor(v)
+        }
+        // Bias spawns toward the lower half so ink can billow up through the frame.
+        let x = 0.1 + 0.8 * h(1)
+        let y = 0.55 + 0.4 * h(2)
+        let r = 0.02 + 0.03 * h(3)
+        return InkBlob(x: x, y: y, radius: r, age: 0, useAccent: seed % 2 == 1)
+    }
+}
+
 /// The built-in generative animations. Effects that support a second color use
 /// `accent` (see `EffectKind.usesAccent`).
 private struct EffectView: View {
@@ -686,7 +813,7 @@ private struct EffectView: View {
             fieldEffects
         case .vectorGrid, .particleMesh:
             geometryEffects
-        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics:
+        case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics, .godRays, .inkFlow:
             ambientEffects
         case .torus3D, .sphere3D, .pointCloud3D:
             threeDEffects
@@ -1824,7 +1951,69 @@ private struct EffectView: View {
         case .caustics:
             Canvas { ctx, size in drawCaustics(ctx: ctx, size: size) }
 
+        case .godRays:
+            Canvas { ctx, size in drawGodRays(ctx: ctx, size: size) }
+
+        case .inkFlow:
+            InkFlowView(color: color, accent: accent, time: time)
+
         default: EmptyView()
+        }
+    }
+
+    /// Volumetric sunbeams fanning from a top-corner origin: soft-edged
+    /// translucent quads, heavily blurred + additive, breathing in intensity
+    /// over ~30 s, with sparse dust motes drifting slowly inside the light.
+    /// Uses the primary color only (the light color). Time-driven (stateless).
+    private func drawGodRays(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+        let origin = CGPoint(x: size.width * 0.15, y: -size.height * 0.1)
+        let light = color.color
+
+        // The four beams as filled shapes, so motes can be clipped inside them.
+        var beams: [Path] = []
+        var breathes: [Double] = []
+        for i in 0..<4 {
+            let ang = 0.5 + Double(i) * 0.22
+            let breathe = 0.4 + 0.6 * abs(sin(time * 0.2 + Double(i)))
+            let far = CGPoint(x: origin.x + cos(ang) * size.width * 1.4,
+                              y: origin.y + sin(ang) * size.height * 1.6)
+            let w: CGFloat = 40
+            var beam = Path()
+            beam.move(to: CGPoint(x: origin.x - w, y: origin.y))
+            beam.addLine(to: CGPoint(x: origin.x + w, y: origin.y))
+            beam.addLine(to: CGPoint(x: far.x + w * 3, y: far.y))
+            beam.addLine(to: CGPoint(x: far.x - w * 3, y: far.y))
+            beam.closeSubpath()
+            beams.append(beam)
+            breathes.append(breathe)
+        }
+
+        // Soft, heavily-blurred additive beams.
+        ctx.drawLayer { l in
+            l.addFilter(.blur(radius: 24))
+            l.blendMode = .plusLighter
+            for (i, beam) in beams.enumerated() {
+                l.fill(beam, with: .color(light.opacity(0.18 * breathes[i])))
+            }
+        }
+
+        // Dust motes, clipped to the union of the beams so they only glint
+        // within the shafts of light. Blurred + additive for a soft twinkle.
+        ctx.drawLayer { l in
+            var union = Path()
+            for beam in beams { union.addPath(beam) }
+            l.clip(to: union)
+            l.addFilter(.blur(radius: 1.5))
+            l.blendMode = .plusLighter
+            for i in 0..<28 {
+                let x = (Double(hash01(i, 3)) + time * 0.01).truncatingRemainder(dividingBy: 1) * size.width
+                let y = (Double(hash01(i, 5)) + time * 0.02).truncatingRemainder(dividingBy: 1) * size.height
+                let tw = 0.4 + 0.6 * abs(sin(time * 0.9 + Double(i) * 1.7))
+                let r = 1.0 + 1.4 * Double(hash01(i, 8))
+                l.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r * 2, height: r * 2)),
+                       with: .color(light.opacity(0.3 * tw)))
+            }
         }
     }
 
