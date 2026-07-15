@@ -63,6 +63,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case sphere3D
     case pointCloud3D
     case outlineGlow
+    case growingIvy
     case analogClock
     case digitalClock
     case weatherWidget
@@ -103,7 +104,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
              .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace,
              .particleSwarm, .audioParticles,
-             .outlineGlow, .analogClock, .digitalClock:
+             .outlineGlow, .growingIvy, .analogClock, .digitalClock:
             return true
         default:
             return false
@@ -185,6 +186,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .sphere3D: return "3D Sphere"
         case .pointCloud3D: return "3D Point Cloud"
         case .outlineGlow: return "Outline Glow"
+        case .growingIvy: return "Growing Ivy"
         case .analogClock: return "Analog Clock"
         case .digitalClock: return "Digital Clock & Weather"
         case .weatherWidget: return "Weather Widget"
@@ -227,7 +229,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .ambient
         case .torus3D, .sphere3D, .pointCloud3D:
             return .threeD
-        case .outlineGlow:
+        case .outlineGlow, .growingIvy:
             return .edge
         case .analogClock, .digitalClock, .weatherWidget:
             return .clocks

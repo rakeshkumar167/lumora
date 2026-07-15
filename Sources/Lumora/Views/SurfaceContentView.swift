@@ -104,6 +104,86 @@ enum EffectOutline {
     case ellipse
 }
 
+// MARK: - Shared outline geometry (used by OutlineGlowView and GrowingIvyView)
+
+/// The surface outline as a closed polyline in Canvas coordinates.
+func outlinePolyline(_ outline: EffectOutline, in size: CGSize) -> [CGPoint] {
+    let w = size.width, h = size.height
+    switch outline {
+    case .rect:
+        return [CGPoint(x: 0, y: 0), CGPoint(x: w, y: 0),
+                CGPoint(x: w, y: h), CGPoint(x: 0, y: h)]
+    case .polygon(let norm):
+        return norm.map { CGPoint(x: $0.x * w, y: $0.y * h) }
+    case .ellipse:
+        let n = 120
+        let cx = w / 2, cy = h / 2, rx = w / 2, ry = h / 2
+        return (0..<n).map { i in
+            let a = Double(i) / Double(n) * 2 * .pi
+            return CGPoint(x: cx + rx * CGFloat(cos(a)), y: cy + ry * CGFloat(sin(a)))
+        }
+    }
+}
+
+/// Cumulative arc length at each vertex of the closed loop; `cum[i]` is the
+/// length from vertex 0 to vertex i, and `cum[count]` is the full perimeter.
+func closedLengths(_ pts: [CGPoint]) -> (cum: [CGFloat], total: CGFloat) {
+    var cum: [CGFloat] = [0]
+    var total: CGFloat = 0
+    for i in 0..<pts.count {
+        let a = pts[i], b = pts[(i + 1) % pts.count]
+        total += hypot(b.x - a.x, b.y - a.y)
+        cum.append(total)
+    }
+    return (cum, total)
+}
+
+func closedPath(_ pts: [CGPoint]) -> Path {
+    var p = Path()
+    guard let first = pts.first else { return p }
+    p.move(to: first)
+    for pt in pts.dropFirst() { p.addLine(to: pt) }
+    p.closeSubpath()
+    return p
+}
+
+/// Path along the closed loop from vertex 0 up to arc length `length`.
+func subPath(_ pts: [CGPoint], _ cum: [CGFloat], upTo length: CGFloat) -> Path {
+    var path = Path()
+    guard let first = pts.first else { return path }
+    path.move(to: first)
+    for i in 0..<pts.count {
+        let a = pts[i], b = pts[(i + 1) % pts.count]
+        let segEnd = cum[i + 1]
+        if segEnd <= length {
+            path.addLine(to: b)
+        } else {
+            let segStart = cum[i]
+            let segLen = segEnd - segStart
+            let f = segLen > 0 ? (length - segStart) / segLen : 0
+            path.addLine(to: CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f))
+            break
+        }
+    }
+    return path
+}
+
+/// The point on the closed loop at arc length `length`.
+func pointAt(_ pts: [CGPoint], _ cum: [CGFloat], length: CGFloat) -> CGPoint {
+    guard let first = pts.first else { return .zero }
+    for i in 0..<pts.count {
+        let segEnd = cum[i + 1]
+        if segEnd >= length {
+            let a = pts[i], b = pts[(i + 1) % pts.count]
+            let segStart = cum[i]
+            let segLen = segEnd - segStart
+            let f = segLen > 0 ? (length - segStart) / segLen : 0
+            return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+        }
+    }
+    return first
+}
+
 /// Traces a glowing light around the surface's outline once — starting when the
 /// effect appears — then holds the completed outline with a gentle breathing
 /// pulse. Because the effect clock is global, "fill once then stay" needs a
@@ -128,7 +208,7 @@ private struct OutlineGlowView: View {
 
     private func draw(ctx: GraphicsContext, size: CGSize, elapsed: Double) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-        let pts = outlinePolyline(size)
+        let pts = outlinePolyline(outline, in: size)
         guard pts.count >= 2 else { return }
         let (cum, total) = closedLengths(pts)
         guard total > 0 else { return }
@@ -180,83 +260,275 @@ private struct OutlineGlowView: View {
                      with: .color(.white))
         }
     }
+}
 
-    /// The surface outline as a closed polyline in Canvas coordinates.
-    private func outlinePolyline(_ size: CGSize) -> [CGPoint] {
-        let w = size.width, h = size.height
-        switch outline {
-        case .rect:
-            return [CGPoint(x: 0, y: 0), CGPoint(x: w, y: 0),
-                    CGPoint(x: w, y: h), CGPoint(x: 0, y: h)]
-        case .polygon(let norm):
-            return norm.map { CGPoint(x: $0.x * w, y: $0.y * h) }
-        case .ellipse:
-            let n = 120
-            let cx = w / 2, cy = h / 2, rx = w / 2, ry = h / 2
-            return (0..<n).map { i in
-                let a = Double(i) / Double(n) * 2 * .pi
-                return CGPoint(x: cx + rx * CGFloat(cos(a)), y: cy + ry * CGFloat(sin(a)))
+/// Ivy that crawls along the surface's true outline, sprouting inward leafy
+/// side-branches, then turns autumn colors, drops its leaves, and regrows — a
+/// looping grow → hold → autumn/fall cycle. Uses primary (leaf green) + accent
+/// (autumn) color. Like `OutlineGlowView`, the cycle is anchored to a per-view
+/// `startRef` captured on appear (the effect clock is global; `time % period`
+/// would snap), and the outline is shared via the file-level `outlinePolyline`.
+private struct GrowingIvyView: View {
+    let color: RGBAColor
+    let accent: RGBAColor
+    let time: Double
+    var outline: EffectOutline = .rect
+
+    @State private var startRef: Double?
+
+    // Per-cycle precomputed branch layout, rebuilt only when the cycle index
+    // (or canvas size) changes — not every frame.
+    private final class Layout {
+        var cycleIndex: Int = .min
+        var size: CGSize = .zero
+        var branches: [Branch] = []
+    }
+    private struct Branch {
+        var anchorArc: CGFloat      // arc length from the cycle's start point
+        var dir: CGVector           // unit growth direction (inward-ish)
+        var perp: CGVector          // unit perpendicular (for curl)
+        var length: CGFloat
+        var curl: CGFloat
+        var seed: Int
+    }
+    @State private var layout = Layout()
+
+    private let growDur = 14.0
+    private let holdDur = 4.0
+    private let autumnDur = 4.0
+    private var period: Double { growDur + holdDur + autumnDur }
+
+    var body: some View {
+        Canvas { ctx, size in
+            let elapsed = startRef.map { max(0, time - $0) } ?? 0
+            draw(ctx: ctx, size: size, elapsed: elapsed)
+        }
+        .onAppear { if startRef == nil { startRef = Date().timeIntervalSinceReferenceDate } }
+    }
+
+    private func hash01(_ i: Int, _ salt: Int) -> CGFloat {
+        let v = sin(Double(i) * 12.9898 + Double(salt) * 78.233) * 43758.5453
+        return CGFloat(v - floor(v))
+    }
+
+    private func draw(ctx: GraphicsContext, size: CGSize, elapsed: Double) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
+
+        let pts = outlinePolyline(outline, in: size)
+        guard pts.count >= 2 else { return }
+        let (cum, total) = closedLengths(pts)
+        guard total > 0 else { return }
+
+        let cycleIndex = Int(elapsed / period)
+        let localT = elapsed.truncatingRemainder(dividingBy: period)
+        let minDim = min(size.width, size.height)
+
+        // Each cycle starts the stem at a different point on the outline.
+        let startArc = hash01(cycleIndex, 7) * total
+
+        rebuildIfNeeded(cycleIndex: cycleIndex, size: size, pts: pts, cum: cum, total: total, minDim: minDim)
+
+        // --- Phase timing -----------------------------------------------------
+        let growFrac = min(localT / growDur, 1.0)                     // 0…1 stem growth
+        let litLen = CGFloat(growFrac) * total
+        let inAutumn = localT >= growDur + holdDur
+        let autumnT = inAutumn ? (localT - growDur - holdDur) / autumnDur : 0   // 0…1
+
+        // Leaf color: green (primary) → autumn (accent) over the first ~half of autumn.
+        let colorT = min(1, autumnT / 0.5)
+        let leafColor = lerp(color, accent, colorT)
+        // Leaves detach and fall in the back half of autumn; stems fade last.
+        let fallT = max(0, (autumnT - 0.35) / 0.65)                  // 0…1
+        let stemFade = 1 - max(0, (autumnT - 0.6) / 0.4)             // stems fade at the very end
+
+        func loopPoint(_ arc: CGFloat) -> CGPoint {
+            var a = arc.truncatingRemainder(dividingBy: total)
+            if a < 0 { a += total }
+            return pointAt(pts, cum, length: a)
+        }
+
+        // --- Build the grown stem path (main vine along the outline) ----------
+        var stemPath = Path()
+        let step = max(4, total / 400)
+        var arc: CGFloat = 0
+        var first = true
+        while arc <= litLen {
+            let p = loopPoint(startArc + arc)
+            if first { stemPath.move(to: p); first = false } else { stemPath.addLine(to: p) }
+            arc += step
+        }
+        if !first {
+            stemPath.addLine(to: loopPoint(startArc + litLen))
+        }
+
+        // --- Build grown branch stems + collect leaves ------------------------
+        struct LeafDraw { var center: CGPoint; var size: CGFloat; var angle: CGFloat; var opacity: Double }
+        var branchPath = Path()
+        var leaves: [LeafDraw] = []
+        let leafParams: [CGFloat] = [0.34, 0.55, 0.74, 0.92]
+
+        for b in layout.branches {
+            // A branch extends only after the stem head passes its anchor.
+            var prog = max(0, min(1, (litLen - b.anchorArc) / 70))
+            if localT > growDur { prog = min(1, prog + CGFloat((localT - growDur) / 1.5)) }
+            if prog <= 0.001 { continue }
+
+            let base = loopPoint(startArc + b.anchorArc)
+            func branchPoint(_ t: CGFloat) -> CGPoint {
+                let d = b.length * t
+                let c = b.curl * sin(Double(t) * .pi)
+                return CGPoint(x: base.x + b.dir.dx * d + b.perp.dx * c,
+                               y: base.y + b.dir.dy * d + b.perp.dy * c)
+            }
+            // Draw branch stem as a short polyline up to its current progress.
+            branchPath.move(to: base)
+            let segs = 8
+            for s in 1...segs {
+                let t = CGFloat(s) / CGFloat(segs) * prog
+                branchPath.addLine(to: branchPoint(t))
+            }
+
+            // Leaves appear along the branch as it extends; sway while alive.
+            for (li, lt) in leafParams.enumerated() where lt <= prog + 0.02 {
+                let idx = b.seed &* 17 &+ li
+                let baseAngle = atan2(b.dir.dy, b.dir.dx)
+                let sidesign: CGFloat = (li % 2 == 0) ? 1 : -1
+                let sway = CGFloat(sin(time * 1.3 + Double(idx))) * 0.18
+                let angle = baseAngle + sidesign * (0.7 + 0.5 * hash01(idx, 3)) + sway
+                let lsz = (minDim * 0.028) * (0.7 + 0.7 * hash01(idx, 4))
+                var center = branchPoint(lt)
+                // While falling, detach and drift downward with horizontal sway.
+                var opacity = 1.0
+                if fallT > 0 {
+                    let personal = min(1, Double(fallT) * (0.7 + Double(hash01(idx, 6)) * 0.9))
+                    let drop = CGFloat(personal * personal) * minDim * 0.6
+                    let drift = CGFloat(sin(time * 1.7 + Double(idx))) * CGFloat(personal) * minDim * 0.05
+                    center.x += drift
+                    center.y += drop
+                    opacity = max(0, 1 - personal)
+                }
+                leaves.append(LeafDraw(center: center, size: lsz, angle: angle, opacity: opacity))
             }
         }
-    }
 
-    /// Cumulative arc length at each vertex of the closed loop; `cum[i]` is the
-    /// length from vertex 0 to vertex i, and `cum[count]` is the full perimeter.
-    private func closedLengths(_ pts: [CGPoint]) -> (cum: [CGFloat], total: CGFloat) {
-        var cum: [CGFloat] = [0]
-        var total: CGFloat = 0
-        for i in 0..<pts.count {
-            let a = pts[i], b = pts[(i + 1) % pts.count]
-            total += hypot(b.x - a.x, b.y - a.y)
-            cum.append(total)
-        }
-        return (cum, total)
-    }
+        let leafC = leafColor
+        let stemC = color.color
+        let stemStyle = StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
 
-    private func closedPath(_ pts: [CGPoint]) -> Path {
-        var p = Path()
-        guard let first = pts.first else { return p }
-        p.move(to: first)
-        for pt in pts.dropFirst() { p.addLine(to: pt) }
-        p.closeSubpath()
-        return p
-    }
-
-    /// Path along the closed loop from vertex 0 up to arc length `length`.
-    private func subPath(_ pts: [CGPoint], _ cum: [CGFloat], upTo length: CGFloat) -> Path {
-        var path = Path()
-        guard let first = pts.first else { return path }
-        path.move(to: first)
-        for i in 0..<pts.count {
-            let a = pts[i], b = pts[(i + 1) % pts.count]
-            let segEnd = cum[i + 1]
-            if segEnd <= length {
-                path.addLine(to: b)
-            } else {
-                let segStart = cum[i]
-                let segLen = segEnd - segStart
-                let f = segLen > 0 ? (length - segStart) / segLen : 0
-                path.addLine(to: CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f))
-                break
+        // Soft green under-glow for stems + leaves (one batched blurred layer).
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 8))
+            layer.blendMode = .plusLighter
+            layer.opacity = stemFade
+            layer.stroke(stemPath, with: .color(stemC.opacity(0.45)),
+                         style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+            layer.stroke(branchPath, with: .color(stemC.opacity(0.4)),
+                         style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+            var glowLeaves = Path()
+            for lf in leaves where lf.opacity > 0.05 {
+                glowLeaves.addPath(leafPath(center: lf.center, size: lf.size, angle: lf.angle))
             }
+            layer.fill(glowLeaves, with: .color(leafC.opacity(0.5)))
         }
-        return path
+
+        // Crisp stems.
+        ctx.stroke(stemPath, with: .color(stemC.opacity(0.95 * stemFade)), style: stemStyle)
+        ctx.stroke(branchPath, with: .color(stemC.opacity(0.9 * stemFade)),
+                   style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+        // Crisp leaves (per-leaf opacity for the stagger during fall).
+        for lf in leaves where lf.opacity > 0.02 {
+            let p = leafPath(center: lf.center, size: lf.size, angle: lf.angle)
+            ctx.fill(p, with: .color(leafC.opacity(lf.opacity)))
+            // A small vein/highlight down the leaf.
+            ctx.fill(Path(ellipseIn: CGRect(x: lf.center.x - lf.size * 0.08,
+                                            y: lf.center.y - lf.size * 0.08,
+                                            width: lf.size * 0.16, height: lf.size * 0.16)),
+                     with: .color(.white.opacity(0.25 * lf.opacity)))
+        }
+
+        // Bright running head while the stem is still growing.
+        if growFrac < 1.0 && !first {
+            let head = loopPoint(startArc + litLen)
+            let r: CGFloat = 7
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 6))
+                layer.blendMode = .plusLighter
+                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                           with: .color(stemC))
+            }
+            ctx.fill(Path(ellipseIn: CGRect(x: head.x - 2.5, y: head.y - 2.5, width: 5, height: 5)),
+                     with: .color(.white))
+        }
     }
 
-    /// The point on the closed loop at arc length `length`.
-    private func pointAt(_ pts: [CGPoint], _ cum: [CGFloat], length: CGFloat) -> CGPoint {
-        guard let first = pts.first else { return .zero }
-        for i in 0..<pts.count {
-            let segEnd = cum[i + 1]
-            if segEnd >= length {
-                let a = pts[i], b = pts[(i + 1) % pts.count]
-                let segStart = cum[i]
-                let segLen = segEnd - segStart
-                let f = segLen > 0 ? (length - segStart) / segLen : 0
-                return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
-            }
+    /// A teardrop-ish leaf path centered at `center`, rotated by `angle`.
+    private func leafPath(center: CGPoint, size: CGFloat, angle: CGFloat) -> Path {
+        let rect = CGRect(x: -size * 0.45, y: -size, width: size * 0.9, height: size * 2)
+        var p = Path(ellipseIn: rect)
+        var t = CGAffineTransform(translationX: center.x, y: center.y)
+        t = t.rotated(by: angle)
+        return p.applying(t)
+    }
+
+    private func lerp(_ a: RGBAColor, _ b: RGBAColor, _ t: Double) -> Color {
+        let t = max(0, min(1, t))
+        return Color(.sRGB,
+                     red: a.r + (b.r - a.r) * t,
+                     green: a.g + (b.g - a.g) * t,
+                     blue: a.b + (b.b - a.b) * t,
+                     opacity: 1)
+    }
+
+    /// Precompute this cycle's branch anchors/directions/seeds once.
+    private func rebuildIfNeeded(cycleIndex: Int, size: CGSize, pts: [CGPoint],
+                                 cum: [CGFloat], total: CGFloat, minDim: CGFloat) {
+        if layout.cycleIndex == cycleIndex && layout.size == size { return }
+        layout.cycleIndex = cycleIndex
+        layout.size = size
+
+        // Centroid (vertex average) — inward direction points toward it.
+        var cx: CGFloat = 0, cy: CGFloat = 0
+        for p in pts { cx += p.x; cy += p.y }
+        cx /= CGFloat(pts.count); cy /= CGFloat(pts.count)
+        let center = CGPoint(x: cx, y: cy)
+
+        let startArc = hash01(cycleIndex, 7) * total
+        func loopPoint(_ arc: CGFloat) -> CGPoint {
+            var a = arc.truncatingRemainder(dividingBy: total)
+            if a < 0 { a += total }
+            return pointAt(pts, cum, length: a)
         }
-        return first
+
+        let spacing: CGFloat = 46
+        let count = max(4, min(60, Int(total / spacing)))
+        var branches: [Branch] = []
+        branches.reserveCapacity(count)
+        for i in 0..<count {
+            let salt = cycleIndex &* 131 &+ i
+            let jitter = (hash01(salt, 1) - 0.5) * spacing * 0.6
+            let anchorArc = CGFloat(i) * spacing + jitter
+            let anchor = loopPoint(startArc + anchorArc)
+
+            // Inward toward centroid, plus a tangential lean for variety.
+            var inx = center.x - anchor.x, iny = center.y - anchor.y
+            let ilen = max(0.0001, hypot(inx, iny)); inx /= ilen; iny /= ilen
+            let ahead = loopPoint(startArc + anchorArc + 6)
+            let behind = loopPoint(startArc + anchorArc - 6)
+            var tx = ahead.x - behind.x, ty = ahead.y - behind.y
+            let tlen = max(0.0001, hypot(tx, ty)); tx /= tlen; ty /= tlen
+            let lean = (hash01(salt, 2) - 0.5) * 1.1
+            var dx = inx + tx * lean, dy = iny + ty * lean
+            let dlen = max(0.0001, hypot(dx, dy)); dx /= dlen; dy /= dlen
+            let perp = CGVector(dx: -dy, dy: dx)
+
+            let length = minDim * (0.10 + 0.10 * hash01(salt, 3))
+            let curl = length * 0.22 * (hash01(salt, 4) - 0.5) * 2
+            branches.append(Branch(anchorArc: anchorArc,
+                                   dir: CGVector(dx: dx, dy: dy),
+                                   perp: perp, length: length, curl: curl, seed: salt))
+        }
+        layout.branches = branches
     }
 }
 
@@ -418,7 +690,7 @@ private struct EffectView: View {
             ambientEffects
         case .torus3D, .sphere3D, .pointCloud3D:
             threeDEffects
-        case .outlineGlow:
+        case .outlineGlow, .growingIvy:
             edgeEffects
         case .analogClock, .digitalClock, .weatherWidget:
             clockEffects
@@ -1566,6 +1838,8 @@ private struct EffectView: View {
         switch kind {
         case .outlineGlow:
             OutlineGlowView(color: color, accent: accent, time: time, outline: outline)
+        case .growingIvy:
+            GrowingIvyView(color: color, accent: accent, time: time, outline: outline)
 
         default: EmptyView()
         }
