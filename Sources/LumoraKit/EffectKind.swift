@@ -33,6 +33,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case particleSwarm
     case audioParticles
     case butterflies
+    case aquarium
     case tvStatic
     case matrixRain
     case pixelDissolve
@@ -95,7 +96,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass:
+             .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
+             .aquarium:
             return false
         default:
             return true
@@ -164,6 +166,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .particleSwarm: return "Particle Swarm"
         case .audioParticles: return "Audio Reactive Particles"
         case .butterflies: return "Butterflies"
+        case .aquarium: return "Aquarium"
         case .tvStatic: return "TV Static"
         case .matrixRain: return "Matrix Rain"
         case .pixelDissolve: return "Pixel Dissolve"
@@ -229,7 +232,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .patterns
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks,
-             .particleSwarm, .audioParticles, .butterflies:
+             .particleSwarm, .audioParticles, .butterflies, .aquarium:
             return .nature
         case .waves, .equalizer, .tunnel, .kaleidoscope,
              .prismFalls, .liquidSlosh, .pendulumPaint:
