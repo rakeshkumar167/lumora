@@ -94,7 +94,7 @@ struct DNAFrame: View {
     var body: some View {
         Canvas { ctx, size in
             ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-            let n = 60, turns = 3.0, height = 2.6
+            let n = 92, turns = 2.3, radius = 1.05, vHalf = 1.45
             let scale = Double(min(size.width, size.height)) * 0.30
             let camDist = 5.0, cx = size.width / 2, cy = size.height / 2
             let spin = time * 0.25
@@ -108,28 +108,37 @@ struct DNAFrame: View {
             for i in 0..<n {
                 let t = Double(i) / Double(n)
                 let a = t * turns * 2 * .pi + time
-                let ya = (t - 0.5) * 2 * height
-                let (sa, fa) = project(Vec3(x: cos(a), y: ya, z: sin(a)))
-                let (sb, fb) = project(Vec3(x: cos(a + .pi), y: ya, z: sin(a + .pi)))
+                let yv = (t - 0.5) * 2 * vHalf
+                let (sa, fa) = project(Vec3(x: radius * cos(a), y: yv, z: radius * sin(a)))
+                let (sb, fb) = project(Vec3(x: radius * cos(a + .pi), y: yv, z: radius * sin(a + .pi)))
                 let hue = fract(t + time * 0.03)
                 dots.append((sa, fa, hue)); dots.append((sb, fb, fract(hue + 0.5)))
-                if i % 4 == 0 { rungs.append((sa, sb, (fa + fb) / 2, hue)) }
+                if i % 3 == 0 { rungs.append((sa, sb, (fa + fb) / 2, hue)) }
             }
             dots.sort { $0.1 < $1.1 }
             ctx.drawLayer { layer in
                 layer.blendMode = .plusLighter
                 for (a, b, f, hue) in rungs {
                     var line = Path(); line.move(to: a); line.addLine(to: b)
-                    layer.stroke(line, with: .color(Color(hue: hue, saturation: 0.6, brightness: 1).opacity(min(1, f * 0.6))),
-                                 style: StrokeStyle(lineWidth: max(0.5, (f - 0.55) * 2.2), lineCap: .round))
+                    layer.stroke(line, with: .color(Color(hue: hue, saturation: 0.5, brightness: 1).opacity(min(0.45, f * 0.38))),
+                                 style: StrokeStyle(lineWidth: max(1, (f - 0.5) * 3), lineCap: .round))
+                }
+            }
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: 6))
+                layer.blendMode = .plusLighter
+                for (sp, f, hue) in dots {
+                    let rad = max(1.6, (f - 0.45) * 11)
+                    layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
+                               with: .color(Color(hue: hue, saturation: 0.85, brightness: 1).opacity(min(1, f * 0.8))))
                 }
             }
             ctx.drawLayer { layer in
                 layer.blendMode = .plusLighter
                 for (sp, f, hue) in dots {
-                    let rad = max(0.6, (f - 0.5) * 6.0)
+                    let rad = max(0.9, (f - 0.5) * 6.0)
                     layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
-                               with: .color(Color(hue: hue, saturation: 0.8, brightness: 1).opacity(min(1, f * 0.9))))
+                               with: .color(Color(hue: hue, saturation: 0.7, brightness: 1).opacity(min(1, f * 0.95))))
                 }
             }
         }

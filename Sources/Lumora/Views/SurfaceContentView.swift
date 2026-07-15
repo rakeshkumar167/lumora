@@ -3368,9 +3368,12 @@ private struct EffectView: View {
     /// depth, and drawn as depth-cued plusLighter glows.
     private func drawDNAHelix(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-        let n = 60
-        let turns = 3.0
-        let height = 2.6
+        let n = 92
+        let turns = 2.3
+        let radius = 1.05           // strand radius (x/z)
+        let vHalf = 1.45            // vertical half-extent — kept close to `radius`
+                                    // so perspective doesn't skew rungs into long
+                                    // slanted lines (the earlier bug).
         let scale = Double(min(size.width, size.height)) * 0.30
         let camDist = 5.0
         let spd = three?.speed ?? 1.0
@@ -3384,44 +3387,53 @@ private struct EffectView: View {
             return (CGPoint(x: cx + r.x * f * scale, y: cy + r.y * f * scale), f)
         }
 
-        // (screen point, depth factor, hue, radius) for painter-sorted drawing.
-        var dots: [(CGPoint, Double, Double, CGFloat)] = []
-        var rungs: [(CGPoint, CGPoint, Double, Double)] = []   // a, b, avgF, hue
+        var dots: [(CGPoint, Double, Double)] = []            // point, depth f, hue
+        var rungs: [(CGPoint, CGPoint, Double, Double)] = []  // a, b, avgF, hue
         for i in 0..<n {
             let t = Double(i) / Double(n)
             let a = t * turns * 2 * .pi + time * spd
-            let ya = (t - 0.5) * 2 * height
-            let pa = Vec3(x: cos(a), y: ya, z: sin(a))
-            let pb = Vec3(x: cos(a + .pi), y: ya, z: sin(a + .pi))
+            let yv = (t - 0.5) * 2 * vHalf
+            let pa = Vec3(x: radius * cos(a), y: yv, z: radius * sin(a))
+            let pb = Vec3(x: radius * cos(a + .pi), y: yv, z: radius * sin(a + .pi))
             let (sa, fa) = project(pa)
             let (sb, fb) = project(pb)
             let hue = rainbow ? fract(t + time * 0.03 * spd) : 0
-            dots.append((sa, fa, hue, 1.0))
-            dots.append((sb, fb, fract(hue + 0.5), 1.0))
-            if i % 4 == 0 {
-                rungs.append((sa, sb, (fa + fb) / 2, hue))
-            }
+            dots.append((sa, fa, hue))
+            dots.append((sb, fb, fract(hue + 0.5)))
+            if i % 3 == 0 { rungs.append((sa, sb, (fa + fb) / 2, hue)) }
         }
-        dots.sort { $0.1 < $1.1 }
+        dots.sort { $0.1 < $1.1 }   // far first
 
-        // Rungs first (behind), thin glowing lines.
+        // Rungs behind — soft and dim so they read as ladder connectors, not
+        // dominant lines.
         ctx.drawLayer { layer in
             layer.blendMode = .plusLighter
             for (a, b, f, hue) in rungs {
-                let col = rainbow ? Color(hue: hue, saturation: 0.6, brightness: 1) : color.color
+                let col = rainbow ? Color(hue: hue, saturation: 0.5, brightness: 1) : color.color
                 var line = Path(); line.move(to: a); line.addLine(to: b)
-                layer.stroke(line, with: .color(col.opacity(min(1, f * 0.6))),
-                             style: StrokeStyle(lineWidth: max(0.5, (f - 0.55) * 2.2), lineCap: .round))
+                layer.stroke(line, with: .color(col.opacity(min(0.45, f * 0.38))),
+                             style: StrokeStyle(lineWidth: max(1, (f - 0.5) * 3), lineCap: .round))
             }
         }
-        // Depth-cued glowing spheres.
+        // Soft glow underlayer for the sphere backbones.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 6))
+            layer.blendMode = .plusLighter
+            for (sp, f, hue) in dots {
+                let rad = max(1.6, (f - 0.45) * 11)
+                let col = rainbow ? Color(hue: hue, saturation: 0.85, brightness: 1) : color.color
+                layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
+                           with: .color(col.opacity(min(1, f * 0.8))))
+            }
+        }
+        // Crisp sphere cores.
         ctx.drawLayer { layer in
             layer.blendMode = .plusLighter
-            for (sp, f, hue, _) in dots {
-                let rad = max(0.6, (f - 0.5) * 6.0)
-                let col = rainbow ? Color(hue: hue, saturation: 0.8, brightness: 1) : color.color
+            for (sp, f, hue) in dots {
+                let rad = max(0.9, (f - 0.5) * 6.0)
+                let col = rainbow ? Color(hue: hue, saturation: 0.7, brightness: 1) : color.color
                 layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
-                           with: .color(col.opacity(min(1, f * 0.9))))
+                           with: .color(col.opacity(min(1, f * 0.95))))
             }
         }
     }
