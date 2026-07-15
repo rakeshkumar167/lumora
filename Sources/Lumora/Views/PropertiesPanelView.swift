@@ -106,7 +106,7 @@ private struct MediaEditor: View {
     @ObservedObject private var weather = WeatherStore.shared
 
     /// The 3D effects that take a speed (and, for the cloud, colour) config.
-    private static let threeDKinds: Set<EffectKind> = [.torus3D, .sphere3D, .pointCloud3D]
+    private static let threeDKinds: Set<EffectKind> = [.torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix]
 
     /// String-light effects that take a bulb/sag config (the tree does not).
     private static let stringLightKinds: Set<EffectKind> =
@@ -218,7 +218,7 @@ private struct MediaEditor: View {
                                           set: { var c = cfg; c.speed = $0; three = c }),
                            in: 0.1...4)
                 }
-                if effectKind == .pointCloud3D {
+                if effectKind == .pointCloud3D || effectKind == .strangeAttractor || effectKind == .dnaHelix {
                     Toggle("Rainbow", isOn: Binding(get: { cfg.rainbow },
                                                     set: { var c = cfg; c.rainbow = $0; three = c }))
                     if !cfg.rainbow {

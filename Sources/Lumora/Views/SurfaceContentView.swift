@@ -1075,7 +1075,7 @@ private struct EffectView: View {
             geometryEffects
         case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics, .godRays, .inkFlow:
             ambientEffects
-        case .torus3D, .sphere3D, .pointCloud3D:
+        case .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix:
             threeDEffects
         case .outlineGlow, .growingIvy:
             edgeEffects
@@ -2287,6 +2287,10 @@ private struct EffectView: View {
             Canvas { ctx, size in drawSphere3D(ctx: ctx, size: size) }
         case .pointCloud3D:
             Canvas { ctx, size in drawPointCloud3D(ctx: ctx, size: size) }
+        case .strangeAttractor:
+            Canvas { ctx, size in drawStrangeAttractor(ctx: ctx, size: size) }
+        case .dnaHelix:
+            Canvas { ctx, size in drawDNAHelix(ctx: ctx, size: size) }
         default: EmptyView()
         }
     }
@@ -3284,6 +3288,140 @@ private struct EffectView: View {
                 let col = rainbow ? Color(hue: hue, saturation: 0.8, brightness: 1) : color.color
                 layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
                            with: .color(col.opacity(min(1, f * 0.85))))
+            }
+        }
+    }
+
+    /// Cached, normalized Lorenz polyline (deterministic → computed once). Points
+    /// are centered on the origin and scaled so the largest extent is ~1.
+    private static let lorenzPolyline: [Vec3] = {
+        let raw = StrangeAttractor.lorenz(steps: 4000, dt: 0.005)
+        guard !raw.isEmpty else { return [] }
+        var cx = 0.0, cy = 0.0, cz = 0.0
+        for p in raw { cx += p.x; cy += p.y; cz += p.z }
+        let n = Double(raw.count)
+        cx /= n; cy /= n; cz /= n
+        var maxExt = 1e-6
+        for p in raw {
+            maxExt = max(maxExt, abs(p.x - cx))
+            maxExt = max(maxExt, abs(p.y - cy))
+            maxExt = max(maxExt, abs(p.z - cz))
+        }
+        let s = 1.0 / maxExt
+        return raw.map { Vec3(x: ($0.x - cx) * s, y: ($0.y - cy) * s, z: ($0.z - cz) * s) }
+    }()
+
+    /// Rotating Lorenz-attractor ribbon: the cached polyline is rotated + projected
+    /// with the same cam-distance math as the point cloud, then drawn as a glowing
+    /// connected path banded by arc length (rainbow) or a fixed color.
+    private func drawStrangeAttractor(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let poly = Self.lorenzPolyline
+        guard poly.count > 1 else { return }
+        let scale = Double(min(size.width, size.height)) * 1.6
+        let camDist = 5.0
+        let spd = three?.speed ?? 1.0
+        let rainbow = three?.rainbow ?? true
+        let cx = size.width / 2, cy = size.height / 2
+
+        var screen: [CGPoint] = []
+        screen.reserveCapacity(poly.count)
+        for p in poly {
+            let r = rot3(p, time * 0.3 * spd, time * 0.5 * spd)
+            let f = camDist / max(r.z + camDist, 0.1)
+            screen.append(CGPoint(x: cx + r.x * f * scale, y: cy + r.y * f * scale))
+        }
+
+        let bandCount = 48
+        var bands = [Path](repeating: Path(), count: bandCount)
+        let total = screen.count
+        for i in 1..<total {
+            let bi = min(bandCount - 1, Int(Double(i) / Double(total) * Double(bandCount)))
+            bands[bi].move(to: screen[i - 1])
+            bands[bi].addLine(to: screen[i])
+        }
+        func bandColor(_ bi: Int) -> Color {
+            rainbow ? Color(hue: (Double(bi) + 0.5) / Double(bandCount), saturation: 0.85, brightness: 1)
+                    : color.color
+        }
+        // Blurred glow underlayer.
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 7))
+            layer.blendMode = .plusLighter
+            for bi in bands.indices where !bands[bi].isEmpty {
+                layer.stroke(bands[bi], with: .color(bandColor(bi).opacity(0.5)),
+                             style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+            }
+        }
+        // Crisp core.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for bi in bands.indices where !bands[bi].isEmpty {
+                layer.stroke(bands[bi], with: .color(bandColor(bi)),
+                             style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+            }
+        }
+    }
+
+    /// Rotating double helix of glowing spheres with base-pair rungs. Both strands
+    /// plus rung endpoints are projected with cam-distance math, painter-sorted by
+    /// depth, and drawn as depth-cued plusLighter glows.
+    private func drawDNAHelix(ctx: GraphicsContext, size: CGSize) {
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+        let n = 60
+        let turns = 3.0
+        let height = 2.6
+        let scale = Double(min(size.width, size.height)) * 0.30
+        let camDist = 5.0
+        let spd = three?.speed ?? 1.0
+        let rainbow = three?.rainbow ?? true
+        let cx = size.width / 2, cy = size.height / 2
+        let spin = time * 0.25 * spd
+
+        func project(_ v: Vec3) -> (CGPoint, Double) {
+            let r = rot3(v, 0, spin)
+            let f = camDist / max(r.z + camDist, 0.1)
+            return (CGPoint(x: cx + r.x * f * scale, y: cy + r.y * f * scale), f)
+        }
+
+        // (screen point, depth factor, hue, radius) for painter-sorted drawing.
+        var dots: [(CGPoint, Double, Double, CGFloat)] = []
+        var rungs: [(CGPoint, CGPoint, Double, Double)] = []   // a, b, avgF, hue
+        for i in 0..<n {
+            let t = Double(i) / Double(n)
+            let a = t * turns * 2 * .pi + time * spd
+            let ya = (t - 0.5) * 2 * height
+            let pa = Vec3(x: cos(a), y: ya, z: sin(a))
+            let pb = Vec3(x: cos(a + .pi), y: ya, z: sin(a + .pi))
+            let (sa, fa) = project(pa)
+            let (sb, fb) = project(pb)
+            let hue = rainbow ? fract(t + time * 0.03 * spd) : 0
+            dots.append((sa, fa, hue, 1.0))
+            dots.append((sb, fb, fract(hue + 0.5), 1.0))
+            if i % 4 == 0 {
+                rungs.append((sa, sb, (fa + fb) / 2, hue))
+            }
+        }
+        dots.sort { $0.1 < $1.1 }
+
+        // Rungs first (behind), thin glowing lines.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for (a, b, f, hue) in rungs {
+                let col = rainbow ? Color(hue: hue, saturation: 0.6, brightness: 1) : color.color
+                var line = Path(); line.move(to: a); line.addLine(to: b)
+                layer.stroke(line, with: .color(col.opacity(min(1, f * 0.6))),
+                             style: StrokeStyle(lineWidth: max(0.5, (f - 0.55) * 2.2), lineCap: .round))
+            }
+        }
+        // Depth-cued glowing spheres.
+        ctx.drawLayer { layer in
+            layer.blendMode = .plusLighter
+            for (sp, f, hue, _) in dots {
+                let rad = max(0.6, (f - 0.5) * 6.0)
+                let col = rainbow ? Color(hue: hue, saturation: 0.8, brightness: 1) : color.color
+                layer.fill(Path(ellipseIn: CGRect(x: sp.x - rad, y: sp.y - rad, width: rad * 2, height: rad * 2)),
+                           with: .color(col.opacity(min(1, f * 0.9))))
             }
         }
     }

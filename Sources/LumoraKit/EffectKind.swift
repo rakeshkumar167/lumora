@@ -64,6 +64,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case torus3D
     case sphere3D
     case pointCloud3D
+    case strangeAttractor
+    case dnaHelix
     case outlineGlow
     case growingIvy
     case analogClock
@@ -92,7 +94,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .torus3D, .sphere3D, .pointCloud3D, .pendulumPaint, .hilbertCurve, .stainedGlass:
+             .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass:
             return false
         default:
             return true
@@ -192,6 +194,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .torus3D: return "3D Torus"
         case .sphere3D: return "3D Sphere"
         case .pointCloud3D: return "3D Point Cloud"
+        case .strangeAttractor: return "Strange Attractor"
+        case .dnaHelix: return "DNA Helix"
         case .outlineGlow: return "Outline Glow"
         case .growingIvy: return "Growing Ivy"
         case .analogClock: return "Analog Clock"
@@ -237,7 +241,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .curvesGrids
         case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics, .godRays, .inkFlow:
             return .ambient
-        case .torus3D, .sphere3D, .pointCloud3D:
+        case .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix:
             return .threeD
         case .outlineGlow, .growingIvy:
             return .edge
