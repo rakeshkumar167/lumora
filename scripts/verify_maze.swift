@@ -113,21 +113,51 @@ struct MazeFrame: View {
             }
             let glow = Color(red: 0.2, green: 0.7, blue: 1.0)
             let acc = Color(red: 1.0, green: 0.55, blue: 0.2)
+            func corner(_ gx: Int, _ gy: Int) -> CGPoint {
+                CGPoint(x: margin + CGFloat(gx) * cellW, y: margin + CGFloat(gy) * cellH)
+            }
 
-            let total = maze.carveOrder.count
-            let litCount = max(1, Int(carveFrac * Double(total)))
-            var corridors = Path()
-            for i in 0..<min(litCount, total) {
-                let p = maze.carveOrder[i]
-                corridors.move(to: center(p.a)); corridors.addLine(to: center(p.b))
+            // Maze WALLS (boundaries with no passage) + outer border, revealed by
+            // carve progress — mirrors MazeSolveView. Solution threads corridors.
+            var visit: [MazeCell: Int] = [:]
+            if let f = maze.carveOrder.first { visit[f.a] = 0 }
+            for (i, p) in maze.carveOrder.enumerated() { visit[p.b] = i + 1 }
+            let maxVisit = max(1, maze.carveOrder.count)
+            func ready(_ cells: [MazeCell]) -> Double {
+                Double(cells.map { visit[$0] ?? 0 }.max() ?? 0) / Double(maxVisit)
             }
+            var wallsPath = Path()
+            func addWall(_ a: CGPoint, _ b: CGPoint, _ rdy: Double) {
+                if rdy <= carveFrac { wallsPath.move(to: a); wallsPath.addLine(to: b) }
+            }
+            for y in 0..<rows {
+                for x in 0..<cols {
+                    let c = MazeCell(x: x, y: y)
+                    if x + 1 < cols {
+                        let r = MazeCell(x: x + 1, y: y)
+                        if !maze.passages.contains(Passage(c, r)) {
+                            addWall(corner(x + 1, y), corner(x + 1, y + 1), ready([c, r]))
+                        }
+                    }
+                    if y + 1 < rows {
+                        let d = MazeCell(x: x, y: y + 1)
+                        if !maze.passages.contains(Passage(c, d)) {
+                            addWall(corner(x, y + 1), corner(x + 1, y + 1), ready([c, d]))
+                        }
+                    }
+                }
+            }
+            addWall(corner(0, 0), corner(cols, 0), 0)
+            addWall(corner(0, rows), corner(cols, rows), 0)
+            addWall(corner(0, 0), corner(0, rows), 0)
+            addWall(corner(cols, 0), corner(cols, rows), 0)
             ctx.drawLayer { l in
-                l.addFilter(.blur(radius: 8)); l.blendMode = .plusLighter
-                l.stroke(corridors, with: .color(glow.opacity(0.45)),
-                         style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                l.addFilter(.blur(radius: 6)); l.blendMode = .plusLighter
+                l.stroke(wallsPath, with: .color(glow.opacity(0.4)),
+                         style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             }
-            ctx.stroke(corridors, with: .color(glow.opacity(0.95)),
-                       style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+            ctx.stroke(wallsPath, with: .color(glow.opacity(0.95)),
+                       style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
 
             guard solveFrac >= 0, solution.count >= 2 else { return }
             var solved = Path()
