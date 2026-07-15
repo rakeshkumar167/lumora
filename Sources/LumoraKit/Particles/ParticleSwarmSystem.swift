@@ -68,6 +68,15 @@ public final class ParticleSwarmSystem {
         }
     }
 
+    /// Nudge a single particle's y position by `dy` (normalized units),
+    /// wrapping toroidally. Lets an effect layer directional drift (e.g.
+    /// Butterflies' gentle upward rise) on top of the flow-field motion
+    /// without exposing mutable access to `positions` itself.
+    public func nudgeY(_ index: Int, by dy: Double) {
+        let p = positions[index]
+        positions[index] = CGPoint(x: p.x, y: wrap01(Double(p.y) + dy))
+    }
+
     private func wrap01(_ v: Double) -> Double {
         let r = v.truncatingRemainder(dividingBy: 1)
         return r < 0 ? r + 1 : r

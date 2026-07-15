@@ -1063,7 +1063,7 @@ private struct EffectView: View {
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
              .chladni, .hilbertCurve, .mazeSolve:
             patternEffects
-        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles:
+        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles, .butterflies:
             natureEffects
         case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh, .pendulumPaint:
             motionEffects
@@ -1598,6 +1598,8 @@ private struct EffectView: View {
             ParticleSwarmView(mode: .swarm, color: color, accent: accent, time: time)
         case .audioParticles:
             ParticleSwarmView(mode: .audio, color: color, accent: accent, time: time)
+        case .butterflies:
+            ButterfliesView(color: color, accent: accent, time: time)
 
         case .sparkle:
             Canvas { ctx, size in
