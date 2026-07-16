@@ -667,16 +667,23 @@ private struct MazeSolveView: View {
 
     @State private var startRef: Double?
 
-    /// A drawable wall segment plus the carve fraction (0…1) at which it
-    /// materializes, so the maze builds progressively behind the carve head.
-    private struct WallSeg { var a: CGPoint; var b: CGPoint; var ready: Double }
+    /// A drawable wall segment (a cell boundary). Walls are revealed in a
+    /// nearest-neighbour trace order (see `orderWalls`) so a glowing pen appears
+    /// to travel ALONG the walls drawing the grid, rather than the walls popping
+    /// in by cell-visit order (which is spatially scattered).
+    private struct WallSeg { var a: CGPoint; var b: CGPoint }
     private final class Layout {
         var cycleIndex: Int = .min
         var size: CGSize = .zero
         var maze: Maze?
         var centers: [MazeCell: CGPoint] = [:]
         var solution: [MazeCell] = []
+        /// Walls in trace order, each oriented (a→b) to chain from the previous.
         var walls: [WallSeg] = []
+        /// Cumulative arc length; `wallCum[i]` is the drawn length up to the
+        /// start of `walls[i]`, and `wallCum[walls.count]` is the grand total.
+        var wallCum: [CGFloat] = [0]
+        var wallTotal: CGFloat = 0
     }
     @State private var layout = Layout()
 
@@ -720,51 +727,82 @@ private struct MazeSolveView: View {
         }
 
         // Wall segments: the boundary between two adjacent cells that have NO
-        // passage, plus the full outer border. Each wall's `ready` fraction is
-        // tied to when its cells are first visited during the carve, so walls
-        // solidify behind the carve head as the maze materializes. The solution
-        // (drawn through cell centers) then threads the open corridors between
-        // walls, never overlapping one.
+        // passage, plus the full outer border. The solution (drawn through cell
+        // centers) threads the open corridors BETWEEN these walls, never
+        // overlapping one.
         func corner(_ gx: Int, _ gy: Int) -> CGPoint {
             CGPoint(x: margin + CGFloat(gx) * cellW, y: margin + CGFloat(gy) * cellH)
         }
-        var visit: [MazeCell: Int] = [:]
-        if let f = maze.carveOrder.first { visit[f.a] = 0 }
-        for (i, p) in maze.carveOrder.enumerated() { visit[p.b] = i + 1 }
-        let maxVisit = max(1, maze.carveOrder.count)
-        func ready(_ cells: [MazeCell]) -> Double {
-            Double(cells.map { visit[$0] ?? 0 }.max() ?? 0) / Double(maxVisit)
-        }
-        var walls: [WallSeg] = []
+        var rawWalls: [WallSeg] = []
         for y in 0..<rows {
             for x in 0..<cols {
                 let c = MazeCell(x: x, y: y)
                 if x + 1 < cols {
                     let r = MazeCell(x: x + 1, y: y)
                     if !maze.connected(c, r) {
-                        walls.append(WallSeg(a: corner(x + 1, y), b: corner(x + 1, y + 1), ready: ready([c, r])))
+                        rawWalls.append(WallSeg(a: corner(x + 1, y), b: corner(x + 1, y + 1)))
                     }
                 }
                 if y + 1 < rows {
                     let d = MazeCell(x: x, y: y + 1)
                     if !maze.connected(c, d) {
-                        walls.append(WallSeg(a: corner(x, y + 1), b: corner(x + 1, y + 1), ready: ready([c, d])))
+                        rawWalls.append(WallSeg(a: corner(x, y + 1), b: corner(x + 1, y + 1)))
                     }
                 }
             }
         }
-        // Outer border materializes immediately.
-        walls.append(WallSeg(a: corner(0, 0), b: corner(cols, 0), ready: 0))
-        walls.append(WallSeg(a: corner(0, rows), b: corner(cols, rows), ready: 0))
-        walls.append(WallSeg(a: corner(0, 0), b: corner(0, rows), ready: 0))
-        walls.append(WallSeg(a: corner(cols, 0), b: corner(cols, rows), ready: 0))
+        // Outer border.
+        rawWalls.append(WallSeg(a: corner(0, 0), b: corner(cols, 0)))
+        rawWalls.append(WallSeg(a: corner(0, rows), b: corner(cols, rows)))
+        rawWalls.append(WallSeg(a: corner(0, 0), b: corner(0, rows)))
+        rawWalls.append(WallSeg(a: corner(cols, 0), b: corner(cols, rows)))
+
+        // Order the walls into a nearest-neighbour pen walk from the maze's
+        // start corner, so the glowing tracer travels along the walls drawing
+        // the grid (rather than walls appearing in scattered cell-visit order).
+        let ordered = orderWalls(rawWalls, start: corner(0, 0))
+        var cum: [CGFloat] = [0]
+        var total: CGFloat = 0
+        for s in ordered {
+            total += hypot(s.b.x - s.a.x, s.b.y - s.a.y)
+            cum.append(total)
+        }
 
         layout.cycleIndex = cycleIndex
         layout.size = size
         layout.maze = maze
         layout.centers = centers
         layout.solution = maze.solve()
-        layout.walls = walls
+        layout.walls = ordered
+        layout.wallCum = cum
+        layout.wallTotal = total
+    }
+
+    /// Greedy nearest-neighbour ordering of wall segments: starting the pen at
+    /// `start`, repeatedly pick the unused segment with an endpoint closest to
+    /// the pen tip and orient it (a→b) so drawing begins from that near
+    /// endpoint. O(n²) but only run once per cycle (cached in `Layout`).
+    private func orderWalls(_ segs: [WallSeg], start: CGPoint) -> [WallSeg] {
+        var remaining = segs
+        var ordered: [WallSeg] = []
+        ordered.reserveCapacity(segs.count)
+        var pen = start
+        while !remaining.isEmpty {
+            var bestIdx = 0
+            var bestDist = CGFloat.greatestFiniteMagnitude
+            var flip = false
+            for (i, s) in remaining.enumerated() {
+                let da = hypot(s.a.x - pen.x, s.a.y - pen.y)
+                let db = hypot(s.b.x - pen.x, s.b.y - pen.y)
+                if da < bestDist { bestDist = da; bestIdx = i; flip = false }
+                if db < bestDist { bestDist = db; bestIdx = i; flip = true }
+            }
+            var seg = remaining.remove(at: bestIdx)
+            if flip { swap(&seg.a, &seg.b) }
+            ordered.append(seg)
+            pen = seg.b
+        }
+        return ordered
     }
 
     private func draw(ctx: inout GraphicsContext, size: CGSize, elapsed: Double) {
@@ -789,17 +827,34 @@ private struct MazeSolveView: View {
 
         func center(_ c: MazeCell) -> CGPoint { centers[c] ?? .zero }
 
-        // --- Carve phase: the maze WALLS materialize as the carve progresses.
-        // Drawing walls (not passage center-lines) leaves open corridor space so
-        // the solution visibly threads the middle of corridors between walls. ---
+        // --- Carve phase: a glowing pen traces ALONG the maze WALLS, drawing
+        // the grid progressively by arc length. The head always sits ON a wall
+        // (the drawing frontier); the solution later threads the open corridors
+        // BETWEEN walls. ---
         let carveFrac = min(localT / carveDur, 1.0)
-        let total = maze.carveOrder.count
-        let litCount = max(1, Int(carveFrac * Double(total)))
+        let drawnLen = CGFloat(carveFrac) * layout.wallTotal
 
         var wallsPath = Path()
-        for w in layout.walls where w.ready <= carveFrac {
-            wallsPath.move(to: w.a)
-            wallsPath.addLine(to: w.b)
+        var carveHead = layout.walls.first?.a ?? .zero
+        for (i, w) in layout.walls.enumerated() {
+            let segEnd = layout.wallCum[i + 1]
+            if segEnd <= drawnLen {
+                wallsPath.move(to: w.a)
+                wallsPath.addLine(to: w.b)
+                carveHead = w.b
+            } else {
+                // Partially draw the frontier wall; the head rides its tip.
+                let segStart = layout.wallCum[i]
+                let segLen = segEnd - segStart
+                let t = segLen > 0 ? (drawnLen - segStart) / segLen : 0
+                if t > 0 {
+                    let p = CGPoint(x: w.a.x + (w.b.x - w.a.x) * t, y: w.a.y + (w.b.y - w.a.y) * t)
+                    wallsPath.move(to: w.a)
+                    wallsPath.addLine(to: p)
+                    carveHead = p
+                }
+                break
+            }
         }
 
         let glow = color.color
@@ -813,18 +868,16 @@ private struct MazeSolveView: View {
         ctx.stroke(wallsPath, with: .color(glow.opacity(0.95)),
                    style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
 
-        // Bright carve head — only while still carving.
+        // Bright carve head — only while still tracing walls.
         if carveFrac < 1.0 {
-            let headPassage = maze.carveOrder[min(litCount, total) - 1]
-            let head = center(headPassage.b)
             let r: CGFloat = 6
             ctx.drawLayer { layer in
                 layer.addFilter(.blur(radius: 6))
                 layer.blendMode = .plusLighter
-                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                layer.fill(Path(ellipseIn: CGRect(x: carveHead.x - r, y: carveHead.y - r, width: r * 2, height: r * 2)),
                            with: .color(.white))
             }
-            ctx.fill(Path(ellipseIn: CGRect(x: head.x - 3, y: head.y - 3, width: 6, height: 6)),
+            ctx.fill(Path(ellipseIn: CGRect(x: carveHead.x - 3, y: carveHead.y - 3, width: 6, height: 6)),
                      with: .color(.white))
         }
 

@@ -94,6 +94,30 @@ struct Maze {
 
 // MARK: - Renderer frame (mirrors MazeSolveView.draw)
 
+struct Seg { var a: CGPoint; var b: CGPoint }
+
+/// Greedy nearest-neighbour ordering of wall segments (mirrors
+/// MazeSolveView.orderWalls): pen starts at `start`, repeatedly takes the
+/// segment with an endpoint nearest the pen and orients it to start there.
+func orderWalls(_ segs: [Seg], start: CGPoint) -> [Seg] {
+    var remaining = segs
+    var ordered: [Seg] = []
+    var pen = start
+    while !remaining.isEmpty {
+        var bestIdx = 0; var bestDist = CGFloat.greatestFiniteMagnitude; var flip = false
+        for (i, s) in remaining.enumerated() {
+            let da = hypot(s.a.x - pen.x, s.a.y - pen.y)
+            let db = hypot(s.b.x - pen.x, s.b.y - pen.y)
+            if da < bestDist { bestDist = da; bestIdx = i; flip = false }
+            if db < bestDist { bestDist = db; bestIdx = i; flip = true }
+        }
+        var seg = remaining.remove(at: bestIdx)
+        if flip { swap(&seg.a, &seg.b) }
+        ordered.append(seg); pen = seg.b
+    }
+    return ordered
+}
+
 let cols = 18, rows = 12
 let maze = Maze.generate(cols: cols, rows: rows, seed: 0)
 let solution = maze.solve()
@@ -117,40 +141,48 @@ struct MazeFrame: View {
                 CGPoint(x: margin + CGFloat(gx) * cellW, y: margin + CGFloat(gy) * cellH)
             }
 
-            // Maze WALLS (boundaries with no passage) + outer border, revealed by
-            // carve progress — mirrors MazeSolveView. Solution threads corridors.
-            var visit: [MazeCell: Int] = [:]
-            if let f = maze.carveOrder.first { visit[f.a] = 0 }
-            for (i, p) in maze.carveOrder.enumerated() { visit[p.b] = i + 1 }
-            let maxVisit = max(1, maze.carveOrder.count)
-            func ready(_ cells: [MazeCell]) -> Double {
-                Double(cells.map { visit[$0] ?? 0 }.max() ?? 0) / Double(maxVisit)
-            }
-            var wallsPath = Path()
-            func addWall(_ a: CGPoint, _ b: CGPoint, _ rdy: Double) {
-                if rdy <= carveFrac { wallsPath.move(to: a); wallsPath.addLine(to: b) }
-            }
+            // Maze WALLS (boundaries with no passage) + outer border, traced by
+            // a glowing pen in nearest-neighbour order — mirrors MazeSolveView.
+            // The head rides the wall being drawn (never a corridor center); the
+            // solution later threads the corridors BETWEEN walls.
+            var rawWalls: [Seg] = []
             for y in 0..<rows {
                 for x in 0..<cols {
                     let c = MazeCell(x: x, y: y)
-                    if x + 1 < cols {
-                        let r = MazeCell(x: x + 1, y: y)
-                        if !maze.passages.contains(Passage(c, r)) {
-                            addWall(corner(x + 1, y), corner(x + 1, y + 1), ready([c, r]))
-                        }
+                    if x + 1 < cols, !maze.passages.contains(Passage(c, MazeCell(x: x + 1, y: y))) {
+                        rawWalls.append(Seg(a: corner(x + 1, y), b: corner(x + 1, y + 1)))
                     }
-                    if y + 1 < rows {
-                        let d = MazeCell(x: x, y: y + 1)
-                        if !maze.passages.contains(Passage(c, d)) {
-                            addWall(corner(x, y + 1), corner(x + 1, y + 1), ready([c, d]))
-                        }
+                    if y + 1 < rows, !maze.passages.contains(Passage(c, MazeCell(x: x, y: y + 1))) {
+                        rawWalls.append(Seg(a: corner(x, y + 1), b: corner(x + 1, y + 1)))
                     }
                 }
             }
-            addWall(corner(0, 0), corner(cols, 0), 0)
-            addWall(corner(0, rows), corner(cols, rows), 0)
-            addWall(corner(0, 0), corner(0, rows), 0)
-            addWall(corner(cols, 0), corner(cols, rows), 0)
+            rawWalls.append(Seg(a: corner(0, 0), b: corner(cols, 0)))
+            rawWalls.append(Seg(a: corner(0, rows), b: corner(cols, rows)))
+            rawWalls.append(Seg(a: corner(0, 0), b: corner(0, rows)))
+            rawWalls.append(Seg(a: corner(cols, 0), b: corner(cols, rows)))
+
+            let ordered = orderWalls(rawWalls, start: corner(0, 0))
+            var cum: [CGFloat] = [0]; var total: CGFloat = 0
+            for s in ordered { total += hypot(s.b.x - s.a.x, s.b.y - s.a.y); cum.append(total) }
+            let drawnLen = CGFloat(carveFrac) * total
+
+            var wallsPath = Path()
+            var carveHead = ordered.first?.a ?? .zero
+            for (i, w) in ordered.enumerated() {
+                let segEnd = cum[i + 1]
+                if segEnd <= drawnLen {
+                    wallsPath.move(to: w.a); wallsPath.addLine(to: w.b); carveHead = w.b
+                } else {
+                    let segStart = cum[i]; let segLen = segEnd - segStart
+                    let t = segLen > 0 ? (drawnLen - segStart) / segLen : 0
+                    if t > 0 {
+                        let p = CGPoint(x: w.a.x + (w.b.x - w.a.x) * t, y: w.a.y + (w.b.y - w.a.y) * t)
+                        wallsPath.move(to: w.a); wallsPath.addLine(to: p); carveHead = p
+                    }
+                    break
+                }
+            }
             ctx.drawLayer { l in
                 l.addFilter(.blur(radius: 6)); l.blendMode = .plusLighter
                 l.stroke(wallsPath, with: .color(glow.opacity(0.4)),
@@ -158,6 +190,10 @@ struct MazeFrame: View {
             }
             ctx.stroke(wallsPath, with: .color(glow.opacity(0.95)),
                        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            // Carve head on the wall frontier while still tracing.
+            if carveFrac < 1.0 {
+                ctx.fill(Path(ellipseIn: CGRect(x: carveHead.x - 3, y: carveHead.y - 3, width: 6, height: 6)), with: .color(.white))
+            }
 
             guard solveFrac >= 0, solution.count >= 2 else { return }
             var solved = Path()
