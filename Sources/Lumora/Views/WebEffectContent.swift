@@ -80,6 +80,7 @@ enum WebEffect {
         case .webPlasma: return "plasma"
         case .webParticles3D: return "particles3d"
         case .webFlow: return "flow"
+        case .webZoomingSpiral: return "zoomingSpiral"
         default: return nil
         }
     }
