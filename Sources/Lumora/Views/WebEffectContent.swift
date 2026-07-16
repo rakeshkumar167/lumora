@@ -82,6 +82,7 @@ enum WebEffect {
         case .webFlow: return "flow"
         case .webZoomingSpiral: return "zoomingSpiral"
         case .webSpaceGlobe: return "spaceGlobe"
+        case .webSnowfall: return "snowfall"
         default: return nil
         }
     }
