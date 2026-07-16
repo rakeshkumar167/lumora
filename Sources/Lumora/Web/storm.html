@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<!--
+  Storm — a full-screen ShaderMaterial pen: a repeatedly-warped, time-flowing
+  cloud texture is layered against itself at several UV offsets/scroll
+  amounts and shaded through a 3D value-noise flicker to produce a churning,
+  backlit storm-cloud look. Ported from a CodePen (three r88, global `THREE`)
+  to the shared three 0.167 ESM build — no CDN. The original loaded a noise
+  texture and a tileable cloud photo from an external CDN; both are
+  regenerated procedurally on canvases here (the cloud texture as a seamless
+  multi-octave sine field so `RepeatWrapping` tiles cleanly — `u_noise` is
+  declared for parity but, like this author's other pens, is never actually
+  sampled by the shader). Group 1: the pointermove listener is deleted
+  (`u_mouse` is likewise declared but unused by the shader, so it stays at
+  its default (0,0)); the per-frame `window.scrollY` poll that drove
+  `u_scroll` is replaced with a fixed 0 — the page no longer scrolls (no
+  scroll chrome, `overflow: hidden`), so this reproduces the resting/unscrolled
+  frame. Kept the pen's dark, opaque storm-cloud background (the fragment
+  shader always writes alpha 1.0, so a transparent clear would not read
+  through it anyway). Bundled and loaded into a WKWebView by WebEffectContent.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Storm</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+window.THREE = THREE;
+
+// ── Procedural stand-in for the pen's external noise.png ────────────────────
+// Declared for parity with the original uniform wiring; the fragment shader
+// below never actually samples u_noise.
+function makeNoiseTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(size, size);
+  for (let i = 0; i < size * size; i++) {
+    imgData.data[i * 4 + 0] = Math.floor(Math.random() * 256);
+    imgData.data[i * 4 + 1] = Math.floor(Math.random() * 256);
+    imgData.data[i * 4 + 2] = Math.floor(Math.random() * 256);
+    imgData.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// ── Procedural stand-in for the pen's external clouds-1-tile.jpg ───────────
+// A seamlessly-tileable soft cloud field: each channel sums a few sine waves
+// at integer cycle counts across the canvas, so the pattern repeats exactly
+// at the texture's edges under RepeatWrapping (no visible seam).
+function makeCloudTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(size, size);
+
+  function makeSeamlessField() {
+    const octaves = [];
+    for (let i = 0; i < 5; i++) {
+      octaves.push({
+        fx: Math.floor(Math.random() * 4) + 2,
+        fy: Math.floor(Math.random() * 4) + 2,
+        phase: Math.random() * Math.PI * 2,
+        amp: 1 / (i + 1.6),
+      });
+    }
+    return (nx, ny) => {
+      let v = 0, norm = 0;
+      for (const o of octaves) {
+        v += o.amp * Math.sin(nx * Math.PI * 2 * o.fx + ny * Math.PI * 2 * o.fy * 0.6 + o.phase);
+        norm += o.amp;
+      }
+      return v / norm; // -1..1
+    };
+  }
+
+  const fieldR = makeSeamlessField();
+  const fieldG = makeSeamlessField();
+  const fieldB = makeSeamlessField();
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = x / size, ny = y / size;
+      const r = fieldR(nx, ny) * 0.5 + 0.5;
+      const g = fieldG(nx, ny) * 0.5 + 0.5;
+      const b = fieldB(nx, ny) * 0.5 + 0.5;
+      const idx = (y * size + x) * 4;
+      imgData.data[idx + 0] = Math.floor(r * 255);
+      imgData.data[idx + 1] = Math.floor(g * 255);
+      imgData.data[idx + 2] = Math.floor(b * 255);
+      imgData.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const vertexShader = `
+void main() {
+    gl_Position = vec4( position, 1.0 );
+}
+`;
+
+const fragmentShader = `
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform float u_time;
+uniform sampler2D u_noise;
+uniform sampler2D u_bg;
+uniform float u_scroll;
+
+const vec3 cloudcolour = vec3(.07,0.0,.24);
+const vec3 lightcolour = vec3(.25,0.6,1.);
+
+float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+vec4 perm(vec4 x){return mod289(((x * 34.0) + 1.0) * x);}
+
+float noise(vec3 p){
+    vec3 a = floor(p);
+    vec3 d = p - a;
+    d = d * d * (3.0 - 2.0 * d);
+
+    vec4 b = a.xxyy + vec4(0.0, 1.0, 0.0, 1.0);
+    vec4 k1 = perm(b.xyxy);
+    vec4 k2 = perm(k1.xyxy + b.zzww);
+
+    vec4 c = k2 + a.zzzz;
+    vec4 k3 = perm(c);
+    vec4 k4 = perm(c + 1.0);
+
+    vec4 o1 = fract(k3 * (1.0 / 41.0));
+    vec4 o2 = fract(k4 * (1.0 / 41.0));
+
+    vec4 o3 = o2 * d.z + o1 * (1.0 - d.z);
+    vec2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
+
+    return o4.y * d.y + o4.x * (1.0 - d.y);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+
+  float noise1 = noise(vec3(uv * 3. * noise(vec3(uv * 3. + 100., u_time * 3. + 10.)), u_time * 2.))  * 2.;
+
+  float noise2 = noise(vec3(uv + 2.35, u_time * 1.357 - 10.));
+
+  uv.y -= u_scroll * .0001;
+
+  uv += texture2D(u_bg, uv * vec2(.5, 1.) - vec2(u_time * .05, 1.) - .5 * .05).rg * 0.08 + noise1 * .008 * (1. - clamp(noise1 * noise1 * 2. + .2, 0., 1.));
+
+  vec3 tex = texture2D(u_bg, uv * vec2(.5, 1.) - vec2(u_time * .02, 1.) - .5).rgb;
+
+  uv.y -= u_scroll * .0001;
+  vec3 tex1 = texture2D(u_bg, uv * vec2(.5, 1.) - vec2(u_time * .08, 1.)).rgb;
+
+  uv.y -= u_scroll * .0001;
+  vec3 tex2 = texture2D(u_bg, (uv * .8 + .5) * vec2(.5, 1.) - vec2(u_time * .1, 1.)).rgb;
+
+  vec3 fragcolour = tex;
+
+  float shade = tex.r;
+  shade *= clamp(noise1 * noise2 * sin(u_time * 3.), .2, 10.);
+  shade += shade * shade * 3.;
+  shade -= (1. - clamp(tex1 * 4., 0., 1.).r) * .2;
+  shade -= (1. - clamp(tex2 * 4., 0., 1.).r) * .1;
+
+  fragcolour = mix(cloudcolour, lightcolour, shade);
+
+  gl_FragColor = vec4(fragcolour, 1.);
+}
+`;
+
+let camera, scene, renderer, uniforms;
+
+function init() {
+  camera = new THREE.Camera();
+  camera.position.z = 1;
+
+  scene = new THREE.Scene();
+
+  const geometry = new THREE.PlaneGeometry(2, 2);
+
+  uniforms = {
+    u_time: { value: 1.0 },
+    u_resolution: { value: new THREE.Vector2() },
+    u_noise: { value: makeNoiseTexture() },
+    u_bg: { value: makeCloudTexture() },
+    // Group 1: no live pointer/scroll input. u_mouse is unused by the shader
+    // and stays at (0,0); u_scroll is pinned to a fixed 0 below instead of
+    // polling window.scrollY (the page never scrolls: overflow is hidden).
+    u_mouse: { value: new THREE.Vector2(0, 0) },
+    u_scroll: { value: 0 },
+  };
+
+  const material = new THREE.ShaderMaterial({
+    uniforms: uniforms,
+    vertexShader: vertexShader,
+    fragmentShader: fragmentShader,
+  });
+  material.extensions.derivatives = true;
+
+  const mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
+
+  // The shader always writes gl_FragColor.a = 1.0 and paints the whole
+  // canvas with dark storm-cloud colour, so the dark background is kept
+  // (a transparent clear wouldn't be visible through it anyway).
+  renderer = new THREE.WebGLRenderer({ alpha: true });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  document.body.appendChild(renderer.domElement);
+
+  onWindowResize();
+  window.addEventListener('resize', onWindowResize, false);
+}
+
+function onWindowResize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  uniforms.u_resolution.value.x = renderer.domElement.width;
+  uniforms.u_resolution.value.y = renderer.domElement.height;
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  uniforms.u_time.value = -1000 + performance.now() * 0.0005;
+  uniforms.u_scroll.value = 0;
+  renderer.render(scene, camera);
+}
+
+init();
+animate();
+</script>
+</body>
+</html>

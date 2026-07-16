@@ -100,6 +100,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case webSnowfall
     case webStarfall
     case webCoralBlooms
+    case webStorm
 
     public var id: String { rawValue }
 
@@ -114,7 +115,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
              .aquarium,
              .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver,
-             .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms:
+             .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm:
             return false
         default:
             return true
@@ -246,6 +247,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .webSnowfall: return "Snowfall"
         case .webStarfall: return "Starfall"
         case .webCoralBlooms: return "Coral Blooms"
+        case .webStorm: return "Storm"
         }
     }
 
@@ -286,7 +288,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .christmas
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             return .bioluminescent
-        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms:
+        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm:
             return .webGL
         }
     }
