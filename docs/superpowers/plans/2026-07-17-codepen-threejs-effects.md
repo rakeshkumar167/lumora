@@ -14,6 +14,7 @@
 
 - **Single shared three version: `0.167`.** Every ES-module pen resolves `"three"` and `"three/addons/"` against the local vendored 0.167 build. Older pens are adapted to it.
 - **No CDN at runtime.** All JS loads from `file://` under `Sources/Lumora/Web/`. Fetching libs from a CDN *during implementation* (to vendor them) is fine.
+- **ESM loading uses a custom URL scheme, NOT file://.** Bundled effect pages are served over `lumora-effect://local/<name>.html` via a `WKURLSchemeHandler` (Task 1), giving pages a real origin so sibling-module `import` works with the WKWebView sandbox fully intact. Do NOT use `allowUniversalAccessFromFileURLs`/`allowFileAccessFromFileURLs` (user decision: keep the sandbox). The handler serves only files resolved within the bundled `Web/` directory (reject `..` traversal), with correct MIME types (`.js`/`.mjs` → `text/javascript`, `.html` → `text/html`). Both `WebEffectContent.swift` and `scripts/verify_web_effect.swift` load via this scheme. Runtime CDN-avoidance is enforced by the offline verify.
 - **No live input.** Remove every `mousemove`/`pointermove`/`pointerdown`/`wheel`/`scroll`/`ScrollTrigger`/`OrbitControls`-drag path. Group-1 pens: remove listener (center the value, add `autoRotate`/auto-drift where it was the only motion). Group-2 pens: feed `autopilot.js` in place of real input.
 - **No text/DOM chrome.** Each page reduces to `<head>` (charset, full-bleed CSS, importmap, vendored `<script>`s) + one `<canvas>` + the effect script. Remove all headings, captions, credit/attribution links, `dat.gui`, layout divs (`.scroll-space`, "Fire Scroll", Framer links), and the CodePen `stopExecutionOnTimeout` `<script>`.
 - **No color config.** Every new `EffectKind` is `usesColor = false`, `usesAccent = false`, `supportsAudio = false`, `category = .webGL`.
@@ -203,10 +204,14 @@ const start = performance.now();
 </html>
 ```
 
+- [ ] **Step 3b: Serve effect pages over a custom URL scheme (`lumora-effect://`)**
+
+WKWebView denies sibling ES-module `import` from a `loadFileURL` page as cross-origin (blank render). Instead of weakening the sandbox, register a `WKURLSchemeHandler` that serves the bundled `Web/` directory over `lumora-effect://local/…`, and load `lumora-effect://local/<name>.html`. Requirements: resolve the URL path within the bundled `Web/` dir only (reject `..`), return correct MIME (`.js`/`.mjs` → `text/javascript`, `.html` → `text/html`), 404 for missing files. Apply in BOTH `Sources/Lumora/Views/WebEffectContent.swift` (production loader) and `scripts/verify_web_effect.swift` (may inline its own copy, since standalone scripts can't import the app module). Do NOT set any `allow*AccessFromFileURLs` flag.
+
 - [ ] **Step 4: Verify the foundation renders**
 
 Run: `swift scripts/verify_web_effect.swift _smoketest`
-Expected: `PASS` — non-blank and animates. If it fails with a blank frame, the importmap or three path is wrong; fix before proceeding.
+Expected: `PASS` — non-blank and animates. Then `swift build` must still succeed.
 
 - [ ] **Step 5: Commit**
 
