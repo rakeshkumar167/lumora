@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Space Globe</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+<!-- simplex-noise 2.4 (classic API: new SimplexNoise(); noise.noise3D(x,y,z)) — exposes global SimplexNoise -->
+<script src="lib/simplex-noise-2.4.min.js"></script>
+</head>
+<body>
+<script type="module">
+// Port of isladjan "Space Globe" (CodePen bGpjZwN), three r121 → 0.167.
+// r121 was a script-tag global build; here three is an ES module, so we import
+// it and expose it as window.THREE for parity with the original code shape.
+import * as THREE from 'three';
+window.THREE = THREE;
+
+// ── Procedural textures ──────────────────────────────────────────────────────
+// The original loaded six images + a body background from external CDNs. Runtime
+// CDN loads are disallowed here, so equivalent textures are generated on-canvas.
+
+// Soft round glow sprite for the star points.
+function makeStarSprite() {
+  const s = 64, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.2, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.5, 'rgba(180,210,255,0.35)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(cv); t.needsUpdate = true; return t;
+}
+
+// Mottled, speckled surface for the noisy nucleus blob (stand-in for star.jpg).
+function makeNucleusTexture() {
+  const w = 512, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#1b2a5a'); g.addColorStop(0.5, '#25123f'); g.addColorStop(1, '#0a1230');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1400; i++) {
+    const x = Math.random() * w, y = Math.random() * h, r = Math.random() * 1.6 + 0.2;
+    const b = 120 + Math.random() * 135;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${b},${b},${Math.min(255, b + 40)},${0.4 + Math.random() * 0.6})`;
+    ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = 16; t.needsUpdate = true; return t;
+}
+
+// Dark nebula starfield for the enclosing background sphere (stand-in for sky.jpg).
+function makeSkyTexture() {
+  const w = 1024, h = 512, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, '#05060f'); g.addColorStop(0.5, '#0a0a1e'); g.addColorStop(1, '#03040a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // Faint nebula blooms.
+  for (let i = 0; i < 6; i++) {
+    const x = Math.random() * w, y = Math.random() * h, r = 120 + Math.random() * 220;
+    const hue = ['80,90,180', '120,70,160', '60,110,160'][i % 3];
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, `rgba(${hue},0.18)`); rg.addColorStop(1, `rgba(${hue},0)`);
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
+  }
+  // Stars.
+  for (let i = 0; i < 900; i++) {
+    const x = Math.random() * w, y = Math.random() * h, r = Math.random() * 1.3 + 0.1;
+    const a = 0.3 + Math.random() * 0.7;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = 16; t.needsUpdate = true; return t;
+}
+
+// ── Scene ────────────────────────────────────────────────────────────────────
+let renderer, scene, camera, sphereBg, nucleus, stars;
+const noise = new SimplexNoise();
+const blobScale = 3;
+let nucleusDirs;          // Float32Array of per-vertex unit directions (blob math)
+let movingStars = [];     // JS-side state for the 50 in-flying star points
+let camAngle = 0;         // autonomous camera orbit (replaces OrbitControls.autoRotate)
+
+function randomPointSphere(radius) {
+  const theta = 2 * Math.PI * Math.random();
+  const phi = Math.acos(2 * Math.random() - 1);
+  const dx = radius * Math.sin(phi) * Math.cos(theta);
+  const dy = radius * Math.sin(phi) * Math.sin(theta);
+  const dz = radius * Math.cos(phi);
+  return new THREE.Vector3(dx, dy, dz);
+}
+
+function init() {
+  scene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 1000);
+  camera.position.set(0, 0, 230);
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+  directionalLight.position.set(0, 50, -20);
+  scene.add(directionalLight);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+  scene.add(ambientLight);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setClearColor(0x000000, 0);   // transparent; the bg sphere supplies the dark space backdrop
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  document.body.appendChild(renderer.domElement);
+
+  const starSprite = makeStarSprite();
+
+  /* Nucleus — noisy displaced icosphere. r121 used THREE.Geometry + geometry.vertices;
+     0.167 IcosahedronGeometry is a (non-indexed) BufferGeometry, so we displace the
+     position attribute directly. Duplicate verts share a position, and the noise is a
+     pure function of direction+time, so they stay welded (no cracks). */
+  const icosahedronGeometry = new THREE.IcosahedronGeometry(30, 10);
+  const nucleusMaterial = new THREE.MeshPhongMaterial({ map: makeNucleusTexture() });
+  nucleus = new THREE.Mesh(icosahedronGeometry, nucleusMaterial);
+  const npos = icosahedronGeometry.attributes.position;
+  nucleusDirs = new Float32Array(npos.count * 3);
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < npos.count; i++) {
+    tmp.fromBufferAttribute(npos, i).normalize();
+    nucleusDirs[i * 3] = tmp.x; nucleusDirs[i * 3 + 1] = tmp.y; nucleusDirs[i * 3 + 2] = tmp.z;
+  }
+  scene.add(nucleus);
+
+  /* Background sphere (BackSide) */
+  const geometrySphereBg = new THREE.SphereGeometry(150, 40, 40);
+  const materialSphereBg = new THREE.MeshBasicMaterial({ side: THREE.BackSide, map: makeSkyTexture() });
+  sphereBg = new THREE.Mesh(geometrySphereBg, materialSphereBg);
+  scene.add(sphereBg);
+
+  /* Moving stars — 50 points that fly inward and respawn */
+  const movingPos = new Float32Array(50 * 3);
+  for (let i = 0; i < 50; i++) {
+    const p = randomPointSphere(150);
+    movingStars.push({
+      x: p.x, y: p.y, z: p.z,
+      startX: p.x, startY: p.y, startZ: p.z,
+      velocity: THREE.MathUtils.randInt(50, 200),
+    });
+    movingPos[i * 3] = p.x; movingPos[i * 3 + 1] = p.y; movingPos[i * 3 + 2] = p.z;
+  }
+  const starsGeometry = new THREE.BufferGeometry();
+  starsGeometry.setAttribute('position', new THREE.BufferAttribute(movingPos, 3));
+  const starsMaterial = new THREE.PointsMaterial({
+    size: 5, color: 0xffffff, transparent: true, opacity: 0.8,
+    map: starSprite, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  stars = new THREE.Points(starsGeometry, starsMaterial);
+  scene.add(stars);
+
+  /* Fixed stars */
+  function createStars(size, total) {
+    const positions = new Float32Array(total * 3);
+    for (let i = 0; i < total; i++) {
+      const radius = THREE.MathUtils.randInt(149, 70);
+      const p = randomPointSphere(radius);
+      positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; positions[i * 3 + 2] = p.z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      size, map: starSprite, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    return new THREE.Points(geo, mat);
+  }
+  scene.add(createStars(15, 20));
+  scene.add(createStars(5, 5));
+  scene.add(createStars(7, 5));
+}
+
+function animate() {
+  // Moving stars: drift toward center, respawn near it.
+  const mpos = stars.geometry.attributes.position;
+  for (let i = 0; i < movingStars.length; i++) {
+    const v = movingStars[i];
+    v.x += (0 - v.x) / v.velocity;
+    v.y += (0 - v.y) / v.velocity;
+    v.z += (0 - v.z) / v.velocity;
+    v.velocity -= 0.3;
+    if (v.x <= 5 && v.x >= -5 && v.z <= 5 && v.z >= -5) {
+      v.x = v.startX; v.y = v.startY; v.z = v.startZ;
+      v.velocity = THREE.MathUtils.randInt(50, 300);
+    }
+    mpos.array[i * 3] = v.x; mpos.array[i * 3 + 1] = v.y; mpos.array[i * 3 + 2] = v.z;
+  }
+  mpos.needsUpdate = true;
+
+  // Nucleus blob: displace each vertex along its fixed direction by simplex noise.
+  const npos = nucleus.geometry.attributes.position;
+  const time = Date.now();
+  for (let i = 0; i < npos.count; i++) {
+    const dx = nucleusDirs[i * 3], dy = nucleusDirs[i * 3 + 1], dz = nucleusDirs[i * 3 + 2];
+    const distance = 30 + noise.noise3D(
+      dx + time * 0.0005, dy + time * 0.0003, dz + time * 0.0008) * blobScale;
+    npos.array[i * 3] = dx * distance;
+    npos.array[i * 3 + 1] = dy * distance;
+    npos.array[i * 3 + 2] = dz * distance;
+  }
+  npos.needsUpdate = true;
+  nucleus.geometry.computeVertexNormals();
+  nucleus.rotation.y += 0.002;
+
+  // Background sphere slow tumble.
+  sphereBg.rotation.x += 0.002;
+  sphereBg.rotation.y += 0.002;
+  sphereBg.rotation.z += 0.002;
+
+  // Autonomous camera orbit (replaces OrbitControls.autoRotate; no drag input).
+  camAngle += 0.0018;
+  camera.position.x = Math.sin(camAngle) * 230;
+  camera.position.z = Math.cos(camAngle) * 230;
+  camera.lookAt(0, 0, 0);
+
+  renderer.render(scene, camera);
+}
+
+let lastW = 0, lastH = 0;
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  if (w === lastW && h === lastH) return;
+  lastW = w; lastH = h;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+
+init();
+(function loop() {
+  resize();
+  animate();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
