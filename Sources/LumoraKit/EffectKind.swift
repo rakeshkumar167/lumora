@@ -91,6 +91,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case driftingSpores
     case glowingFlora
     case bioRiver
+    // WebGL / JS effects rendered in a WKWebView (curated bundled pages).
+    case webPlasma
 
     public var id: String { rawValue }
 
@@ -104,7 +106,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
              .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
              .aquarium,
-             .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
+             .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver,
+             .webPlasma:
             return false
         default:
             return true
@@ -228,6 +231,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .driftingSpores: return "Drifting Spores"
         case .glowingFlora: return "Glowing Flora"
         case .bioRiver: return "Bioluminescent River"
+        case .webPlasma: return "WebGL Plasma"
         }
     }
 
@@ -268,6 +272,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .christmas
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             return .bioluminescent
+        case .webPlasma:
+            return .webGL
         }
     }
 }
@@ -288,6 +294,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case clocks
     case christmas
     case bioluminescent
+    case webGL
 
     public var id: String { rawValue }
 
@@ -306,6 +313,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .clocks: return "Clocks & Info"
         case .christmas: return "Christmas Lights"
         case .bioluminescent: return "Bioluminescent"
+        case .webGL: return "WebGL & Shaders"
         }
     }
 

@@ -90,9 +90,14 @@ Mirrors `VideoContent`'s `NSViewRepresentable` shape (which hosts an
 
 ## Warp handling (primary risk — spiked FIRST)
 
-Warp onto the surface quad is a v1 requirement, and a **live `WKWebView` under
-`.projectionEffect` is unverified**. Implementation Task 1 is a warp spike with
-a decision ladder, resolved before building the three effects:
+**RESOLVED (2026-07-16, `scripts/spike_web_warp.swift`): step 1 works.** A live
+`WKWebView` running the WebGL plasma page, placed under a perspective
+`.projectionEffect`, renders keystoned with true perspective at full framerate
+(screenshot eyeballed) — the same path `VideoContent` uses. No `CATransform3D`
+or per-frame snapshot fallback is needed; web effects warp exactly like
+image/video surfaces via the existing `SurfaceContentView.quadBody`.
+
+Original decision ladder (kept for the record):
 
 1. **Live `.projectionEffect`** — the same path `VideoContent` uses (the parent
    `SurfaceContentView.quadBody` applies `ProjectionTransform(homography)`). Try

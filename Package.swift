@@ -11,7 +11,10 @@ let package = Package(
         .executableTarget(
             name: "Lumora",
             dependencies: ["LumoraKit"],
-            resources: [.process("Resources")]
+            // `.process` optimizes/flattens the flat asset folder; the bundled
+            // web effects live in their own `Web/` dir and are `.copy`'d verbatim
+            // so each .html can reference its sibling `lib/*.js` by relative path.
+            resources: [.process("Resources"), .copy("Web")]
         ),
         // Minimal tests — homography math only (the correctness-critical piece).
         .testTarget(

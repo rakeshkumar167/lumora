@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--
+  WebGL Plasma — a self-contained animated GLSL fragment shader (no external
+  library). Renders a full-canvas WebGL quad; the fragment shader draws a
+  flowing plasma/interference field animated by an `iTime` uniform driven by
+  requestAnimationFrame. Bundled and loaded into a WKWebView by
+  WebEffectContent (see the WebGL/JS effects spec). Background is transparent so
+  the effect can overlay other surfaces.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<script>
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', { premultipliedAlpha: false, alpha: true });
+
+const vsSource = `
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+// Flowing plasma: layered sinusoidal fields + a warped domain, cycled through a
+// teal/violet/magenta palette so it reads as a lush projection backdrop.
+const fsSource = `
+precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+vec3 palette(float t) {
+  vec3 a = vec3(0.32, 0.24, 0.42);
+  vec3 b = vec3(0.45, 0.42, 0.55);
+  vec3 c = vec3(1.0, 1.0, 1.0);
+  vec3 d = vec3(0.15, 0.35, 0.55);
+  return a + b * cos(6.28318 * (c * t + d));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / min(iResolution.x, iResolution.y);
+  float t = iTime * 0.25;
+
+  // Domain warp for organic swirl.
+  vec2 p = uv * 3.0;
+  p += 0.6 * vec2(sin(p.y * 1.5 + t), cos(p.x * 1.5 - t));
+
+  float v = 0.0;
+  v += sin(p.x + t);
+  v += sin(p.y * 0.9 - t * 1.2);
+  v += sin((p.x + p.y) * 0.7 + t * 0.8);
+  v += sin(length(p) * 1.3 - t * 1.5);
+  v = v / 4.0;
+
+  float hue = 0.5 + 0.5 * v + 0.1 * t;
+  vec3 col = palette(hue);
+
+  // Gentle vignette + glow lift.
+  float d = length(uv);
+  col *= 1.15 - 0.35 * d;
+  col += 0.06 * vec3(0.3, 0.9, 1.0) * (0.5 + 0.5 * sin(t * 2.0));
+
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
+`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSource));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSource));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uRes = gl.getUniformLocation(prog, 'iResolution');
+const uTime = gl.getUniformLocation(prog, 'iTime');
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.floor(canvas.clientWidth * dpr);
+  const h = Math.floor(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+}
+
+const start = performance.now();
+function frame() {
+  resize();
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, (performance.now() - start) / 1000.0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

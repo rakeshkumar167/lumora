@@ -1139,6 +1139,18 @@ private struct EffectView: View {
             christmasEffects
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             bioluminescentEffects
+        case .webPlasma:
+            webEffects
+        }
+    }
+
+    /// Curated JS/WebGL effects rendered in a `WKWebView` (see
+    /// `WebEffectContent`). Perspective-warped by the parent like other media.
+    @ViewBuilder private var webEffects: some View {
+        if let resource = WebEffect.resource(for: kind) {
+            WebEffectContent(resource: resource)
+        } else {
+            Color.clear
         }
     }
 
