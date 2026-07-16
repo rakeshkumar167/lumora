@@ -1,7 +1,7 @@
 # Bioluminescent Night Scenes — Design / Requirements
 
 **Date:** 2026-07-16
-**Status:** Approved (brainstorm), ready for implementation plan.
+**Status:** Implemented 2026-07-16 (all 4 effects shipped; see BACKLOG "Done recently").
 
 ## Summary
 

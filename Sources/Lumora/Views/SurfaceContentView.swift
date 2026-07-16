@@ -1084,6 +1084,24 @@ private struct EffectView: View {
             clockEffects
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             christmasEffects
+        case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
+            bioluminescentEffects
+        }
+    }
+
+    /// Bioluminescent "Pandora night jungle" scene effects. All use the fixed
+    /// `BioPalette`, so none take primary/accent colors (see `usesColor`).
+    @ViewBuilder private var bioluminescentEffects: some View {
+        switch kind {
+        case .mistyPeaks:
+            MistyPeaksView(time: time)
+        case .driftingSpores:
+            DriftingSporesView(time: time)
+        case .glowingFlora:
+            GlowingFloraView(time: time)
+        case .bioRiver:
+            BioRiverView(time: time)
+        default: EmptyView()
         }
     }
 

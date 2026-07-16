@@ -148,6 +148,27 @@ true single-line centrelines (thick strokes still trace as boundary loops).
 - **Design doc rename** — `docs/superpowers/specs/2026-07-05-spatialcanvas-design.md`
   still uses the old "SpatialCanvas" name.
 
+## Done recently (2026-07-16)
+
+- **Bioluminescent night scenes** — a new **Bioluminescent** effect category
+  (`EffectCategory.bioluminescent`) with four composable "Avatar/Pandora night
+  jungle" effects sharing one fixed `BioPalette` (defined in
+  `Sources/Lumora/Views/BioluminescentViews.swift`), so none expose color
+  pickers (all in the `usesColor` false-list): **Misty Peaks** (`mistyPeaks`,
+  stateless moonlit sky + parallax mountain ridges + drifting mist bands),
+  **Drifting Spores** (`driftingSpores`, reuses `ParticleSwarmSystem` + `nudgeY`
+  rise like Butterflies — soft glowing rising woodsprite motes), **Glowing
+  Flora** (`glowingFlora`, `GrowingIvy`-style grow→hold→fade cycle anchored to a
+  per-view `startRef`, but plants rooted at the bottom growing upward with
+  glowing flower-pods + fronds), and **Bioluminescent River** (`bioRiver`,
+  `InkFlow`-style stateful mote buffer advected by a directional current +
+  `CurlNoiseField` meander, velocity-aligned glowing streaks over a water
+  gradient). Additive-only (new `EffectKind` cases + category, derived from
+  `category` so save-compatible; no config structs). Each validated by a
+  `scripts/verify_<name>.swift` (non-blank + variance + change/growth/flow over
+  time) and an eyeballed frame; full `swift test` still 96/96. Spec:
+  `docs/superpowers/specs/2026-07-16-bioluminescent-scenes-design.md`.
+
 ## Done recently (2026-07-13)
 
 - **Native 3D effects** — a software 3D pipeline in Canvas (rotate → perspective

@@ -86,6 +86,11 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case godRays
     case inkFlow
     case mazeSolve
+    // Bioluminescent night scenes (fixed Pandora palette; no color pickers).
+    case mistyPeaks
+    case driftingSpores
+    case glowingFlora
+    case bioRiver
 
     public var id: String { rawValue }
 
@@ -98,7 +103,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .weatherWidget,
              .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
              .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
-             .aquarium:
+             .aquarium,
+             .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             return false
         default:
             return true
@@ -218,6 +224,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .godRays: return "God Rays"
         case .inkFlow: return "Ink in Water"
         case .mazeSolve: return "Maze Solve"
+        case .mistyPeaks: return "Misty Peaks"
+        case .driftingSpores: return "Drifting Spores"
+        case .glowingFlora: return "Glowing Flora"
+        case .bioRiver: return "Bioluminescent River"
         }
     }
 
@@ -256,6 +266,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .clocks
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             return .christmas
+        case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
+            return .bioluminescent
         }
     }
 }
@@ -275,6 +287,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case edge
     case clocks
     case christmas
+    case bioluminescent
 
     public var id: String { rawValue }
 
@@ -292,6 +305,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .edge: return "Edge"
         case .clocks: return "Clocks & Info"
         case .christmas: return "Christmas Lights"
+        case .bioluminescent: return "Bioluminescent"
         }
     }
 
