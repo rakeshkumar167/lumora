@@ -8,19 +8,63 @@ import AppKit
 import WebKit
 
 let name = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "plasma"
-let htmlPath = FileManager.default.currentDirectoryPath + "/Sources/Lumora/Web/\(name).html"
+let webRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath + "/Sources/Lumora/Web", isDirectory: true)
+let htmlPath = webRoot.appendingPathComponent("\(name).html").path
 guard FileManager.default.fileExists(atPath: htmlPath) else { print("FAIL: missing \(htmlPath)"); exit(1) }
-let htmlURL = URL(fileURLWithPath: htmlPath)
+
+// Inlined copy of the production WebEffectSchemeHandler (a standalone script
+// can't import the app module). Serves `webRoot` over `lumora-effect://` so the
+// page's sibling ES-module imports resolve same-origin — no file:// universal
+// access. Mirrors Sources/Lumora/Views/WebEffectSchemeHandler.swift.
+final class SchemeHandler: NSObject, WKURLSchemeHandler {
+    static let scheme = "lumora-effect"
+    private let root: URL
+    private var active = Set<ObjectIdentifier>()
+    init(root: URL) { self.root = root.standardizedFileURL; super.init() }
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        let id = ObjectIdentifier(task); active.insert(id)
+        guard let reqURL = task.request.url, let fileURL = resolve(reqURL),
+              let data = try? Data(contentsOf: fileURL) else { notFound(task); return }
+        guard active.contains(id) else { return }
+        let resp = HTTPURLResponse(url: reqURL, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": Self.mime(fileURL.pathExtension),
+                           "Content-Length": String(data.count)])!
+        task.didReceive(resp); task.didReceive(data); task.didFinish(); active.remove(id)
+    }
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) { active.remove(ObjectIdentifier(task)) }
+
+    private func resolve(_ url: URL) -> URL? {
+        var p = url.path; if p.hasPrefix("/") { p.removeFirst() }
+        let cand = root.appendingPathComponent(p).standardizedFileURL
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard cand.path == root.path || cand.path.hasPrefix(rootPath) else { return nil }
+        return cand
+    }
+    private func notFound(_ task: WKURLSchemeTask) {
+        let id = ObjectIdentifier(task); guard active.contains(id) else { return }
+        let resp = HTTPURLResponse(url: URL(string: "\(Self.scheme)://local/")!,
+            statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+        task.didReceive(resp); task.didFinish(); active.remove(id)
+    }
+    static func mime(_ ext: String) -> String {
+        switch ext.lowercased() {
+        case "js", "mjs": return "text/javascript"
+        case "html": return "text/html"
+        case "css": return "text/css"
+        case "json": return "application/json"
+        default: return "application/octet-stream"
+        }
+    }
+}
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 let frame = NSRect(x: 0, y: 0, width: 640, height: 440)
 let config = WKWebViewConfiguration()
-// Required so bundled ES-module effect pages can `import` sibling `file://`
-// modules — WKWebView otherwise denies fetch()/import() of file:// siblings as
-// cross-origin, even within the loadFileURL allowingReadAccessTo sandbox.
-config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+let schemeHandler = SchemeHandler(root: webRoot)
+config.setURLSchemeHandler(schemeHandler, forURLScheme: SchemeHandler.scheme)
 let webView = WKWebView(frame: frame, configuration: config)
 let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
 window.contentView = webView
@@ -84,6 +128,6 @@ final class Nav: NSObject, WKNavigationDelegate {
 }
 let nav = Nav()
 webView.navigationDelegate = nav
-webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+webView.load(URLRequest(url: URL(string: "\(SchemeHandler.scheme)://local/\(name).html")!))
 DispatchQueue.main.asyncAfter(deadline: .now() + 12) { print("FAIL: timed out"); exit(1) }
 app.run()

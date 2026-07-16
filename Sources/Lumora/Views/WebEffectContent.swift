@@ -17,11 +17,13 @@ struct WebEffectContent: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        // Required so bundled ES-module effect pages can `import` sibling
-        // `file://` modules — WKWebView otherwise denies fetch()/import() of
-        // file:// siblings as cross-origin, even within the loadFileURL
-        // allowingReadAccessTo sandbox.
-        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        // Serve bundled pages + their sibling ES modules over the custom
+        // `lumora-effect://` scheme. One shared origin keeps module imports
+        // same-origin (so WKWebView permits them) while leaving the file://
+        // sandbox intact.
+        if let handler = context.coordinator.schemeHandler {
+            config.setURLSchemeHandler(handler, forURLScheme: WebEffectSchemeHandler.scheme)
+        }
         let webView = WKWebView(frame: .zero, configuration: config)
         // Transparent background so the effect overlays other surfaces.
         webView.setValue(false, forKey: "drawsBackground")
@@ -44,16 +46,25 @@ struct WebEffectContent: NSViewRepresentable {
     final class Coordinator {
         private var currentResource: String?
 
+        /// Serves the bundled `Web/` directory over `lumora-effect://`. Created
+        /// once from the bundle's Web root; `nil` only if the bundle is missing
+        /// its Web resources (which would fail the load anyway).
+        lazy var schemeHandler: WebEffectSchemeHandler? = {
+            guard let webRoot = WebEffect.webRootURL else { return nil }
+            return WebEffectSchemeHandler(root: webRoot)
+        }()
+
         func load(_ resource: String, into webView: WKWebView) {
             guard resource != currentResource else { return }
             currentResource = resource
-            guard let url = WebEffect.url(forResource: resource) else {
+            guard WebEffect.url(forResource: resource) != nil else {
                 assertionFailure("Missing bundled web effect: \(resource).html")
                 return
             }
-            // Grant read access to the whole `Web` directory so the page can
-            // load sibling vendored libraries (three.min.js, p5.min.js).
-            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+            // Load via the custom scheme so sibling ES-module imports resolve
+            // same-origin against the WebEffectSchemeHandler's Web root.
+            guard let url = URL(string: "\(WebEffectSchemeHandler.scheme)://local/\(resource).html") else { return }
+            webView.load(URLRequest(url: url))
         }
     }
 }
@@ -76,5 +87,12 @@ enum WebEffect {
     /// The bundled page's file URL under the copied `Web/` resource directory.
     static func url(forResource name: String) -> URL? {
         Bundle.module.url(forResource: name, withExtension: "html", subdirectory: "Web")
+    }
+
+    /// The bundled `Web/` resource directory, used as the scheme handler's root
+    /// so it can serve every page plus its sibling `lib/*` modules. Derived from
+    /// the smoke-test page's URL (any bundled page's parent is the Web root).
+    static var webRootURL: URL? {
+        url(forResource: "_smoketest")?.deletingLastPathComponent()
     }
 }
