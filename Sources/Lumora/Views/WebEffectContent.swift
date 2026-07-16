@@ -17,6 +17,11 @@ struct WebEffectContent: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        // Required so bundled ES-module effect pages can `import` sibling
+        // `file://` modules — WKWebView otherwise denies fetch()/import() of
+        // file:// siblings as cross-origin, even within the loadFileURL
+        // allowingReadAccessTo sandbox.
+        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         let webView = WKWebView(frame: .zero, configuration: config)
         // Transparent background so the effect overlays other surfaces.
         webView.setValue(false, forKey: "drawsBackground")

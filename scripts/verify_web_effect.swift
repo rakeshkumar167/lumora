@@ -16,7 +16,12 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 let frame = NSRect(x: 0, y: 0, width: 640, height: 440)
-let webView = WKWebView(frame: frame)
+let config = WKWebViewConfiguration()
+// Required so bundled ES-module effect pages can `import` sibling `file://`
+// modules — WKWebView otherwise denies fetch()/import() of file:// siblings as
+// cross-origin, even within the loadFileURL allowingReadAccessTo sandbox.
+config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+let webView = WKWebView(frame: frame, configuration: config)
 let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
 window.contentView = webView
 window.orderBack(nil)
