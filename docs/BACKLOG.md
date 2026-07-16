@@ -23,6 +23,27 @@ Requirements captured for future sessions.
   more convincingly as ink diffusing in water (e.g. softer/variable blob edges,
   finer tendrils via more/smaller sub-blobs per bloom, denser curl advection,
   slower fade, spawn from varied points not just the lower frame).
+- **WebGL Plasma palette** (2026-07-16) — the `webPlasma` shader's cosine
+  palette reads more rainbow (blue→orange→red) than the intended teal/violet
+  house look. Tune the `palette()` coefficients in
+  `Sources/Lumora/Web/plasma.html` toward the cyan/violet family the other new
+  effects use.
+
+## WebGL effects follow-ups (2026-07-16)
+
+- **Sync web effects to Lumora's clock** — web pages currently self-animate via
+  their own `requestAnimationFrame`; they are not driven by the shared global
+  effect `time`. Bridge a `time`/`iTime` uniform into the page (e.g. via
+  `evaluateJavaScript` or a `WKScriptMessageHandler`) so web effects can be
+  scrubbed/paused with the timeline and stay in sync across editor + projection.
+- **Audio-reactive web effects** — with a uniform bridge in place, feed mic FFT
+  levels (see `AudioInputManager`) into shader/three.js/p5 uniforms so web
+  effects can react to sound like the native audio effects.
+- **Pause off-screen / inactive-scene web views** — each `WKWebView` is a full
+  browser instance and keeps animating even when its scene isn't active; pause
+  or throttle hidden web views for performance.
+- **More web effects** — the framework now supports GLSL/three.js/p5; add more
+  curated pages (Shadertoy ports, etc.) in verified sets.
 
 ## Effects — DONE ✅
 
@@ -70,17 +91,12 @@ enriched. `kaleidoscope`/`fire` are the heaviest per-frame.
 ## Code-authored / external effects (explored 2026-07-06)
 
 Two viable ways to add effects written in code beyond the built-in `EffectKind`
-set. Both are feasible; not yet built.
+set.
 
-- **JS / WebGL effect surfaces (`WKWebView`)** — add a `.web(URL)` media type
-  backed by a `WKWebView` hosted via `NSViewRepresentable` (same pattern as
-  `VideoContent`/`AVPlayerLayer`). Loads a local `.html` running HTML5 canvas /
-  p5.js / three.js / WebGL / Shadertoy-style GLSL. Most literal "bake in JS".
-  Caveat: warping a *live* web layer under `.projectionEffect` is unverified
-  (same open question as video). Fallbacks: apply `CATransform3D` to the web
-  view's layer directly, or `takeSnapshot` per frame and warp as an image
-  (perfect warp but caps framerate). Needs transparent background; each web
-  surface is a full browser instance (heavier than native effects).
+- **JS / WebGL effect surfaces (`WKWebView`)** — **DONE ✅ 2026-07-16** (shipped
+  as the `EffectCategory.webGL` set, not a media type — see "Done recently"
+  below). The `.projectionEffect` warp caveat was resolved: a live `WKWebView`
+  warps correctly with true perspective, no snapshot fallback needed.
 - **Metal shader effects** — native GPU shaders via SwiftUI `.layerEffect` /
   `.colorEffect` (`ShaderLibrary`). Perfect warp (normal SwiftUI view),
   lightweight, Shadertoy-grade. Written in Metal Shading Language, not JS;
@@ -149,6 +165,35 @@ true single-line centrelines (thick strokes still trace as boundary loops).
   still uses the old "SpatialCanvas" name.
 
 ## Done recently (2026-07-16)
+
+- **WebGL / JS effects via `WKWebView`** — a new **WebGL & Shaders** effect
+  category (`EffectCategory.webGL`). Web effects are ordinary `EffectKind` cases
+  dispatched to `WebEffectContent` (a `WKWebView`-backed `NSViewRepresentable`,
+  transparent background) loading curated bundled pages from
+  `Sources/Lumora/Web/` (`.copy("Web")` in `Package.swift` so pages can
+  reference sibling libs). Three starter effects prove the framework across
+  content styles: **WebGL Plasma** (`webPlasma`, self-contained GLSL shader),
+  **3D Particles (WebGL)** (`webParticles3D`, three.js depth-cued point-cloud
+  sphere), **Flow Field (p5)** (`webFlow`, p5.js Perlin flow field). three.js
+  r128 + p5.js v1.9.0 are vendored locally in `Web/lib/` (MIT, no CDN at
+  runtime). Additive / save-compatible (category derived; `usesColor`/`usesAccent`
+  = false). **Warp spike passed** (`scripts/spike_web_warp.swift`): a live
+  `WKWebView` under `.projectionEffect` keystones with true perspective at full
+  framerate — no `CATransform3D`/snapshot fallback. Content verified via
+  `WKWebView.takeSnapshot` (`scripts/verify_web_plasma.swift`,
+  `verify_web_effect.swift`); no `Canvas`-style offscreen verify (live browser).
+  `swift test` still 96/96. Spec:
+  `docs/superpowers/specs/2026-07-16-webgl-wkwebview-design.md`.
+  Follow-ups (below): plasma palette tune; clock/audio sync.
+- **Maze Solve tracer fix** — the grid tracer now moves ALONG the walls while
+  drawing the maze, not through the corridors. The earlier "render walls, not
+  passage center-lines" fix had left the carve head at cell centers (between
+  walls) and revealed walls by scattered cell-visit order. Now the carve phase
+  traces walls with a glowing pen in nearest-neighbour order (`orderWalls`,
+  cached per cycle with cumulative arc lengths, mirroring the Contour Trace
+  pen-walk), revealing by arc length with the head on the wall frontier. Solve
+  phase unchanged (threads corridors between walls). Renderer-only; pure `Maze`
+  logic + tests unchanged (96/96). `scripts/verify_maze.swift` updated.
 
 - **Bioluminescent night scenes** — a new **Bioluminescent** effect category
   (`EffectCategory.bioluminescent`) with four composable "Avatar/Pandora night
