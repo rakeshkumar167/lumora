@@ -93,6 +93,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case bioRiver
     // WebGL / JS effects rendered in a WKWebView (curated bundled pages).
     case webPlasma
+    case webParticles3D
+    case webFlow
 
     public var id: String { rawValue }
 
@@ -107,7 +109,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
              .aquarium,
              .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver,
-             .webPlasma:
+             .webPlasma, .webParticles3D, .webFlow:
             return false
         default:
             return true
@@ -232,6 +234,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .glowingFlora: return "Glowing Flora"
         case .bioRiver: return "Bioluminescent River"
         case .webPlasma: return "WebGL Plasma"
+        case .webParticles3D: return "3D Particles (WebGL)"
+        case .webFlow: return "Flow Field (p5)"
         }
     }
 
@@ -272,7 +276,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .christmas
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             return .bioluminescent
-        case .webPlasma:
+        case .webPlasma, .webParticles3D, .webFlow:
             return .webGL
         }
     }

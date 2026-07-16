@@ -1,7 +1,8 @@
 # WebGL / JS Effects via WKWebView — Design / Requirements
 
 **Date:** 2026-07-16
-**Status:** Approved (brainstorm), ready for implementation.
+**Status:** Implemented 2026-07-16 (framework + all 3 starter effects shipped;
+warp spike passed — live `.projectionEffect` warps a `WKWebView`).
 
 ## Summary
 

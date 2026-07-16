@@ -62,6 +62,8 @@ enum WebEffect {
     static func resource(for kind: EffectKind) -> String? {
         switch kind {
         case .webPlasma: return "plasma"
+        case .webParticles3D: return "particles3d"
+        case .webFlow: return "flow"
         default: return nil
         }
     }

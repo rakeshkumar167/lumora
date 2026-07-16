@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!--
+  3D Particles (WebGL) — a three.js scene: a slowly-rotating spherical cloud of
+  additively-blended glowing points, depth-cued, breathing in size. Uses the
+  vendored global build lib/three.min.js (r128, exposes `THREE`) — no CDN.
+  Bundled and loaded into a WKWebView by WebEffectContent. Transparent
+  background so the effect overlays other surfaces.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+<script src="lib/three.min.js"></script>
+</head>
+<body>
+<script>
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+camera.position.z = 6;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setClearColor(0x000000, 0);   // transparent
+document.body.appendChild(renderer.domElement);
+
+// Build a sphere of points with per-point color drawn from a teal→violet ramp.
+const COUNT = 2600;
+const positions = new Float32Array(COUNT * 3);
+const colors = new Float32Array(COUNT * 3);
+const c = new THREE.Color();
+for (let i = 0; i < COUNT; i++) {
+  // Uniform-ish distribution on a sphere shell with a little radial jitter.
+  const u = Math.random(), v = Math.random();
+  const theta = 2 * Math.PI * u, phi = Math.acos(2 * v - 1);
+  const r = 2.4 + (Math.random() - 0.5) * 0.7;
+  const x = r * Math.sin(phi) * Math.cos(theta);
+  const y = r * Math.sin(phi) * Math.sin(theta);
+  const z = r * Math.cos(phi);
+  positions[i*3] = x; positions[i*3+1] = y; positions[i*3+2] = z;
+  const t = (y / 3) * 0.5 + 0.5;                 // vertical gradient
+  c.setHSL(0.5 + 0.25 * t, 0.85, 0.55);          // cyan → violet
+  colors[i*3] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
+}
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const mat = new THREE.PointsMaterial({
+  size: 0.075,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.95,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const points = new THREE.Points(geo, mat);
+scene.add(points);
+
+let lastW = 0, lastH = 0;
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  if (w === lastW && h === lastH) return;
+  lastW = w; lastH = h;
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(w, h);                 // updateStyle = true → CSS matches window
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
+const start = performance.now();
+function animate() {
+  resize();
+  const t = (performance.now() - start) / 1000;
+  points.rotation.y = t * 0.25;
+  points.rotation.x = Math.sin(t * 0.15) * 0.35;
+  mat.size = 0.07 + 0.02 * Math.sin(t * 1.2);    // gentle breathing
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>
