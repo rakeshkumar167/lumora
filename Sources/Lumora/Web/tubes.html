@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tubes</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #canvas { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: block; width: 100vw; height: 100vh; overflow: hidden; }
+</style>
+</head>
+<body>
+<!-- Port of soju22 "Tubes Cursor" (CodePen qEbdVjK). Uses the prebuilt,
+     self-contained threejs-components@0.0.19 tubes1 bundle (bundles its own
+     three; not routed through the shared importmap), vendored as-is to
+     ./lib/tubes1.min.js. All chrome (hero text, Framer link) and the
+     click-to-randomize-colors handler are removed. Group-2 input treatment:
+     the component tracks the real cursor via a "pointermove" listener on
+     document.body; autopilot.js drives it by dispatching a synthetic
+     pointermove each frame with clientX/clientY mapped from the wandering
+     pointer01 signal, so the tubes visibly chase the synthetic cursor. Dark
+     clear kept — the glowing tubes/lights read best on black. -->
+<canvas id="canvas"></canvas>
+<script type="module">
+import TubesCursor from './lib/tubes1.min.js';
+import * as autopilot from './lib/autopilot.js';
+
+const app = TubesCursor(document.getElementById('canvas'), {
+  tubes: {
+    colors: ["#f967fb", "#53bc28", "#6958d5"],
+    lights: {
+      intensity: 200,
+      colors: ["#83f36e", "#fe8a2e", "#ff008a", "#60aed5"] } } });
+
+// Auto-drive: the component listens for "pointermove" on document.body. Feed it
+// a synthetic wandering cursor each frame from autopilot.
+function drive() {
+  autopilot.update(performance.now());
+  const clientX = autopilot.pointer01.x * window.innerWidth;
+  const clientY = autopilot.pointer01.y * window.innerHeight;
+  const ev = new PointerEvent('pointermove', {
+    clientX,
+    clientY,
+    bubbles: true,
+    pointerType: 'mouse' });
+  document.body.dispatchEvent(ev);
+  requestAnimationFrame(drive);
+}
+requestAnimationFrame(drive);
+</script>
+</body>
+</html>
