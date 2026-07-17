@@ -36,7 +36,7 @@ const fragmentShader = `
     uniform float u_stop_time;
     uniform float u_speed;
     uniform vec2 u_stop_randomizer;
-    uniform float u_hue;
+    uniform vec3 u_flower_hsv;
     uniform float u_clean;
     uniform vec2 u_point;
     uniform sampler2D u_texture;
@@ -93,7 +93,7 @@ const fragmentShader = `
         float stem_shape = 1. - pow(smoothstep(0., stem_radius, dot(cursor, cursor)), .03);
         vec3 stem = stem_shape * stem_color;
 
-        vec3 flower_color = hsv2rgb(vec3(u_hue, 0.85, 1.0));
+        vec3 flower_color = hsv2rgb(u_flower_hsv);
         vec3 flower_new = flower_color * flower_shape(cursor, 1., .96, 1., .15, 0.);
         vec3 flower_mask = 1. - vec3(flower_shape(cursor, 1.05, 1.07, 1., .15, 0.));
         vec3 flower_mid = vec3(-.6) * flower_shape(cursor, .15, 1., 2., .1, 1.9);
@@ -115,6 +115,36 @@ const vertexShader = `
 `;
 
 const canvasEl = document.querySelector("#canvas");
+
+// Curated palette of REAL flower colors as HSV triples [hue, sat, val] (hue in
+// [0,1]). Deliberately excludes the green/cyan band (~0.25-0.55) and pure blue
+// (~0.60-0.68) so blooms always read as floral.
+const FLOWER_PALETTE = [
+  [0.00, 0.85, 1.00], // red
+  [0.97, 0.80, 0.95], // crimson/rose
+  [0.92, 0.45, 1.00], // pink
+  [0.88, 0.80, 1.00], // hot-pink/magenta
+  [0.80, 0.85, 0.75], // deep-purple
+  [0.75, 0.55, 0.95], // violet
+  [0.72, 0.35, 0.98], // lavender
+  [0.06, 0.90, 1.00], // orange
+  [0.03, 0.70, 1.00], // coral
+  [0.13, 0.90, 1.00], // yellow
+  [0.11, 0.85, 1.00], // gold
+  [0.10, 0.08, 1.00]  // white/cream
+];
+
+// Pick a random palette entry and add small natural jitter (hue +/-0.02,
+// sat/val +/-0.05), clamped. Returns a THREE.Vector3 (h,s,v) for u_flower_hsv.
+function pickFlowerHSV() {
+  const c = FLOWER_PALETTE[Math.floor(Math.random() * FLOWER_PALETTE.length)];
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  let h = c[0] + (Math.random() - 0.5) * 0.04; // +/-0.02
+  h = (h % 1 + 1) % 1;                          // wrap hue into [0,1]
+  const s = clamp01(c[1] + (Math.random() - 0.5) * 0.10); // +/-0.05
+  const v = clamp01(c[2] + (Math.random() - 0.5) * 0.10); // +/-0.05
+  return new THREE.Vector3(h, s, v);
+}
 
 const pointer = {
   x: .5,
@@ -271,7 +301,7 @@ function createPlane() {
       u_moving: { value: 0. },
       u_speed: { value: 0. },
       u_stop_randomizer: { value: new THREE.Vector2(Math.random(), Math.random()) },
-      u_hue: { value: Math.random() },
+      u_flower_hsv: { value: pickFlowerHSV() },
       u_clean: { value: 1. },
       u_ratio: { value: window.innerWidth / window.innerHeight },
       u_texture: { value: null } },
@@ -298,7 +328,7 @@ function render() {
   if (pointer.moved) {
     shaderMaterial.uniforms.u_moving.value = 1.;
     shaderMaterial.uniforms.u_stop_randomizer.value = new THREE.Vector2(Math.random(), Math.random());
-    shaderMaterial.uniforms.u_hue.value = Math.random();
+    shaderMaterial.uniforms.u_flower_hsv.value = pickFlowerHSV();
     shaderMaterial.uniforms.u_stop_time.value = 0.;
     pointer.moved = false;
   } else {
