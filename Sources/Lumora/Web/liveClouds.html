@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Live Clouds</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+</head>
+<body>
+<script type="module">
+// Port of DenDionigi "Live clouds" (CodePen GRbGLgy), three 0.167 ES module +
+// BufferGeometryUtils. The pen loaded a cloud puff PNG from a CDN
+// (mrdoob.com/lab/.../cloud10.png); runtime CDN loads are disallowed here, so
+// an equivalent soft cloud-puff sprite is generated on-canvas instead.
+// Group-1 input treatment: the mousemove-driven camera parallax target is
+// replaced with a slow autonomous drift at the same amplitude the mouse could
+// reach (±0.25 * halfWidth horizontally, ±0.15 * halfHeight vertically).
+import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+const cloudShader = {
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D map;
+    uniform vec3 fogColor;
+    uniform float fogNear;
+    uniform float fogFar;
+    varying vec2 vUv;
+
+    void main() {
+      float depth = gl_FragCoord.z / gl_FragCoord.w;
+      float fogFactor = smoothstep( fogNear, fogFar, depth );
+
+      gl_FragColor = texture2D( map, vUv );
+      gl_FragColor.w *= pow( gl_FragCoord.z, 20.0 );
+      gl_FragColor = mix( gl_FragColor, vec4( fogColor , gl_FragColor.w ), fogFactor );
+    }
+  `,
+};
+
+// Soft, fluffy cloud-puff sprite (stand-in for the CDN cloud10.png). A few
+// overlapping radial-gradient blobs on a transparent canvas read as a puff.
+function makeCloudTexture() {
+  const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const blobs = [
+    [0.50, 0.55, 0.46], [0.32, 0.60, 0.30], [0.68, 0.60, 0.30],
+    [0.40, 0.42, 0.26], [0.60, 0.42, 0.26], [0.50, 0.38, 0.22],
+  ];
+  for (const [bx, by, br] of blobs) {
+    const cx = bx * s, cy = by * s, r = br * s;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0.0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+    g.addColorStop(1.0, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.needsUpdate = true;
+  return t;
+}
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 1, 3000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+renderer.setClearColor(0x000000, 0);   // transparent
+
+let mesh, geometry, material;
+let position;
+
+const start_time = Date.now();
+
+function init() {
+  camera.position.z = 6000;
+
+  geometry = new THREE.BufferGeometry();
+
+  const texture = makeCloudTexture();
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;   // r-typo fix: pen used the non-existent LinearMipMapLinearFilter
+
+  const fog = new THREE.Fog(0x4584b4, -100, 3000);
+  scene.fog = fog;
+
+  material = new THREE.ShaderMaterial({
+    uniforms: {
+      map: { value: texture },
+      fogColor: { value: fog.color },
+      fogNear: { value: fog.near },
+      fogFar: { value: fog.far },
+    },
+    vertexShader: cloudShader.vertexShader,
+    fragmentShader: cloudShader.fragmentShader,
+    depthWrite: false,
+    depthTest: false,
+    transparent: true,
+  });
+
+  const planeGeo = new THREE.PlaneGeometry(64, 64);
+  const planeObj = new THREE.Object3D();
+  const geometries = [];
+
+  for (let i = 0; i < 8000; i++) {
+    planeObj.position.x = Math.random() * 1000 - 500;
+    planeObj.position.y = -Math.random() * Math.random() * 200 - 15;
+    planeObj.position.z = i;
+    planeObj.rotation.z = Math.random() * Math.PI;
+    planeObj.scale.x = planeObj.scale.y = Math.random() * Math.random() * 1.5 + 0.5;
+    planeObj.updateMatrix();
+
+    const clonedPlaneGeo = planeGeo.clone();
+    clonedPlaneGeo.applyMatrix4(planeObj.matrix);
+    geometries.push(clonedPlaneGeo);
+  }
+
+  const planeGeos = BufferGeometryUtils.mergeGeometries(geometries);
+  const planesMesh = new THREE.Mesh(planeGeos, material);
+  planesMesh.renderOrder = 2;
+
+  const planesMeshA = planesMesh.clone();
+  planesMeshA.position.z = -8000;
+  planesMeshA.renderOrder = 1;
+
+  scene.add(planesMesh);
+  scene.add(planesMeshA);
+
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  window.addEventListener('resize', onWindowResize, false);
+
+  animate();
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  position = (Date.now() - start_time) * 0.03 % 8000;
+
+  // Autonomous drift replaces the mousemove camera-parallax target, matching
+  // the original's reachable amplitude: mouseX = (clientX - halfW) * 0.25,
+  // mouseY = (clientY - halfH) * 0.15.
+  const t = (Date.now() - start_time) / 1000;
+  const halfW = window.innerWidth / 2, halfH = window.innerHeight / 2;
+  const targetX = Math.sin(t * 0.05) * halfW * 0.25;
+  const targetY = Math.cos(t * 0.037) * halfH * 0.15;
+
+  camera.position.x += (targetX - camera.position.x) * 0.01;
+  camera.position.y += (-targetY - camera.position.y) * 0.01;
+  camera.position.z = -position + 8000;
+
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>
