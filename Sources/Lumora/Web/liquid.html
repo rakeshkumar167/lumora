@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Liquid</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #canvas { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: block; width: 100vw; height: 100vh; overflow: hidden; }
+</style>
+</head>
+<body>
+<!-- Port of soju22 "Liquid Effect" (CodePen myVWBGa). Uses the prebuilt,
+     self-contained threejs-components@0.0.27 liquid1 bundle (it bundles its own
+     three; NOT routed through the shared importmap). Vendored as-is to
+     ./lib/liquid1.min.js. The displacement/reflection source image the pen
+     fetched from a CDN (assets.codepen.io/.../liquid.webp) is vendored to
+     ./lib/liquid.webp so nothing is fetched at runtime. Autonomous liquid
+     background — no live input. Dark clear kept: it's a metallic reflective
+     surface that reads best on black. -->
+<canvas id="canvas"></canvas>
+<script type="module">
+import LiquidBackground from './lib/liquid1.min.js';
+
+const app = LiquidBackground(document.getElementById('canvas'));
+
+app.loadImage('./lib/liquid.webp');
+app.liquidPlane.material.metalness = 0.75;
+app.liquidPlane.material.roughness = 0.25;
+app.liquidPlane.uniforms.displacementScale.value = 5;
+// Source pen set rain off and relied on the mouse for motion. With live input
+// removed, rain is the autonomous driver that keeps the liquid surface rippling.
+app.setRain(true);
+</script>
+</body>
+</html>

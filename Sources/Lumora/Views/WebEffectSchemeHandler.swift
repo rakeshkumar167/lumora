@@ -99,6 +99,11 @@ final class WebEffectSchemeHandler: NSObject, WKURLSchemeHandler {
         case "html": return "text/html"
         case "css": return "text/css"
         case "json": return "application/json"
+        case "webp": return "image/webp"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "svg": return "image/svg+xml"
         default: return "application/octet-stream"
         }
     }
