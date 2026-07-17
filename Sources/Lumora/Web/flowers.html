@@ -148,6 +148,7 @@ let moveCount = 0;
 let phase = "move";      // "move" (fast traversal) | "pause" (hold to bloom)
 let phaseStart = -1;     // ms timestamp when the current phase began
 let moveFrom = { x: pointer.x, y: pointer.y };
+let moveCtrl = null;     // quadratic Bezier control point for the curved path
 let target = null;
 let moveDur = 300;       // ms, short so the traversal reads as a fast streak
 let pauseDur = 500;      // ms, long enough for a flower to settle/bloom
@@ -187,7 +188,24 @@ function startMove(now) {
   phaseStart = now;
   target = pickTarget();
   moveFrom = { x: pointer.x, y: pointer.y };
-  moveDur = 250 + Math.random() * 100; // ~0.25-0.35s
+  moveDur = (250 + Math.random() * 100) * 1.25; // ~0.31-0.44s (25% slower)
+
+  // Build a quadratic Bezier control point: offset the segment midpoint by a
+  // vector PERPENDICULAR to moveFrom->target, magnitude 0.2-0.45 of the segment
+  // length with a randomized sign, so the traversal arcs left or right. Clamp
+  // into [0,1]^2 so the curve stays on-screen.
+  const mx = (moveFrom.x + target.x) * .5;
+  const my = (moveFrom.y + target.y) * .5;
+  const sx = target.x - moveFrom.x;
+  const sy = target.y - moveFrom.y;
+  const segLen = Math.hypot(sx, sy) || 1e-6;
+  const perpX = -sy / segLen;               // unit perpendicular to the segment
+  const perpY = sx / segLen;
+  const mag = segLen * (0.2 + Math.random() * 0.25); // 0.2-0.45 of segment length
+  const sign = Math.random() < 0.5 ? -1 : 1;
+  const cx = Math.min(1, Math.max(0, mx + perpX * mag * sign));
+  const cy = Math.min(1, Math.max(0, my + perpY * mag * sign));
+  moveCtrl = { x: cx, y: cy };
 }
 
 function drivePointer(now) {
@@ -195,9 +213,11 @@ function drivePointer(now) {
 
   if (phase === "move") {
     const t = Math.min(1, (now - phaseStart) / moveDur);
-    const e = t * t * (3 - 2 * t); // smoothstep for a quick, eased traversal
-    const px = moveFrom.x + (target.x - moveFrom.x) * e;
-    const py = moveFrom.y + (target.y - moveFrom.y) * e;
+    const e = t * t * (3 - 2 * t); // smoothstep ease -> accelerate/decelerate
+    // Quadratic Bezier P(e) = (1-e)^2*A + 2(1-e)e*C + e^2*B along the eased param.
+    const u = 1 - e;
+    const px = u * u * moveFrom.x + 2 * u * e * moveCtrl.x + e * e * target.x;
+    const py = u * u * moveFrom.y + 2 * u * e * moveCtrl.y + e * e * target.y;
     const dx = px - pointer.x;
     const dy = py - pointer.y;
     pointer.x = px;
