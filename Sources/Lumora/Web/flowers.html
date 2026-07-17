@@ -27,7 +27,6 @@
 <canvas id="canvas"></canvas>
 <script type="module">
 import * as THREE from 'three';
-import * as autopilot from './lib/autopilot.js';
 
 const fragmentShader = `
     #define PI 3.14159265359
@@ -138,21 +137,90 @@ window.addEventListener("resize", () => {
   updateSize();
 });
 
-// Auto-drive: re-stamp the pointer to a new wander point at intervals, leaving
-// it still between stamps so a flower blooms at each stop.
-let lastStamp = -1e9;
-const STAMP_INTERVAL_MS = 650;
+// Auto-drive: bespoke jump-pause-cover motion. Repeatedly jump the cursor
+// quickly to a new distant target (drawing a streak of blooms), then pause so a
+// flower settles/blooms. Each new target is chosen far from everywhere already
+// covered this cycle (farthest-point sampling). After 50 moves, clear the
+// feedback buffers and start a fresh cycle.
+const MOVES_PER_CYCLE = 50;
+let visited = [];        // target points chosen this cycle, in [0,1]^2
+let moveCount = 0;
+let phase = "move";      // "move" (fast traversal) | "pause" (hold to bloom)
+let phaseStart = -1;     // ms timestamp when the current phase began
+let moveFrom = { x: pointer.x, y: pointer.y };
+let target = null;
+let moveDur = 300;       // ms, short so the traversal reads as a fast streak
+let pauseDur = 500;      // ms, long enough for a flower to settle/bloom
+
+// Farthest-point sampling: pick the candidate maximizing the min distance to all
+// visited targets AND to the current pointer, so it's far from everywhere
+// already covered and from where we are now.
+function pickTarget() {
+  let best = { x: Math.random(), y: Math.random() };
+  let bestScore = -1;
+  for (let i = 0; i < 24; i++) {
+    const cx = Math.random(), cy = Math.random();
+    let minD = Math.hypot(cx - pointer.x, cy - pointer.y);
+    for (const v of visited) {
+      minD = Math.min(minD, Math.hypot(cx - v.x, cy - v.y));
+    }
+    if (minD > bestScore) { bestScore = minD; best = { x: cx, y: cy }; }
+  }
+  visited.push(best);
+  return best;
+}
+
+// Clear both ping-pong feedback buffers (match the pen's transparent-black
+// clear), wiping the accumulated flowers so the next cycle starts fresh.
+function clearFeedback() {
+  const prev = renderer.getRenderTarget();
+  for (const rt of renderTargets) {
+    renderer.setRenderTarget(rt);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+  }
+  renderer.setRenderTarget(prev);
+}
+
+function startMove(now) {
+  phase = "move";
+  phaseStart = now;
+  target = pickTarget();
+  moveFrom = { x: pointer.x, y: pointer.y };
+  moveDur = 250 + Math.random() * 100; // ~0.25-0.35s
+}
+
 function drivePointer(now) {
-  if (now - lastStamp > STAMP_INTERVAL_MS) {
-    const nx = autopilot.pointer01.x;
-    const ny = autopilot.pointer01.y;
-    const dx = 12 * (nx - pointer.x);
-    const dy = 12 * (ny - pointer.y);
-    pointer.x = nx;
-    pointer.y = ny;
-    pointer.speed = Math.min(2, dx * dx + dy * dy);
-    pointer.moved = true;
-    lastStamp = now;
+  if (phaseStart < 0) { startMove(now); }
+
+  if (phase === "move") {
+    const t = Math.min(1, (now - phaseStart) / moveDur);
+    const e = t * t * (3 - 2 * t); // smoothstep for a quick, eased traversal
+    const px = moveFrom.x + (target.x - moveFrom.x) * e;
+    const py = moveFrom.y + (target.y - moveFrom.y) * e;
+    const dx = px - pointer.x;
+    const dy = py - pointer.y;
+    pointer.x = px;
+    pointer.y = py;
+    pointer.moved = true;                          // keep u_moving high while moving
+    pointer.speed = Math.min(2, 400 * (dx * dx + dy * dy)); // bigger delta -> faster
+    if (t >= 1) {
+      pointer.x = target.x;
+      pointer.y = target.y;
+      phase = "pause";
+      phaseStart = now;
+      pauseDur = 400 + Math.random() * 200;        // ~0.4-0.6s
+    }
+  } else { // pause: hold stationary (pointer.moved stays false -> u_stop_time grows)
+    if (now - phaseStart >= pauseDur) {
+      moveCount++;
+      if (moveCount >= MOVES_PER_CYCLE) {
+        clearFeedback();
+        visited = [];
+        moveCount = 0;
+      }
+      startMove(now);
+    }
   }
 }
 
@@ -183,7 +251,6 @@ function createPlane() {
 
 function render() {
   const now = performance.now();
-  autopilot.update(now);
   drivePointer(now);
 
   shaderMaterial.uniforms.u_clean.value = 1;
