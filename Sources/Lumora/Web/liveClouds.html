@@ -54,6 +54,10 @@ const cloudShader = {
 
 // Soft, fluffy cloud-puff sprite (stand-in for the CDN cloud10.png). A few
 // overlapping radial-gradient blobs on a transparent canvas read as a puff.
+// Peak alpha is kept low on purpose: with depthTest/depthWrite both off (as
+// in the original), thousands of these quads composite unsorted along the
+// flight path, so per-layer opacity has to be low or the stack saturates to
+// a flat white screen well before the tunnel is even half full.
 function makeCloudTexture() {
   const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
   const ctx = cv.getContext('2d');
@@ -64,9 +68,9 @@ function makeCloudTexture() {
   for (const [bx, by, br] of blobs) {
     const cx = bx * s, cy = by * s, r = br * s;
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0.0, 'rgba(255,255,255,0.9)');
-    g.addColorStop(0.5, 'rgba(255,255,255,0.5)');
-    g.addColorStop(1.0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.0, 'rgba(232,238,248,0.22)');
+    g.addColorStop(0.55, 'rgba(210,222,240,0.09)');
+    g.addColorStop(1.0, 'rgba(210,222,240,0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
   }
