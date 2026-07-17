@@ -13,8 +13,8 @@
      self-contained threejs-components@0.0.27 liquid1 bundle (it bundles its own
      three; NOT routed through the shared importmap). Vendored as-is to
      ./lib/liquid1.min.js. The displacement/reflection source image the pen
-     fetched from a CDN (assets.codepen.io/.../liquid.webp) is vendored to
-     ./lib/liquid.webp so nothing is fetched at runtime. Autonomous liquid
+     fetched from a CDN is replaced by the project's bundled wallpaper, vendored
+     to ./lib/liquid-wallp.png so nothing is fetched at runtime. Autonomous liquid
      background — no live input. Dark clear kept: it's a metallic reflective
      surface that reads best on black. -->
 <canvas id="canvas"></canvas>
@@ -23,7 +23,7 @@ import LiquidBackground from './lib/liquid1.min.js';
 
 const app = LiquidBackground(document.getElementById('canvas'));
 
-app.loadImage('./lib/liquid.webp');
+app.loadImage('./lib/liquid-wallp.png');
 app.liquidPlane.material.metalness = 0.75;
 app.liquidPlane.material.roughness = 0.25;
 app.liquidPlane.uniforms.displacementScale.value = 5;
