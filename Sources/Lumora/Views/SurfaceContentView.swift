@@ -1139,7 +1139,8 @@ private struct EffectView: View {
             christmasEffects
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             bioluminescentEffects
-        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm:
+        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
+             .webMorphingBall:
             webEffects
         }
     }
