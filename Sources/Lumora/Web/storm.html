@@ -4,12 +4,13 @@
   cloud texture is layered against itself at several UV offsets/scroll
   amounts and shaded through a 3D value-noise flicker to produce a churning,
   backlit storm-cloud look. Ported from a CodePen (three r88, global `THREE`)
-  to the shared three 0.167 ESM build — no CDN. The original loaded a noise
-  texture and a tileable cloud photo from an external CDN; both are
-  regenerated procedurally on canvases here (the cloud texture as a seamless
-  multi-octave sine field so `RepeatWrapping` tiles cleanly — `u_noise` is
-  declared for parity but, like this author's other pens, is never actually
-  sampled by the shader). Group 1: the pointermove listener is deleted
+  to the shared three 0.167 ESM build. The pen's tileable cloud photo
+  (`clouds-1-tile.jpg`) is vendored locally under `lib/` and loaded via the
+  bundled `lumora-effect://` scheme (no runtime CDN) — the shader's whole look
+  is this photo warped and re-layered, so a procedural stand-in doesn't match;
+  the real asset is used. `u_noise` is declared for parity but, like this
+  author's other pens, is never actually sampled by the shader, so it keeps a
+  tiny procedural stand-in. Group 1: the pointermove listener is deleted
   (`u_mouse` is likewise declared but unused by the shader, so it stays at
   its default (0,0)); the per-frame `window.scrollY` poll that drove
   `u_scroll` is replaced with a fixed 0 — the page no longer scrolls (no
@@ -52,63 +53,6 @@ function makeNoiseTexture() {
     imgData.data[i * 4 + 1] = Math.floor(Math.random() * 256);
     imgData.data[i * 4 + 2] = Math.floor(Math.random() * 256);
     imgData.data[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(imgData, 0, 0);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.minFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-// ── Procedural stand-in for the pen's external clouds-1-tile.jpg ───────────
-// A seamlessly-tileable soft cloud field: each channel sums a few sine waves
-// at integer cycle counts across the canvas, so the pattern repeats exactly
-// at the texture's edges under RepeatWrapping (no visible seam).
-function makeCloudTexture() {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const imgData = ctx.createImageData(size, size);
-
-  function makeSeamlessField() {
-    const octaves = [];
-    for (let i = 0; i < 5; i++) {
-      octaves.push({
-        fx: Math.floor(Math.random() * 4) + 2,
-        fy: Math.floor(Math.random() * 4) + 2,
-        phase: Math.random() * Math.PI * 2,
-        amp: 1 / (i + 1.6),
-      });
-    }
-    return (nx, ny) => {
-      let v = 0, norm = 0;
-      for (const o of octaves) {
-        v += o.amp * Math.sin(nx * Math.PI * 2 * o.fx + ny * Math.PI * 2 * o.fy * 0.6 + o.phase);
-        norm += o.amp;
-      }
-      return v / norm; // -1..1
-    };
-  }
-
-  const fieldR = makeSeamlessField();
-  const fieldG = makeSeamlessField();
-  const fieldB = makeSeamlessField();
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const nx = x / size, ny = y / size;
-      const r = fieldR(nx, ny) * 0.5 + 0.5;
-      const g = fieldG(nx, ny) * 0.5 + 0.5;
-      const b = fieldB(nx, ny) * 0.5 + 0.5;
-      const idx = (y * size + x) * 4;
-      imgData.data[idx + 0] = Math.floor(r * 255);
-      imgData.data[idx + 1] = Math.floor(g * 255);
-      imgData.data[idx + 2] = Math.floor(b * 255);
-      imgData.data[idx + 3] = 255;
-    }
   }
   ctx.putImageData(imgData, 0, 0);
   const tex = new THREE.CanvasTexture(canvas);
@@ -195,7 +139,7 @@ void main() {
 }
 `;
 
-let camera, scene, renderer, uniforms;
+let camera, scene, renderer, uniforms, cloudTexture;
 
 function init() {
   camera = new THREE.Camera();
@@ -209,7 +153,7 @@ function init() {
     u_time: { value: 1.0 },
     u_resolution: { value: new THREE.Vector2() },
     u_noise: { value: makeNoiseTexture() },
-    u_bg: { value: makeCloudTexture() },
+    u_bg: { value: cloudTexture },
     // Group 1: no live pointer/scroll input. u_mouse is unused by the shader
     // and stays at (0,0); u_scroll is pinned to a fixed 0 below instead of
     // polling window.scrollY (the page never scrolls: overflow is hidden).
@@ -252,8 +196,16 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-init();
-animate();
+// Load the real tileable cloud photo (vendored under lib/, served over the
+// lumora-effect:// scheme), then start — the shader's whole look is this photo.
+new THREE.TextureLoader().load('./lib/clouds-1-tile.jpg', (tex) => {
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.minFilter = THREE.LinearFilter;
+  cloudTexture = tex;
+  init();
+  animate();
+});
 </script>
 </body>
 </html>
