@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Disco Balls</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .container { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .overlay-block { width: 33%; height: 40%; max-width: 30vh; max-height: 30vw; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div class="container"></div>
+<script type="module">
+// Port of ksenia-k "Three.js geometries as disco balls" (CodePen ZEjJxWQ),
+// three 0.133 ES module → 0.167, + vendored OrbitControls/BufferGeometryUtils.
+// The `.container` / `.overlay-block` divs aren't chrome — they're the
+// multi-viewport layout the renderer's scissor test reads bounding rects
+// from to draw the three side-by-side disco-ball scenes; no text/captions.
+// The pen loaded a matcap PNG from a CDN (assets.codepen.io/.../matcap-
+// crystal.png); runtime CDN loads are disallowed here, so an equivalent
+// shiny-metal matcap is generated on-canvas instead.
+// Group-1 input treatment: OrbitControls kept for its autoRotate animation
+// only — enableRotate/enableZoom/enablePan are all off, so there is no drag,
+// scroll-zoom, or pan path left; controls.update() still runs each frame.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+const container = document.querySelector('.container');
+const canvasEl = document.querySelector('#canvas');
+
+let renderer, clock, texture, scenes = [];
+
+const objects = [
+  { geometry: new THREE.TorusKnotGeometry(.3, .2, 64, 12), mirrorSize: .09 },
+  { geometry: new THREE.IcosahedronGeometry(.5, 3), mirrorSize: .11 },
+  { geometry: new THREE.TorusGeometry(.4, .2, 10, 20).rotateX(-.4), mirrorSize: .11 },
+];
+
+// Procedural stand-in for the CDN matcap-crystal.png: a bright off-center
+// highlight over a mid-tone metallic body, darkening toward the rim — the
+// classic matcap shading recipe for a shiny faceted mirror tile.
+function makeMatcapTexture() {
+  const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0c0c10';
+  ctx.fillRect(0, 0, s, s);
+  const body = ctx.createRadialGradient(s * 0.5, s * 0.5, 0, s * 0.5, s * 0.5, s * 0.5);
+  body.addColorStop(0.0, '#cfd8e6');
+  body.addColorStop(0.55, '#7f8ba3');
+  body.addColorStop(0.85, '#333c4d');
+  body.addColorStop(1.0, '#0c0c10');
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(s * 0.5, s * 0.5, s * 0.5, 0, Math.PI * 2); ctx.fill();
+  const hi = ctx.createRadialGradient(s * 0.36, s * 0.32, 0, s * 0.36, s * 0.32, s * 0.28);
+  hi.addColorStop(0.0, 'rgba(255,255,255,0.95)');
+  hi.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+  hi.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hi;
+  ctx.beginPath(); ctx.arc(s * 0.36, s * 0.32, s * 0.28, 0, Math.PI * 2); ctx.fill();
+  const rim = ctx.createRadialGradient(s * 0.68, s * 0.72, 0, s * 0.68, s * 0.72, s * 0.22);
+  rim.addColorStop(0.0, 'rgba(190,210,255,0.4)');
+  rim.addColorStop(1.0, 'rgba(190,210,255,0)');
+  ctx.fillStyle = rim;
+  ctx.beginPath(); ctx.arc(s * 0.68, s * 0.72, s * 0.22, 0, Math.PI * 2); ctx.fill();
+  const t = new THREE.CanvasTexture(cv);
+  t.needsUpdate = true;
+  return t;
+}
+
+initScene();
+window.addEventListener('resize', updateSceneSize);
+
+function initScene() {
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, canvas: canvasEl });
+  renderer.setClearColor(0x000000, 0);   // transparent
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  clock = new THREE.Clock();
+
+  texture = makeMatcapTexture();
+  for (let i = 0; i < objects.length; i++) {
+    scenes.push(createScene(i));
+  }
+  updateSceneSize();
+  render();
+}
+
+function createDiscoBall(idx) {
+  const dummy = new THREE.Object3D();
+
+  const mirrorMaterial = new THREE.MeshMatcapMaterial({ matcap: texture });
+
+  let geometryOriginal = objects[idx].geometry;
+  geometryOriginal.deleteAttribute('normal');
+  geometryOriginal.deleteAttribute('uv');
+  geometryOriginal = BufferGeometryUtils.mergeVertices(geometryOriginal);
+  geometryOriginal.computeVertexNormals();
+
+  const mirrorGeometry = new THREE.PlaneGeometry(objects[idx].mirrorSize, objects[idx].mirrorSize);
+  const instancedMirrorMesh = new THREE.InstancedMesh(
+    mirrorGeometry, mirrorMaterial, geometryOriginal.attributes.position.count);
+
+  const positions = geometryOriginal.attributes.position.array;
+  const normals = geometryOriginal.attributes.normal.array;
+  for (let i = 0; i < positions.length; i += 3) {
+    dummy.position.set(positions[i], positions[i + 1], positions[i + 2]);
+    dummy.lookAt(positions[i] + normals[i], positions[i + 1] + normals[i + 1], positions[i + 2] + normals[i + 2]);
+    dummy.updateMatrix();
+    instancedMirrorMesh.setMatrixAt(i / 3, dummy.matrix);
+  }
+
+  const obj = new THREE.Group();
+  const innerGeometry = geometryOriginal.clone();
+  const ballInnerMaterial = new THREE.MeshBasicMaterial({ color: 0x222222 });
+  const innerMesh = new THREE.Mesh(innerGeometry, ballInnerMaterial);
+
+  obj.add(innerMesh, instancedMirrorMesh);
+  return obj;
+}
+
+function createScene(geometryIdx) {
+  const scene = new THREE.Scene();
+
+  const element = document.createElement('div');
+  element.className = 'overlay-block';
+  scene.userData.element = element;
+  container.appendChild(element);
+
+  const camera = new THREE.PerspectiveCamera(50, scene.userData.element.clientWidth / scene.userData.element.clientHeight, 1, 10);
+  camera.position.z = 2;
+  scene.userData.camera = camera;
+
+  const controls = new OrbitControls(scene.userData.camera, scene.userData.element);
+  controls.minDistance = 2;
+  controls.maxDistance = 5;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 6;
+  controls.enableRotate = false;   // no drag input — autoRotate alone drives the spin
+  controls.enableZoom = false;
+  controls.enablePan = false;
+  controls.enableDamping = true;
+  scene.userData.controls = controls;
+
+  scene.add(createDiscoBall(geometryIdx));
+
+  return scene;
+}
+
+function render() {
+  renderer.setScissorTest(true);
+  const delta = .1 * clock.getDelta();
+
+  scenes.forEach((scene, idx) => {
+    const rect = scene.userData.element.getBoundingClientRect();
+    const width = rect.right - rect.left;
+    const height = rect.bottom - rect.top;
+    const left = rect.left;
+    const bottom = renderer.domElement.clientHeight - rect.bottom;
+
+    renderer.setViewport(left, bottom, width, height);
+    renderer.setScissor(left, bottom, width, height);
+
+    scene.userData.controls.update();
+
+    if (idx === 0) {
+      scene.children[0].rotateX(delta);
+      scene.children[0].rotateZ(delta);
+    } else if (idx === 2) {
+      scene.children[0].rotateZ(-3 * delta);
+    }
+
+    renderer.render(scene, scene.userData.camera);
+  });
+
+  requestAnimationFrame(render);
+}
+
+function updateSceneSize() {
+  scenes.forEach(scene => {
+    scene.userData.camera.aspect = scene.userData.element.clientWidth / scene.userData.element.clientHeight;
+    scene.userData.camera.updateProjectionMatrix();
+  });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+}
+</script>
+</body>
+</html>

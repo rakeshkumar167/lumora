@@ -88,6 +88,7 @@ enum WebEffect {
         case .webStorm: return "storm"
         case .webMorphingBall: return "morphingBall"
         case .webLiveClouds: return "liveClouds"
+        case .webDiscoBalls: return "discoBalls"
         default: return nil
         }
     }
