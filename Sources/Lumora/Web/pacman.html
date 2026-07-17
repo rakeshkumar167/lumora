@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pacman</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: radial-gradient(ellipse at center, #000 0%, #100b0d 99%); }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #map-test { display: none; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+<!-- GSAP (UMD) provides the TweenMax/TimelineMax/Linear compat globals the pen
+     uses; it needs no THREE, so it loads first as a classic script. -->
+<script src="./lib/gsap.min.js"></script>
+</head>
+<body translate="no">
+<!-- Port of radixzz "Pacman Concept" (CodePen PRaRZB). Original: three r92
+     globals + example-globals EffectComposer/UnrealBloomPass + THREE.MeshLine +
+     perlin.js + TweenMax, mouse-follow camera. Retargeted to the shared three
+     0.167 ES module: addon classes (EffectComposer/RenderPass/ShaderPass/
+     UnrealBloomPass/FXAAShader) are imported and assigned onto THREE; THREE.Math
+     -> THREE.MathUtils; the removed THREE.Geometry is replaced with
+     BufferGeometry + mergeGeometries (maze/planes) and Float32Array position
+     buffers (particles, trail MeshLines). MeshLine and perlin were vendored as
+     ES modules (lib/meshline.module.js, lib/perlin.module.js). Group-2 input:
+     the mousemove handler is removed; autopilot.js drives this.mouse each frame
+     so the camera tilt animates. Dark background kept — the whole scene is
+     bloom/god-ray glow that reads only on black. -->
+<img id="map-test" src="data:image/gif;base64,R0lGODdhHAAfAPIAAAAAAAD/AAAA//8AACZFySZFySZFySZFySH5BAEAAAQALAAAAAAcAB8AAAOwOLrc/iMIAISkNahL7cyKwIhj2JDmADArq7QLrKZ0itYk5+0SL3gdzeBGupWGR2IteeQAhD3oTxp8GIsnB4YyY7q24FUrOp2+VGFMF8VNibcObBhJZ4GjaHh0nkXOsQ1gaxAkb2liGx9bFmeHXC1GC4V5bUcyLnUMOk6MEYpAIJlXS0qifaOSiVAZZT5Pql6RNkt0gHGzCxJ4nq+enWRCsqmZt8SBtE2KYK5pnRDP0AkAOw==" />
+
+<script type="module">
+import * as THREE_NS from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshLine, MeshLineMaterial } from './lib/meshline.module.js';
+import { noise } from './lib/perlin.module.js';
+import * as autopilot from './lib/autopilot.js';
+
+// The `import * as` namespace is read-only, so copy it into a mutable object.
+// The pen uses r128-style example globals — expose the vendored addons and the
+// legacy THREE.Math alias on this copy so the original code runs unchanged.
+const THREE = Object.assign({}, THREE_NS);
+THREE.EffectComposer = EffectComposer;
+THREE.RenderPass = RenderPass;
+THREE.ShaderPass = ShaderPass;
+THREE.UnrealBloomPass = UnrealBloomPass;
+THREE.FXAAShader = FXAAShader;
+THREE.Math = THREE.MathUtils;
+
+const CUBE_SIZE = 10;
+const MAP_WIDTH = 28;
+const MAP_HEIGHT = 31;
+
+// DIRECTIONS
+const NONE = 0;
+const UP = 1;
+const RIGHT = 2;
+const DOWN = 3;
+const LEFT = 4;
+
+// MAP ITEMS
+const MAP_EMPTY = 1;
+const MAP_WALL = 2;
+const MAP_JUNCTION = 3;
+const MAP_DIRECTION = 4;
+
+const MAP_PARSE_COLORS = {
+  '0,0,0': MAP_EMPTY,
+  '255,0,0': MAP_WALL,
+  '0,255,0': MAP_JUNCTION,
+  '0,0,255': MAP_DIRECTION };
+
+
+class BoardMap {
+  constructor(mapId) {
+    this.width = 0;
+    this.height = 0;
+    this.tiles = [];
+    this.mapImageData = this.getImageData(mapId);
+    this.parseMap();
+  }
+
+  getImageData(id) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = document.querySelector(id);
+    const { width: w, height: h } = img;
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(img, 0, 0);
+    this.width = w;
+    this.height = h;
+    return ctx.getImageData(0, 0, w, h).data;
+  }
+
+  getMapPixelRGB(x, y) {
+    const { mapImageData: data, width } = this;
+    const idx = (x + width * y) * 4;
+    return [
+    Math.round(data[idx + 0] / 255) * 255,
+    Math.round(data[idx + 1] / 255) * 255,
+    Math.round(data[idx + 2] / 255) * 255];
+  }
+
+  stepToDirection(x, y, direction) {
+    let xTo = x;
+    let yTo = y;
+    switch (direction) {
+      case UP:yTo -= 1;break;
+      case RIGHT:xTo += 1;break;
+      case DOWN:yTo += 1;break;
+      case LEFT:xTo -= 1;break;}
+    return [xTo, yTo];
+  }
+
+  getTileAt(x, y, direction = NONE) {
+    let [xTo, yTo] = this.stepToDirection(x, y, direction);
+    if (x <= this.width && y <= this.height) {
+      let idx = yTo * this.width + xTo;
+      return this.tiles[idx];
+    }
+  }
+
+  getNearestNeighborFrom(x, y, direction, type) {
+    let next = this.getTileAt(x, y, direction);
+    let [xTo, yTo] = this.stepToDirection(x, y, direction);
+    if (next === type) {
+      return [xTo, yTo];
+    } else if (next) {
+      return this.getNearestNeighborFrom(xTo, yTo, direction, type);
+    }
+  }
+
+  getIndexFromCoords(x, y) {
+    return y * this.width + x;
+  }
+
+  getCoordsFromIndex(idx) {
+    const x = idx % this.width;
+    const y = Math.floor(idx / this.width);
+    return [x, y];
+  }
+
+  parseMap() {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const [r, g, b] = this.getMapPixelRGB(x, y);
+        this.tiles.push(MAP_PARSE_COLORS[`${r},${g},${b}`]);
+      }
+    }
+  }}
+
+
+class MapBoundariesMesh {
+  constructor(boardMap) {
+    this.boardMap = boardMap;
+    this._geos = [];
+    this.generateGeometry();
+    // THREE.Geometry replacement: merge the per-block BufferGeometries.
+    this.geometry = this._geos.length ? mergeGeometries(this._geos) : new THREE.BufferGeometry();
+  }
+
+  generateGeometry() {
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        let idx = y * MAP_WIDTH + x;
+        if (this.boardMap.tiles[idx] === MAP_WALL) {
+          this.putBlock(x, y);
+        }
+      }
+    }
+  }
+
+  putBlock(x, y) {
+    const boxWidth = CUBE_SIZE / MAP_WIDTH;
+    const boxHeight = CUBE_SIZE / MAP_HEIGHT;
+    const halfSize = CUBE_SIZE / 2;
+    const boxElevation = 0.25;
+    const geo = new THREE.BoxGeometry(boxWidth, boxElevation, boxHeight);
+    const tX = -halfSize + x * boxWidth + boxWidth / 2;
+    const tY = -halfSize + y * boxHeight + boxHeight / 2;
+    geo.translate(tX, boxElevation / 2, tY);
+    this._geos.push(geo);
+  }}
+
+
+class Particles {
+  constructor() {
+    this.clusters = [];
+    this.scales = [];
+    this.initParticles();
+  }
+
+  initParticles() {
+    this.texture = null;
+    for (let i = 0; i < 5; i++) {
+      const cluster = {
+        scale: i + 2,
+        speed: THREE.Math.randFloat(0.5, 1.8),
+        points: this.getCluster(100) };
+      this.clusters.push(cluster);
+    }
+  }
+
+  getCluster(count) {
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3 + 0] = THREE.Math.randFloatSpread(2);
+      positions[i * 3 + 1] = THREE.Math.randFloatSpread(2);
+      positions[i * 3 + 2] = THREE.Math.randFloatSpread(2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xffff00,
+      size: THREE.Math.randFloat(0.1, 0.25),
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.9 });
+    return new THREE.Points(geo, mat);
+  }
+
+  update(delta) {
+    for (let i = 0; i < this.clusters.length; i++) {
+      const cluster = this.clusters[i];
+
+      if (cluster.scale > 12) {
+        cluster.scale = 2;
+        cluster.points.material.opacity = 1;
+      }
+
+      cluster.scale += 0.45 * delta * cluster.speed;
+      cluster.points.scale.set(cluster.scale, cluster.scale, cluster.scale);
+
+      if (cluster.scale > 8) {
+        const opacity = THREE.Math.lerp(1, 0, 1 - (12 - cluster.scale) / 4);
+        cluster.points.material.opacity = opacity;
+      }
+    }
+  }}
+
+
+class Trails {
+  constructor(map) {
+    this.group = new THREE.Object3D();
+    this.position = new THREE.Vector3();
+    this.map = map;
+    this.maxPositions = 25;
+    this.history = [];
+    this.junctionTiles = [];
+    this.init();
+    this.spawn();
+  }
+
+  init() {
+    // THREE.Geometry replacement: a flat position buffer feeds MeshLine.
+    this.positions = new Float32Array(this.maxPositions * 3);
+    const mat = new MeshLineMaterial({ color: new THREE.Color(0xffffff), side: THREE.DoubleSide });
+    this.line = new MeshLine();
+    this.mesh = new THREE.Mesh(this.line.geometry, mat);
+    this.group.add(this.mesh);
+    this.map.tiles.forEach((t, idx) => {
+      if (t === MAP_JUNCTION) {
+        this.junctionTiles.push(idx);
+      }
+    });
+    this.light = new THREE.PointLight(0x00ff00, 1, 5);
+    this.group.add(this.light);
+  }
+
+  spawn() {
+    const { line } = this;
+    const wayPoints = this.getWayPoints();
+    if (!wayPoints.length) {
+      setTimeout(this.spawn.bind(this), 500);
+      return;
+    }
+    const start = wayPoints[0];
+    for (let i = 0; i < this.maxPositions; i++) {
+      this.positions[i * 3 + 0] = start.x;
+      this.positions[i * 3 + 1] = start.y;
+      this.positions[i * 3 + 2] = start.z;
+    }
+    this.position.copy(start);
+    this.light.position.copy(start);
+    line.setGeometry(this.positions, p => p * 0.5);
+    this.startPath(wayPoints);
+  }
+
+  getTileDirections(x, y) {
+    const { map } = this;
+    return [UP, RIGHT, DOWN, LEFT].filter(d => {
+      const tile = map.getTileAt(x, y, d);
+      return tile !== undefined && tile === MAP_DIRECTION;
+    });
+  }
+
+  scaleTilePosition(position) {
+    const { map } = this;
+    const tileScaleX = CUBE_SIZE / map.width;
+    const tileScaleY = CUBE_SIZE / map.height;
+    position.set(
+    (position.x + tileScaleX * 1.5) * tileScaleX,
+    (position.y + tileScaleX * 1.5) * tileScaleY, 0);
+    return position;
+  }
+
+  getWayPoints() {
+    const { map, junctionTiles: jTiles } = this;
+    const startTile = jTiles[~~(Math.random() * jTiles.length)];
+    let [xCurrent, yCurrent] = map.getCoordsFromIndex(startTile);
+    const visitedTiles = [];
+    let insert = true;
+    while (insert) {
+      visitedTiles.push(map.getIndexFromCoords(xCurrent, yCurrent));
+
+      const directions = this.getTileDirections(xCurrent, yCurrent);
+
+      const neighbours = directions.
+      map(d => map.getNearestNeighborFrom(xCurrent, yCurrent, d, MAP_JUNCTION)).
+      filter(n => n && visitedTiles.indexOf(map.getIndexFromCoords(n[0], n[1])) === -1);
+
+      const nPick = neighbours[~~(Math.random() * neighbours.length)];
+      if (nPick) {
+        [xCurrent, yCurrent] = nPick;
+        insert = true;
+      } else {
+        insert = false;
+      }
+    }
+    return visitedTiles.map(idx => {
+      let [x, y] = map.getCoordsFromIndex(idx);
+      return this.scaleTilePosition(new THREE.Vector3(x, y, 0));
+    });
+  }
+
+  updatePosition() {
+    const { position } = this;
+    this.light.position.copy(position);
+    this.line.advance(position);
+  }
+
+  startPath(waypoints) {
+    const { position } = this;
+    this.timeline = new TimelineMax({ onComplete: () => {
+        TweenMax.to(this.position, 1, {
+          onUpdate: this.updatePosition.bind(this),
+          onComplete: () => {
+            setTimeout(this.spawn.bind(this), Math.random() * 2500 + 500);
+          } });
+      } });
+    waypoints.forEach((pos, idx) => {
+      this.timeline.to(this.position, 0.25, {
+        x: pos.x,
+        y: pos.y,
+        onUpdate: this.updatePosition.bind(this),
+        ease: Linear.easeNone });
+
+      if (idx === 0) {
+        this.timeline.to(this.light, 0.2, { power: 1.5 * 4 * Math.PI });
+      }
+
+      if (idx === waypoints.length - 1) {
+        this.timeline.to(this.light, 0.4, { power: 0.1 * 4 * Math.PI }, '-=0.45');
+      }
+    });
+  }}
+
+
+class App {
+  constructor() {
+    this.width = 0;
+    this.height = 0;
+    this.mouse = new THREE.Vector2(0, 0);
+    this.init();
+    this.initLights();
+    this.initMazeMesh();
+    this.initTrails();
+    this.initParticles();
+    this.initGodRays();
+    this.setupComposer();
+    this.setupProstprocessing();
+    this.attachEvents();
+    this.updateSize();
+    this.onFrame(0);
+  }
+
+  init() {
+    const { innerWidth: w, innerHeight: h } = window;
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(w, h);
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
+    this.camera.position.set(14, 14, 14);
+    this.clock = new THREE.Clock();
+    document.body.appendChild(this.renderer.domElement);
+  }
+
+  initTrails() {
+    const { scene } = this;
+    const map = new BoardMap('#map-test');
+
+    const t1 = new Trails(map);
+    t1.group.position.set(-CUBE_SIZE / 2, CUBE_SIZE / 2 + 0.2, -CUBE_SIZE / 2);
+    t1.group.rotation.x = Math.PI / 2;
+    scene.add(t1.group);
+
+    const t2 = new Trails(map);
+    t2.group.position.set(CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2);
+    t2.group.rotation.x = Math.PI / 2;
+    t2.group.rotation.y = Math.PI / 2;
+    scene.add(t2.group);
+
+    const t3 = new Trails(map);
+    t3.group.position.set(-CUBE_SIZE / 2, -CUBE_SIZE / 2 - 0.1, CUBE_SIZE / 2);
+    scene.add(t3.group);
+  }
+
+  initParticles() {
+    const { scene } = this;
+    this.particles = new Particles();
+    this.particles.clusters.forEach(cluster => {
+      scene.add(cluster.points);
+    });
+  }
+
+  initLights() {
+    const { scene } = this;
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+    const innerLight = new THREE.PointLight(0xfffff);
+    const outterLight = new THREE.PointLight(0xc743ff, 3, 25);
+    outterLight.position.set(14, 14, 14);
+    this.outterLight = outterLight;
+    scene.add(innerLight);
+    scene.add(outterLight);
+    scene.add(ambientLight);
+  }
+
+  setupProstprocessing() {
+    const { composer } = this;
+    const { innerWidth: w, innerHeight: h } = window;
+    this.effectFXAA = new THREE.ShaderPass(THREE.FXAAShader);
+    this.effectFXAA.uniforms['resolution'].value.set(1 / w, 1 / h);
+    composer.addPass(this.effectFXAA);
+    this.bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
+    this.bloomPass.renderToScreen = true;
+    composer.addPass(this.bloomPass);
+  }
+
+  initGodRays() {
+    const { scene, mazeMesh } = this;
+    const geoSphere = new THREE.BoxGeometry(CUBE_SIZE * 0.8, CUBE_SIZE * 0.8, CUBE_SIZE * 0.8);
+    const matSphere = new THREE.MeshBasicMaterial({ color: 0xffa602, transparent: true });
+    this.lightSphere = new THREE.Mesh(geoSphere, matSphere);
+    this.lightSphere.layers.set(1);
+    this.lightSphere.material.opacity = 1;
+    scene.add(this.lightSphere);
+
+    const matOcclusion = new THREE.MeshBasicMaterial({ color: 0x0 });
+    this.occlusionMesh = new THREE.Mesh(mazeMesh.geometry, matOcclusion);
+    this.occlusionMesh.position.z = 0;
+    this.occlusionMesh.layers.set(1);
+    scene.add(this.occlusionMesh);
+  }
+
+  getScriptContent(id) {
+    return document.querySelector(id).textContent;
+  }
+
+  setupComposer() {
+    const { renderer, camera, scene } = this;
+    const { innerWidth: w, innerHeight: h } = window;
+    const scale = 0.5;
+    this.occlusionRenderTarget = new THREE.WebGLRenderTarget(w * scale, h * scale);
+    this.occlusionComposer = new THREE.EffectComposer(renderer, this.occlusionRenderTarget);
+    this.occlusionComposer.addPass(new THREE.RenderPass(scene, camera));
+    let occPass = new THREE.ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        lightPosition: { value: new THREE.Vector2(0.5, 0.5) },
+        exposure: { value: 0.21 },
+        decay: { value: 0.95 },
+        density: { value: 0.1 },
+        weight: { value: 0.7 },
+        samples: { value: 50 } },
+      vertexShader: PASSTHROUGH_VERTEX,
+      fragmentShader: VOLUMETRIC_LIGHT_FRAGMENT });
+
+    occPass.needsSwap = false;
+    this.occlusionPass = occPass;
+    this.occlusionComposer.addPass(occPass);
+
+    this.composer = new THREE.EffectComposer(renderer);
+    this.composer.addPass(new THREE.RenderPass(scene, camera));
+    let addPass = new THREE.ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        tAdd: { value: null } },
+      vertexShader: PASSTHROUGH_VERTEX,
+      fragmentShader: ADDITIVE_FRAGMENT });
+
+    addPass.uniforms.tAdd.value = this.occlusionRenderTarget.texture;
+    this.composer.addPass(addPass);
+  }
+
+  initMazeMesh() {
+    const { scene } = this;
+    const geos = [];
+
+    const collect = (mesh) => {
+      mesh.updateMatrix();
+      const g = mesh.geometry.clone();
+      g.applyMatrix4(mesh.matrix);
+      geos.push(g);
+    };
+
+    const up = this.getGamePlaneGeometry('#map-test');
+    up.position.y = CUBE_SIZE / 2;
+    collect(up);
+
+    const right = this.getGamePlaneGeometry('#map-test');
+    right.position.x = CUBE_SIZE / 2;
+    right.rotation.z = Math.PI / 2;
+    collect(right);
+
+    const front = this.getGamePlaneGeometry('#map-test');
+    front.rotation.x = Math.PI / 2;
+    front.position.z = CUBE_SIZE / 2 - 0.25;
+    collect(front);
+
+    const left = this.getGamePlaneGeometry('#map-test');
+    left.rotation.z = Math.PI / 2;
+    left.position.x = -CUBE_SIZE / 2 + 0.25;
+    collect(left);
+
+    const down = this.getGamePlaneGeometry('#map-test');
+    down.position.y = -CUBE_SIZE / 2;
+    collect(down);
+
+    const back = this.getGamePlaneGeometry('#map-test');
+    back.rotation.x = Math.PI / 2;
+    back.position.z = -CUBE_SIZE / 2;
+    collect(back);
+
+    const geo = mergeGeometries(geos);
+    const mat = new THREE.MeshPhongMaterial({ color: 0x4583dc });
+    this.mazeMesh = new THREE.Mesh(geo, mat);
+    this.mazeMesh.updateMatrix();
+    scene.add(this.mazeMesh);
+  }
+
+  getGamePlaneGeometry(mapId) {
+    const boardMap = new BoardMap(mapId);
+    const mapBoundariesMesh = new MapBoundariesMesh(boardMap);
+    return new THREE.Mesh(mapBoundariesMesh.geometry);
+  }
+
+  attachEvents() {
+    window.addEventListener("resize", this.updateSize.bind(this));
+  }
+
+  updateSize() {
+    const { renderer, camera, composer, occlusionComposer } = this;
+    const { innerWidth: w, innerHeight: h } = window;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    composer.setSize(w, h);
+    occlusionComposer.setSize(w, h);
+    this.width = w;
+    this.height = h;
+  }
+
+  updateOcclusionIntensity(time) {
+    const { uniforms: u } = this.occlusionPass;
+    const n0 = (noise.perlin2(time * 0.0005, 0) + 1) * 0.5;
+    const n1 = (noise.perlin2(0, time * 0.0005) + 1) * 0.5;
+    u.exposure.value = THREE.Math.lerp(0.05, 0.21, n0);
+    u.decay.value = THREE.Math.lerp(0.95, 0.98, n1);
+    u.density.value = THREE.Math.lerp(0.2, 0.4, n0);
+    u.weight.value = THREE.Math.lerp(0.1, 0.7, n1);
+  }
+
+  updateLightPosition(time) {
+    const { lightSphere } = this;
+    const n0 = (noise.perlin2(time * 0.0005, 0) + 1) * 0.5;
+    lightSphere.position.y = THREE.Math.lerp(-1, 1, n0);
+  }
+
+  updateCameraTilt() {
+    const { mouse } = this;
+    TweenMax.to(this.camera.position, 1.5, {
+      x: 14 + mouse.x * 2.5,
+      y: 14 + mouse.y * 2.5,
+      z: 14 + mouse.x * mouse.y });
+  }
+
+  onFrame(time) {
+    const { renderer, scene, camera, clock } = this;
+    requestAnimationFrame(this.onFrame.bind(this));
+    // Auto-drive: feed the synthetic wandering pointer into the camera tilt.
+    autopilot.update(performance.now());
+    this.mouse.x = autopilot.pointer.x;
+    this.mouse.y = autopilot.pointer.y;
+    camera.layers.set(1);
+    this.updateCameraTilt();
+    this.particles.update(clock.getDelta());
+    this.updateOcclusionIntensity(time);
+    this.updateLightPosition(time);
+    renderer.setClearColor(0x0, 0);
+    this.occlusionComposer.render();
+    camera.layers.set(0);
+    camera.lookAt(scene.position);
+    this.composer.render();
+  }}
+
+
+// Shaders (were <script type="x-shader"> tags in the pen).
+const PASSTHROUGH_VERTEX = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+  }
+`;
+
+const VOLUMETRIC_LIGHT_FRAGMENT = `
+  varying vec2 vUv;
+  uniform sampler2D tDiffuse;
+  uniform vec2 lightPosition;
+  uniform float exposure;
+  uniform float decay;
+  uniform float density;
+  uniform float weight;
+  uniform int samples;
+  const int MAX_SAMPLES = 100;
+  void main()
+  {
+    vec2 texCoord = vUv;
+    vec2 deltaTextCoord = texCoord - lightPosition;
+    deltaTextCoord *= 1.0 / float(samples) * density;
+    vec4 color = texture2D(tDiffuse, texCoord);
+    float illuminationDecay = 1.0;
+    for(int i=0; i < MAX_SAMPLES; i++) {
+      if(i == samples) {
+        break;
+      }
+      texCoord -= deltaTextCoord;
+      vec4 samp = texture2D(tDiffuse, texCoord);
+      samp *= illuminationDecay * weight;
+      color += samp;
+      illuminationDecay *= decay;
+    }
+    gl_FragColor = color * exposure;
+  }
+`;
+
+const ADDITIVE_FRAGMENT = `
+  uniform sampler2D tDiffuse;
+  uniform sampler2D tAdd;
+  varying vec2 vUv;
+  void main() {
+    vec4 color = texture2D( tDiffuse, vUv );
+    vec4 add = texture2D( tAdd, vUv );
+    gl_FragColor = color + add;
+  }
+`;
+
+window.app = new App();
+</script>
+</body>
+</html>
