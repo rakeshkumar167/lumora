@@ -90,6 +90,10 @@ enum WebEffect {
         case .webLiveClouds: return "liveClouds"
         case .webDiscoBalls: return "discoBalls"
         case .webBlackHole: return "blackHole"
+        case .webFlowers: return "flowers"
+        case .webPacman: return "pacman"
+        case .webLiquid: return "liquid"
+        case .webTubes: return "tubes"
         default: return nil
         }
     }

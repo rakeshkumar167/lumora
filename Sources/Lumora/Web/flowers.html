@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Draw Flowers</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+</head>
+<body>
+<!-- Port of ksenia-k "Draw With WebGL Flowers" (CodePen poOMpzx), a three ES
+     module (was esm.sh three@0.139 -> retargeted to the shared 'three' 0.167).
+     Feedback ping-pong render targets keep drawn flowers on screen. Group-2
+     input treatment: the mousemove/touchmove/click/keydown listeners are
+     removed; autopilot.js drives the pen's `pointer`. The pen blooms a flower
+     where the cursor PAUSES (u_moving must fall to 0 and u_stop_time grow), so
+     the synthetic pointer is re-stamped to a new wander point at intervals and
+     left still between stamps — reproducing the "draw where you stop" behavior
+     and making blooms appear over time along the wandering path. -->
+<canvas id="canvas"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import * as autopilot from './lib/autopilot.js';
+
+const fragmentShader = `
+    #define PI 3.14159265359
+
+    uniform float u_ratio;
+    uniform float u_moving;
+    uniform float u_stop_time;
+    uniform float u_speed;
+    uniform vec2 u_stop_randomizer;
+    uniform float u_clean;
+    uniform vec2 u_point;
+    uniform sampler2D u_texture;
+    varying vec2 vUv;
+
+    float rand(vec2 n) {
+        return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+    }
+    float noise(vec2 n) {
+        const vec2 d = vec2(0., 1.);
+        vec2 b = floor(n), f = smoothstep(vec2(0.), vec2(1.), fract(n));
+        return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
+    }
+
+    float flower_shape(vec2 _point, float _size, float _outline, float _tickniess, float _noise, float _angle_offset) {
+        float random_by_uv = noise(vUv);
+
+        float petals_thickness = .5;
+        float petals_number = 5. + floor(u_stop_randomizer[0] * 4.);
+        float angle_animated_offset = .7 * (random_by_uv - .5) / (1. + 30. * u_stop_time);
+        float flower_angle = atan(_point.y, _point.x) - angle_animated_offset;
+        float flower_sectoral_shape = abs(sin(flower_angle * .5 * petals_number + _angle_offset)) + _tickniess * petals_thickness;
+
+        vec2 flower_size_range = vec2(4., 18.);
+        float flower_radial_shape = length(_point) * (flower_size_range[0] + flower_size_range[1] * u_stop_randomizer[0]);
+        float radius_noise = sin(flower_angle * 13. + 15. * random_by_uv);
+        flower_radial_shape += _noise * radius_noise;
+
+        float flower_radius_grow = min(20000. * u_stop_time, 1.);
+        flower_radius_grow = 1. / flower_radius_grow;
+
+        float flower_shape = 1. - smoothstep(0., _size * flower_sectoral_shape, _outline * flower_radius_grow * flower_radial_shape);
+        flower_shape *= (1. - u_moving);
+
+        flower_shape *= (1. - step(1., u_stop_time));
+
+        return flower_shape;
+    }
+
+    void main() {
+
+        vec3 base = texture2D(u_texture, vUv).xyz;
+        vec2 cursor = vUv - u_point.xy;
+        cursor.x *= u_ratio;
+
+        vec3 stem_color = vec3(0., 2., 1.5);
+        float stem_radius = .003 * u_speed * u_moving;
+        float stem_shape = 1. - pow(smoothstep(0., stem_radius, dot(cursor, cursor)), .03);
+        vec3 stem = stem_shape * stem_color;
+
+        vec3 flower_color = vec3(.7 + u_stop_randomizer[1], .8 * u_stop_randomizer[1], 2.9 + u_stop_randomizer[0] * .6);
+        vec3 flower_new = flower_color * flower_shape(cursor, 1., .96, 1., .15, 0.);
+        vec3 flower_mask = 1. - vec3(flower_shape(cursor, 1.05, 1.07, 1., .15, 0.));
+        vec3 flower_mid = vec3(-.6) * flower_shape(cursor, .15, 1., 2., .1, 1.9);
+
+        vec3 color = base * flower_mask + (flower_new + flower_mid + stem);
+        color *= u_clean;
+        color = clamp(color, vec3(.0, .0, .15), vec3(1., 1., .4));
+
+        gl_FragColor = vec4(color, 1.);
+    }
+`;
+
+const vertexShader = `
+    varying vec2 vUv;
+    void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 1.);
+    }
+`;
+
+const canvasEl = document.querySelector("#canvas");
+
+const pointer = {
+  x: .5,
+  y: .65,
+  moved: false,
+  speed: 0 };
+
+let basicMaterial, shaderMaterial;
+
+let renderer = new THREE.WebGLRenderer({
+  canvas: canvasEl,
+  alpha: true });
+
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+let sceneShader = new THREE.Scene();
+let sceneBasic = new THREE.Scene();
+let camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
+let clock = new THREE.Clock();
+
+let renderTargets = [
+new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight),
+new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight)];
+
+createPlane();
+updateSize();
+window.addEventListener("resize", () => {
+  updateSize();
+});
+
+// Auto-drive: re-stamp the pointer to a new wander point at intervals, leaving
+// it still between stamps so a flower blooms at each stop.
+let lastStamp = -1e9;
+const STAMP_INTERVAL_MS = 650;
+function drivePointer(now) {
+  if (now - lastStamp > STAMP_INTERVAL_MS) {
+    const nx = autopilot.pointer01.x;
+    const ny = autopilot.pointer01.y;
+    const dx = 12 * (nx - pointer.x);
+    const dy = 12 * (ny - pointer.y);
+    pointer.x = nx;
+    pointer.y = ny;
+    pointer.speed = Math.min(2, dx * dx + dy * dy);
+    pointer.moved = true;
+    lastStamp = now;
+  }
+}
+
+render();
+
+function createPlane() {
+  shaderMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      u_stop_time: { value: 0. },
+      u_point: { value: new THREE.Vector2(pointer.x, pointer.y) },
+      u_moving: { value: 0. },
+      u_speed: { value: 0. },
+      u_stop_randomizer: { value: new THREE.Vector2(Math.random(), Math.random()) },
+      u_clean: { value: 1. },
+      u_ratio: { value: window.innerWidth / window.innerHeight },
+      u_texture: { value: null } },
+    vertexShader,
+    fragmentShader });
+
+  basicMaterial = new THREE.MeshBasicMaterial();
+
+  const planeGeometry = new THREE.PlaneGeometry(2, 2);
+  const planeBasic = new THREE.Mesh(planeGeometry, basicMaterial);
+  const planeShader = new THREE.Mesh(planeGeometry, shaderMaterial);
+  sceneBasic.add(planeBasic);
+  sceneShader.add(planeShader);
+}
+
+function render() {
+  const now = performance.now();
+  autopilot.update(now);
+  drivePointer(now);
+
+  shaderMaterial.uniforms.u_clean.value = 1;
+  shaderMaterial.uniforms.u_point.value = new THREE.Vector2(pointer.x, 1 - pointer.y);
+  shaderMaterial.uniforms.u_texture.value = renderTargets[0].texture;
+  shaderMaterial.uniforms.u_ratio.value = window.innerWidth / window.innerHeight;
+  if (pointer.moved) {
+    shaderMaterial.uniforms.u_moving.value = 1.;
+    shaderMaterial.uniforms.u_stop_randomizer.value = new THREE.Vector2(Math.random(), Math.random());
+    shaderMaterial.uniforms.u_stop_time.value = 0.;
+    pointer.moved = false;
+  } else {
+    shaderMaterial.uniforms.u_moving.value = 0.;
+  }
+  shaderMaterial.uniforms.u_stop_time.value += clock.getDelta();
+  shaderMaterial.uniforms.u_speed.value = pointer.speed;
+
+  renderer.setRenderTarget(renderTargets[1]);
+  renderer.render(sceneShader, camera);
+
+  basicMaterial.map = renderTargets[1].texture;
+
+  renderer.setRenderTarget(null);
+  renderer.render(sceneBasic, camera);
+
+  let tmp = renderTargets[0];
+  renderTargets[0] = renderTargets[1];
+  renderTargets[1] = tmp;
+
+  requestAnimationFrame(render);
+}
+
+function updateSize() {
+  shaderMaterial.uniforms.u_ratio.value = window.innerWidth / window.innerHeight;
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+</script>
+</body>
+</html>

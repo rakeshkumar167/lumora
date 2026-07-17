@@ -1140,7 +1140,8 @@ private struct EffectView: View {
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             bioluminescentEffects
         case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
-             .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole:
+             .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
+             .webFlowers, .webPacman, .webLiquid, .webTubes:
             webEffects
         }
     }
