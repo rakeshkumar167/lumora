@@ -1,16 +1,17 @@
 # Lumora
 
 A macOS app for **projection mapping**: treat a room (or any surface) as a
-digital canvas, define projection surfaces, assign generative or image-based
-media to each, preview the whole composition live, and send fullscreen output to
-a projector.
+digital canvas, define projection surfaces (or **auto-detect** them from a
+photo), assign generative or image-based media to each, arrange them across
+**scenes**, preview the whole composition live, and send fullscreen output to a
+projector.
 
 ## Run it
 
 ```sh
 swift run          # build + launch
 swift build        # build only
-swift test         # run the homography unit tests
+swift test         # run the unit tests (geometry, effects, detection pipeline)
 ```
 
 Requires macOS 14+ and the Xcode command-line tools (Swift 5.9+). You can also
@@ -60,34 +61,25 @@ immediately — the surface starts animating in the live preview.
 ### Media
 Each surface can display:
 - **Solid color**
-- **58 built-in generative effects**, each animated and warp-aware, with
-  primary + accent color controls. Chosen via a two-step **Category → Effect**
-  picker; they're organized into these categories:
-  - *Gradients & washes* — Grid, Color Wash, Gradient Sweep, Breathing Glow,
-    Rainbow Sweep, Radial Pulse, Aurora, Plasma, Strobe
-  - *Patterns & geometry* — Checkerboard, Barber Stripes, Color Bars, Neon Grid,
-    Halftone Dots, Moiré, Truchet Tiles, Concentric Polygons, Spirograph
-  - *Particles & nature* — Sparkle, Starfield Warp, Fireflies, Snow, Lava Lamp,
-    Fire, Rain, Lightning, Bubbles, Falling Leaves
-  - *Waves & motion* — Waves, Equalizer Bars, Vortex, Tunnel, Pendulum Wave,
-    Kaleidoscope, Prism Falls (continuous spectrum waterfall), Liquid Slosh
-    (confined-box tank liquid)
-  - *Retro & digital* — TV Static, CRT Scanlines, Matrix Rain, Glitch, Pixel
-    Dissolve, DVD Bounce, Marquee Text
-  - *Fractals* — Fractal Tree, Barnsley Fern, Koch Snowflake, Sierpinski
-    Triangle. Each runs a ~2-minute **generate → hold → vanish** cycle, re-seeded
-    each cycle so it restarts from a different starting point.
-  - *Fields* — Voronoi Cells (drifting Worley shatter), Metaballs (blobby
-    merge), Hex Grid (pulsing honeycomb), Flow Field (perlin-ish particle
-    streams)
-  - *Curves & Grids* — Lissajous (harmonograph curve), Orbits (nested planets),
-    Vector Grid (80s synthwave plane), Particle Mesh (drifting constellation)
-  - *Ambient & illusion* — Living Texture (glowing nebula/silk ribbons through
-    an organic noise field), Depth Breaker (trompe-l'œil "hole in the wall"
-    with floating shapes casting fake shadows)
-  - *Edge* — Outline Glow (a running light traces the chosen surface's true
-    outline — quad, polygon, or ellipse — leaving an accumulating glow, then
-    the completed outline gently breathes)
+- **Over 100 built-in generative effects**, each animated and warp-aware, with
+  primary + accent color controls, chosen via a two-step **Category → Effect**
+  picker across 14 categories:
+  - *Gradients & Washes*, *Patterns & Geometry*, *Particles & Nature*,
+    *Waves & Motion*, *Retro & Digital*, *Fractals* (each a ~2-min generate →
+    hold → vanish cycle), *Fields*, *Curves & Grids*, *Ambient & Illusion*,
+    and *Edge* (Outline Glow traces a surface's true outline).
+  - *3D* — software-rendered rotating torus, sphere, and depth-cued point cloud.
+  - *Clocks & Info* — real-time analog/digital clock faces plus a weather-aware
+    digital clock (Open-Meteo + CoreLocation).
+  - *Christmas Lights* — a bundled tree with on-tree twinkles and sagging
+    string-light strands.
+  - *Bioluminescent* — Avatar-style glowing night scenes (misty peaks, drifting
+    spores, glowing flora, a bioluminescent river).
+  - *WebGL & Shaders* — GPU / three.js / p5.js effects rendered in an embedded
+    web view (plasma, 3D particle clouds, flow fields, black hole, and more),
+    vendored locally (no CDN at runtime).
+  - Several effects are **audio-reactive**, driven by the microphone's live
+    frequency spectrum.
 - **Imported still image**
 - **Looping muted video**
 - **Laser Trace** — takes an image, edge-detects it (Core Image `CIEdges`), and a
@@ -97,6 +89,31 @@ Each surface can display:
 - **Contour Trace** — takes an image, detects contours (Vision
   `VNDetectContoursRequest`), and a single pen tip draws them one at a time,
   navigating edge to edge. Selectable color + adjustable trace speed.
+
+### Scenes
+- A project is an ordered list of **scenes**, each with its own surfaces, light
+  lines, and play duration.
+- A scene strip below the canvas selects / adds / deletes / reorders / renames
+  scenes and sets each one's duration; a Preview toggle cycles through them in
+  the editor.
+- Projection **auto-advances** through scenes by duration and loops.
+- Adding a scene can **copy the surface outlines** from the current scene (each
+  rendering the grid alignment effect) so you can re-map the same layout.
+
+### Auto surface detection
+- **Detect Surfaces** finds large flat surfaces in a room photo using a
+  pure-Swift **classical computer-vision pipeline** (Canny edges → Hough lines →
+  contour tracing → region segmentation → validation → property/confidence
+  ranking) — no OpenCV, no ML, fully offline and unit-tested. Detected surfaces
+  come out as **quads** (perspective-warpable) or **polygons**.
+- **Projected-boundary calibration** — clicking Detect Surfaces projects a
+  glowing boundary with four magenta corner markers; you photograph the scene,
+  upload the photo, and the app perspective-rectifies it to the projector
+  rectangle before detection, so found surfaces align to what the projector
+  actually illuminates (falls back to the raw photo if the markers aren't found).
+- A **review sheet** overlays the detected surfaces (numbered, quad-by-default
+  with per-surface revert-to-polygon, draggable corners) so you keep / discard /
+  adjust before adding them to the canvas.
 
 ### Projection & project files
 - **Projection mode** — opens fullscreen output on a second display (projector)
@@ -108,10 +125,13 @@ Each surface can display:
 ## Architecture
 
 - **`LumoraKit`** — pure, UI-free geometry + model core (unit-tested `Homography`
-  math; `Surface`, `MediaAssignment`, `EffectKind`, `RGBAColor` value types). No
+  math; `Surface`, `MediaAssignment`, `EffectKind`, `RGBAColor` value types) plus
+  the classical-CV **surface-detection pipeline** (edges, lines, contours,
+  regions, ranking) and calibration (marker detection + perspective rectify). No
   SwiftUI/AppKit dependency.
 - **`Lumora`** — the SwiftUI app (state store, canvas/editor/projection views,
-  effect renderers).
+  effect renderers, and embedded `WKWebView` pages for the WebGL/three.js/p5
+  effects).
 
 Perspective warping uses the pure `Homography` (rect → quad) driven through
 SwiftUI's native `ProjectionTransform`. Generative effects are stateless
@@ -121,6 +141,6 @@ SwiftUI's native `ProjectionTransform`. Generative effects are stateless
 ## Roadmap
 
 Per-surface playback settings (loop / volume / speed / fill mode),
-projector-native output to remove letterboxing, room-photo import to replace the
-blank backdrop, a real document model (current-doc tracking, recent files), and
-optional skeletonization for single-line contour tracing. See `docs/BACKLOG.md`.
+projector-native output to remove letterboxing, a real document model
+(current-doc tracking, recent files), and optional skeletonization for
+single-line contour tracing. See `docs/BACKLOG.md`.
