@@ -27,4 +27,44 @@ public enum ImagePreprocessor {
         for i in 0..<(w * h) { pixels[i] = Float(bytes[i]) / 255.0 }
         return GrayImage(width: w, height: h, pixels: pixels)
     }
+
+    /// Separable Gaussian blur with clamp-to-edge borders.
+    public static func gaussianBlur(_ img: GrayImage, sigma: Float) -> GrayImage {
+        let radius = max(1, Int((sigma * 3).rounded()))
+        var kernel = [Float](repeating: 0, count: 2 * radius + 1)
+        var sum: Float = 0
+        for i in -radius...radius {
+            let v = expf(-Float(i * i) / (2 * sigma * sigma))
+            kernel[i + radius] = v
+            sum += v
+        }
+        for i in kernel.indices { kernel[i] /= sum }
+
+        let w = img.width, h = img.height
+        var tmp = [Float](repeating: 0, count: w * h)
+        // Horizontal pass.
+        for y in 0..<h {
+            for x in 0..<w {
+                var acc: Float = 0
+                for k in -radius...radius {
+                    let xx = min(max(x + k, 0), w - 1)
+                    acc += img.pixels[y * w + xx] * kernel[k + radius]
+                }
+                tmp[y * w + x] = acc
+            }
+        }
+        // Vertical pass.
+        var out = [Float](repeating: 0, count: w * h)
+        for y in 0..<h {
+            for x in 0..<w {
+                var acc: Float = 0
+                for k in -radius...radius {
+                    let yy = min(max(y + k, 0), h - 1)
+                    acc += tmp[yy * w + x] * kernel[k + radius]
+                }
+                out[y * w + x] = acc
+            }
+        }
+        return GrayImage(width: w, height: h, pixels: out)
+    }
 }

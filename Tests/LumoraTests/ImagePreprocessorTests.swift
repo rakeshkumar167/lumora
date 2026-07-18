@@ -41,4 +41,22 @@ final class ImagePreprocessorTests: XCTestCase {
         XCTAssertEqual(g.width, 4)
         XCTAssertEqual(g.height, 4)
     }
+
+    func testGaussianBlurPreservesUniformImage() {
+        let g = GrayImage(width: 5, height: 5, pixels: [Float](repeating: 0.5, count: 25))
+        let b = ImagePreprocessor.gaussianBlur(g, sigma: 1.0)
+        XCTAssertEqual(b.width, 5)
+        XCTAssertEqual(b.height, 5)
+        for v in b.pixels { XCTAssertEqual(v, 0.5, accuracy: 1e-4) }
+    }
+
+    func testGaussianBlurSpreadsAnImpulse() {
+        var px = [Float](repeating: 0, count: 25)
+        px[2 * 5 + 2] = 1.0 // center impulse
+        let g = GrayImage(width: 5, height: 5, pixels: px)
+        let b = ImagePreprocessor.gaussianBlur(g, sigma: 1.0)
+        XCTAssertLessThan(b.at(2, 2), 1.0, "center energy should spread out")
+        XCTAssertGreaterThan(b.at(2, 1), 0.0, "neighbor should receive energy")
+        XCTAssertGreaterThan(b.at(1, 2), 0.0, "neighbor should receive energy")
+    }
 }
