@@ -1,5 +1,7 @@
 import XCTest
 import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import LumoraKit
 
 final class ContourTracerTests: XCTestCase {
@@ -50,5 +52,47 @@ final class ContourTracerTests: XCTestCase {
         let parentIdx = cs[childIdx].parentIndex!
         XCTAssertLessThan(ContourTracer.polygonArea(cs[childIdx].points),
                           ContourTracer.polygonArea(cs[parentIdx].points))
+    }
+
+    func testWritesContourOverlayArtifactWhenRequested() throws {
+        guard ProcessInfo.processInfo.environment["CONTOUR_OVERLAY"] == "1" else {
+            throw XCTSkip("set CONTOUR_OVERLAY=1 to write the overlay artifact")
+        }
+        // Binary: an outer frame with a nested filled square inside its hole,
+        // plus a separate square elsewhere — exercises nesting + siblings.
+        let w = 200, h = 160
+        let b = grid(w, h) { x, y in
+            let frame = (20...120).contains(x) && (20...120).contains(y)
+                && !((34...106).contains(x) && (34...106).contains(y))
+            let nested = (55...85).contains(x) && (55...85).contains(y)
+            let sibling = (150...185).contains(x) && (40...110).contains(y)
+            return frame || nested || sibling
+        }
+        let contours = ContourTracer.traceContours(binary: b, width: w, height: h)
+
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let out = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        out.setFillColor(CGColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)); out.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        let H = CGFloat(h)
+        let palette = [CGColor(red: 0.2, green: 1, blue: 0.4, alpha: 1),
+                       CGColor(red: 1, green: 0.7, blue: 0.2, alpha: 1),
+                       CGColor(red: 0.4, green: 0.6, blue: 1, alpha: 1)]
+        for (i, c) in contours.enumerated() {
+            let poly = PolygonApproximator.simplify(c.points, epsilon: 2.0)
+            let depth = c.parentIndex == nil ? 0 : 1
+            out.setStrokeColor(palette[(depth + i) % palette.count]); out.setLineWidth(2)
+            guard let first = poly.first else { continue }
+            out.move(to: CGPoint(x: first.x, y: H - first.y))
+            for p in poly.dropFirst() { out.addLine(to: CGPoint(x: p.x, y: H - p.y)) }
+            out.closePath(); out.strokePath()
+        }
+        let img = out.makeImage()!
+        let dir = ProcessInfo.processInfo.environment["CONTOUR_OVERLAY_DIR"] ?? NSTemporaryDirectory()
+        let url = URL(fileURLWithPath: dir).appendingPathComponent("contour_overlay.png")
+        let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, img, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        print("CONTOUR_OVERLAY written to: \(url.path) — contours: \(contours.count), nested: \(contours.filter { $0.parentIndex != nil }.count)")
     }
 }
