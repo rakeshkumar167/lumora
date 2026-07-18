@@ -7,7 +7,7 @@ import SwiftUI
 /// their own surfaces — before adding them to the canvas.
 struct SurfaceDetectionReviewView: View {
     let image: NSImage
-    let quads: [DetectedQuad]
+    let surfaces: [DetectedSurface]
     let onAdd: ([[CGPoint]]) -> Void
     let onCancel: () -> Void
 
@@ -24,16 +24,16 @@ struct SurfaceDetectionReviewView: View {
 
     @State private var items: [ReviewItem]
 
-    init(image: NSImage, quads: [DetectedQuad],
+    init(image: NSImage, surfaces: [DetectedSurface],
          onAdd: @escaping ([[CGPoint]]) -> Void, onCancel: @escaping () -> Void) {
         self.image = image
-        self.quads = quads
+        self.surfaces = surfaces
         self.onAdd = onAdd
         self.onCancel = onCancel
-        _items = State(initialValue: quads.map { quad in
-            ReviewItem(corners: quad.corners, keep: true,
-                       label: "\(Int(quad.areaFraction * 100))%",
-                       systemImage: quad.source == .plane ? "rectangle.dashed" : "tv")
+        _items = State(initialValue: surfaces.map { s in
+            ReviewItem(corners: s.polygon, keep: true,
+                       label: "\(Int(s.confidence * 100))%",
+                       systemImage: s.isQuad ? "rectangle.dashed" : "hexagon")
         })
     }
 

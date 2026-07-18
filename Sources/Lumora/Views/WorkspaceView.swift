@@ -10,7 +10,7 @@ struct WorkspaceView: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
     @State private var reviewImage: NSImage?
-    @State private var reviewQuads: [DetectedQuad] = []
+    @State private var reviewSurfaces: [DetectedSurface] = []
     @State private var showReview = false
     @State private var detecting = false
     @State private var showDetectDisclaimer = false
@@ -46,7 +46,7 @@ struct WorkspaceView: View {
             if let img = reviewImage {
                 SurfaceDetectionReviewView(
                     image: img,
-                    quads: reviewQuads,
+                    surfaces: reviewSurfaces,
                     onAdd: { corners in
                         store.addDetectedSurfaces(corners)
                         showReview = false
@@ -174,10 +174,10 @@ struct WorkspaceView: View {
               let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         detecting = true
         Task {
-            let quads = SurfaceDetector.detect(in: cg)
+            let detected = SurfaceDetector.detectSurfaces(in: cg)
             await MainActor.run {
                 reviewImage = nsImage
-                reviewQuads = quads
+                reviewSurfaces = detected
                 detecting = false
                 showReview = true
             }
