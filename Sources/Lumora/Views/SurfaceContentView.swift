@@ -299,6 +299,9 @@ private struct GrowingIvyView: View {
         var amp: CGFloat         // lateral meander amplitude (px)
         var freq: CGFloat        // meander frequency
         var phase: CGFloat
+        var amp2: CGFloat        // second harmonic (organic irregularity)
+        var freq2: CGFloat
+        var phase2: CGFloat
         var lengthFrac: CGFloat  // fraction of the span it grows across
         var seed: Int
         var branches: [VineBranch]
@@ -350,7 +353,9 @@ private struct GrowingIvyView: View {
         let spanG = vertical ? size.height : size.width
         let start = startPoint(v.startFrac, size)
         let along = t * v.lengthFrac * spanG
+        // Two harmonics → a gentler, less regular (more organic) meander.
         let lateral = v.amp * sin(Double(t) * Double(v.freq) * .pi + Double(v.phase))
+                    + v.amp2 * sin(Double(t) * Double(v.freq2) * .pi + Double(v.phase2))
         return CGPoint(x: start.x + growth.dx * along + perp.dx * lateral,
                        y: start.y + growth.dy * along + perp.dy * lateral)
     }
@@ -415,7 +420,7 @@ private struct GrowingIvyView: View {
                 let bsegs = 8
                 for s in 1...bsegs { branchPath.addLine(to: branchPoint(CGFloat(s) / CGFloat(bsegs) * prog)) }
 
-                let leafParams: [CGFloat] = [0.45, 0.75, 1.0]
+                let leafParams: [CGFloat] = [0.30, 0.48, 0.64, 0.80, 1.0]
                 for (li, lt) in leafParams.enumerated() where lt <= prog + 0.02 {
                     let idx = b.seed &* 17 &+ li
                     let baseAngle = atan2(dir.dy, dir.dx)
@@ -568,24 +573,30 @@ private struct GrowingIvyView: View {
             let vseed = cycleIndex &* 911 &+ i
             let slot = (CGFloat(i) + 0.5) / CGFloat(count)
             let startFrac = min(0.98, max(0.02, slot + (hash01(vseed, 1) - 0.5) * (0.7 / CGFloat(count))))
-            let amp = minDim * (0.05 + 0.06 * hash01(vseed, 2))
-            let freq = 1.5 + 2.0 * hash01(vseed, 3)
+            // Gentler primary sway (less wavy) plus a smaller, faster second
+            // harmonic at a random phase → organic, non-uniform vines.
+            let amp = minDim * (0.018 + 0.030 * hash01(vseed, 2))
+            let freq = 0.8 + 1.1 * hash01(vseed, 3)
             let phase = hash01(vseed, 4) * .pi * 2
+            let amp2 = amp * (0.30 + 0.35 * hash01(vseed, 8))
+            let freq2 = freq * (2.3 + 1.8 * hash01(vseed, 9))
+            let phase2 = hash01(vseed, 10) * .pi * 2
             let lengthFrac = 0.82 + 0.22 * hash01(vseed, 5)
 
-            // Branches spread along the vine.
+            // Branches spread densely along the vine, both sides staggered.
             var branches: [VineBranch] = []
-            let bcount = 5 + Int(hash01(vseed, 6) * 4)
+            let bcount = 11 + Int(hash01(vseed, 6) * 6)   // ~11–16 per vine
             for j in 0..<bcount {
                 let bseed = vseed &* 61 &+ j
-                let t = 0.12 + (0.86 * (CGFloat(j) + hash01(bseed, 1)) / CGFloat(bcount))
+                let t = 0.08 + (0.90 * (CGFloat(j) + 0.35 + 0.5 * hash01(bseed, 1)) / CGFloat(bcount))
                 let side: CGFloat = (j % 2 == 0) ? 1 : -1
-                let length = minDim * (0.09 + 0.09 * hash01(bseed, 2))
+                let length = minDim * (0.075 + 0.075 * hash01(bseed, 2))
                 let curl = length * 0.22 * (hash01(bseed, 3) - 0.5) * 2
-                let hasFlower = hash01(bseed, 7) < 0.17    // ~1 in 6 branches
+                let hasFlower = hash01(bseed, 7) < 0.14    // ~1 in 7 branches
                 branches.append(VineBranch(t: t, side: side, length: length, curl: curl, seed: bseed, hasFlower: hasFlower))
             }
             vines.append(Vine(startFrac: startFrac, amp: amp, freq: freq, phase: phase,
+                              amp2: amp2, freq2: freq2, phase2: phase2,
                               lengthFrac: lengthFrac, seed: vseed, branches: branches))
         }
         layout.vines = vines
