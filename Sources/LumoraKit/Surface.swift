@@ -189,3 +189,16 @@ public struct Surface: Identifiable, Equatable, Codable {
         Surface(name: name, points: rectCorners(defaultBounds), shape: .ellipse)
     }
 }
+
+extension Surface {
+    /// A copy of this surface's outline for seeding a new scene: geometry and
+    /// display properties are preserved, the identity is fresh, and the effect
+    /// is reset to the default `grid` alignment effect (matching
+    /// `ProjectStore.addSurface()`).
+    public func outlineCopyWithGrid() -> Surface {
+        var copy = self
+        copy.id = UUID()
+        copy.media = .effect(.grid, .cyan, RGBAColor(r: 0.05, g: 0.06, b: 0.09))
+        return copy
+    }
+}
