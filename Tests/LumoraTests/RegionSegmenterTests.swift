@@ -1,5 +1,7 @@
 import XCTest
 import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import LumoraKit
 
 final class RegionSegmenterTests: XCTestCase {
@@ -35,5 +37,59 @@ final class RegionSegmenterTests: XCTestCase {
         let edges = EdgeMap(width: 30, height: 30, edges: [Bool](repeating: false, count: 900))
         // No barriers → the whole frame is one region.
         XCTAssertEqual(RegionSegmenter.regions(from: edges).count, 1)
+    }
+
+    func testWritesRegionOverlayArtifactWhenRequested() throws {
+        guard ProcessInfo.processInfo.environment["REGION_OVERLAY"] == "1" else {
+            throw XCTSkip("set REGION_OVERLAY=1 to write the overlay artifact")
+        }
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let maxDim = Int(ProcessInfo.processInfo.environment["REGION_MAXDIM"] ?? "1000")!
+
+        // Source: a real photo if REGION_IMAGE is set, else a synthetic room.
+        let source: CGImage
+        if let path = ProcessInfo.processInfo.environment["REGION_IMAGE"] {
+            let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil)!
+            source = CGImageSourceCreateImageAtIndex(src, 0, nil)!
+        } else {
+            let w = 320, h = 240
+            let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.setFillColor(CGColor(red: 0.82, green: 0.80, blue: 0.76, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.setFillColor(CGColor(red: 0.55, green: 0.52, blue: 0.48, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h / 3))
+            ctx.setFillColor(CGColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1)); ctx.fill(CGRect(x: 110, y: 120, width: 110, height: 70))
+            source = ctx.makeImage()!
+        }
+
+        let gray = ImagePreprocessor.grayscale(from: source, maxDimension: maxDim)
+        let edges = CannyEdgeDetector.detect(gray)
+        let regions = RegionSegmenter.regions(from: edges)
+        let valid = regions.filter { PolygonValidator.isValid($0.points, frameWidth: gray.width, frameHeight: gray.height) }
+
+        let W = gray.width, H = gray.height
+        let out = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        out.draw(source, in: CGRect(x: 0, y: 0, width: W, height: H))
+        out.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.35)); out.fill(CGRect(x: 0, y: 0, width: W, height: H))
+        let fH = CGFloat(H)
+        let palette = [CGColor(red: 0.2, green: 1, blue: 0.5, alpha: 1), CGColor(red: 1, green: 0.6, blue: 0.2, alpha: 1),
+                       CGColor(red: 0.4, green: 0.6, blue: 1, alpha: 1), CGColor(red: 1, green: 0.4, blue: 0.8, alpha: 1),
+                       CGColor(red: 1, green: 0.9, blue: 0.3, alpha: 1)]
+        for (i, r) in valid.enumerated() {
+            guard let first = r.points.first else { continue }
+            let color = palette[i % palette.count]
+            out.setStrokeColor(color); out.setLineWidth(2.5)
+            out.setFillColor(color.copy(alpha: 0.18)!)
+            out.move(to: CGPoint(x: first.x, y: fH - first.y))
+            for p in r.points.dropFirst() { out.addLine(to: CGPoint(x: p.x, y: fH - p.y)) }
+            out.closePath(); out.drawPath(using: .fillStroke)
+        }
+        let img = out.makeImage()!
+        let dir = ProcessInfo.processInfo.environment["REGION_OVERLAY_DIR"] ?? NSTemporaryDirectory()
+        let url = URL(fileURLWithPath: dir).appendingPathComponent("region_overlay.png")
+        let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, img, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        print("REGION_OVERLAY \(W)x\(H) regions:\(regions.count) valid:\(valid.count) -> \(url.path)")
     }
 }

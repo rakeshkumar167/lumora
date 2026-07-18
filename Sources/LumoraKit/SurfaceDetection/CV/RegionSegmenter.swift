@@ -9,7 +9,9 @@ public enum RegionSegmenter {
     public struct Config {
         public var dilateRadius: Int       // seal edge gaps
         public var simplifyEpsilon: Double // Douglas–Peucker tolerance (px)
-        public init(dilateRadius: Int = 1, simplifyEpsilon: Double = 2.5) {
+        // dilateRadius 2 seals typical Canny edge gaps: at radius 1 a real
+        // room's flat surfaces leak through 1px gaps into one giant blob.
+        public init(dilateRadius: Int = 2, simplifyEpsilon: Double = 2.5) {
             self.dilateRadius = dilateRadius
             self.simplifyEpsilon = simplifyEpsilon
         }
