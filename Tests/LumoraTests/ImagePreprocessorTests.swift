@@ -59,4 +59,23 @@ final class ImagePreprocessorTests: XCTestCase {
         XCTAssertGreaterThan(b.at(2, 1), 0.0, "neighbor should receive energy")
         XCTAssertGreaterThan(b.at(1, 2), 0.0, "neighbor should receive energy")
     }
+
+    func testBilateralPreservesAStepEdge() {
+        // Left half black, right half white — a hard vertical edge.
+        let w = 8, h = 4
+        var px = [Float](repeating: 0, count: w * h)
+        for y in 0..<h { for x in 0..<w { px[y * w + x] = x < w / 2 ? 0 : 1 } }
+        let g = GrayImage(width: w, height: h, pixels: px)
+
+        let bil = ImagePreprocessor.bilateral(g, radius: 2, sigmaSpatial: 2.0, sigmaRange: 0.1)
+        // Edge-preserving: dark side stays dark, bright side stays bright.
+        XCTAssertLessThan(bil.at(0, 2), 0.1)
+        XCTAssertGreaterThan(bil.at(7, 2), 0.9)
+
+        // Contrast: a Gaussian of similar spatial extent smears the boundary.
+        let gauss = ImagePreprocessor.gaussianBlur(g, sigma: 2.0)
+        XCTAssertGreaterThan(bil.at(7, 2) - bil.at(0, 2),
+                             gauss.at(7, 2) - gauss.at(0, 2),
+                             "bilateral keeps more edge contrast than Gaussian")
+    }
 }

@@ -67,4 +67,34 @@ public enum ImagePreprocessor {
         }
         return GrayImage(width: w, height: h, pixels: out)
     }
+
+    /// Edge-preserving smoothing: neighbors are weighted by both spatial
+    /// distance (`sigmaSpatial`) and intensity difference (`sigmaRange`), so
+    /// strong edges are preserved while flat noise is averaged out.
+    public static func bilateral(_ img: GrayImage, radius: Int,
+                                 sigmaSpatial: Float, sigmaRange: Float) -> GrayImage {
+        let w = img.width, h = img.height
+        let s2 = 2 * sigmaSpatial * sigmaSpatial
+        let r2 = 2 * sigmaRange * sigmaRange
+        var out = [Float](repeating: 0, count: w * h)
+        for y in 0..<h {
+            for x in 0..<w {
+                let center = img.pixels[y * w + x]
+                var acc: Float = 0, wsum: Float = 0
+                for dy in -radius...radius {
+                    for dx in -radius...radius {
+                        let xx = min(max(x + dx, 0), w - 1)
+                        let yy = min(max(y + dy, 0), h - 1)
+                        let v = img.pixels[yy * w + xx]
+                        let dI = v - center
+                        let weight = expf(-Float(dx * dx + dy * dy) / s2) * expf(-(dI * dI) / r2)
+                        acc += v * weight
+                        wsum += weight
+                    }
+                }
+                out[y * w + x] = wsum > 0 ? acc / wsum : center
+            }
+        }
+        return GrayImage(width: w, height: h, pixels: out)
+    }
 }
