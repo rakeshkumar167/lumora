@@ -65,4 +65,68 @@ public enum HoughLineDetector {
         return HoughAccumulator(thetaCount: thetaCount, rhoCount: rhoCount, rhoMin: rhoMin,
                                 votes: votes, cosT: cosT, sinT: sinT)
     }
+
+    public static func detect(_ edges: EdgeMap, config: Config = .init()) -> [DetectedLine] {
+        let acc = accumulate(edges, config: config)
+        let found = peaks(acc, config: config)
+
+        // Cache edge point coordinates once.
+        let w = edges.width, h = edges.height
+        var pts: [(Double, Double)] = []
+        for y in 0..<h { for x in 0..<w where edges.edges[y * w + x] { pts.append((Double(x), Double(y))) } }
+
+        var out: [DetectedLine] = []
+        for peak in found {
+            let ct = acc.cosT[peak.theta], st = acc.sinT[peak.theta]
+            let rho = acc.rhoMin + Double(peak.rhoIdx) * config.rhoStep
+            // Points on this line, projected onto the line direction (-sinθ, cosθ).
+            var proj: [(t: Double, x: Double, y: Double)] = []
+            for (px, py) in pts {
+                let dist = abs(px * ct + py * st - rho)
+                if dist <= config.lineTolerance {
+                    proj.append((t: -px * st + py * ct, x: px, y: py))
+                }
+            }
+            if proj.count < 2 { continue }
+            proj.sort { $0.t < $1.t }
+            // Split into runs at gaps > maxGap; emit runs ≥ minLength.
+            var runStart = 0
+            for i in 1...proj.count {
+                let broken = i == proj.count || (proj[i].t - proj[i - 1].t) > config.maxGap
+                if broken {
+                    let a = proj[runStart], b = proj[i - 1]
+                    let line = DetectedLine(p1: CGPoint(x: a.x, y: a.y), p2: CGPoint(x: b.x, y: b.y))
+                    if line.length >= config.minLength { out.append(line) }
+                    runStart = i
+                }
+            }
+        }
+        return out
+    }
+
+    struct Peak { let theta: Int; let rhoIdx: Int; let votes: Int }
+
+    /// Local-maxima peaks ≥ minVotes, greedily non-max-suppressed within
+    /// `peakNMSHalfWindow` cells (in both θ and ρ), strongest first.
+    static func peaks(_ acc: HoughAccumulator, config: Config) -> [Peak] {
+        var candidates: [Peak] = []
+        for t in 0..<acc.thetaCount {
+            for r in 0..<acc.rhoCount {
+                let v = acc.votes[t * acc.rhoCount + r]
+                if v >= config.minVotes { candidates.append(Peak(theta: t, rhoIdx: r, votes: v)) }
+            }
+        }
+        candidates.sort { $0.votes > $1.votes }
+        var accepted: [Peak] = []
+        for c in candidates {
+            if accepted.count >= config.maxLines { break }
+            var suppressed = false
+            for a in accepted where abs(a.theta - c.theta) <= config.peakNMSHalfWindow
+                && abs(a.rhoIdx - c.rhoIdx) <= config.peakNMSHalfWindow {
+                suppressed = true; break
+            }
+            if !suppressed { accepted.append(c) }
+        }
+        return accepted
+    }
 }

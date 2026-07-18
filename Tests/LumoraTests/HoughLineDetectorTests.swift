@@ -45,4 +45,30 @@ final class HoughLineDetectorTests: XCTestCase {
         XCTAssertEqual(rho, Double(y0), accuracy: 2 * cfg.rhoStep)
         XCTAssertGreaterThan(best, 30, "the whole segment should vote for one cell")
     }
+
+    func testDetectsSingleHorizontalSegment() {
+        let w = 60, h = 40
+        let edges = horizontalLineEdges(w: w, h: h, y0: 20, x0: 10, x1: 50)
+        let lines = HoughLineDetector.detect(edges)
+        XCTAssertEqual(lines.count, 1, "one segment expected")
+        let l = lines[0]
+        XCTAssertEqual(LineGeometry.angleDifference(l.angle, 0), 0, accuracy: 0.05, "horizontal")
+        XCTAssertEqual(l.length, 40, accuracy: 3)
+        XCTAssertEqual(min(l.p1.y, l.p2.y), 20, accuracy: 1)
+    }
+
+    func testDetectsTwoPerpendicularSegments() {
+        let w = 60, h = 60
+        var e = [Bool](repeating: false, count: w * h)
+        for x in 10...50 { e[30 * w + x] = true } // horizontal
+        for y in 10...50 { e[y * w + 30] = true } // vertical
+        let lines = HoughLineDetector.detect(EdgeMap(width: w, height: h, edges: e))
+        XCTAssertGreaterThanOrEqual(lines.count, 2)
+        // Some pair is ~perpendicular.
+        var foundPerp = false
+        for i in 0..<lines.count { for j in (i + 1)..<lines.count {
+            if abs(LineGeometry.angleDifference(lines[i].angle, lines[j].angle) - .pi / 2) < 0.1 { foundPerp = true }
+        } }
+        XCTAssertTrue(foundPerp, "expected a perpendicular pair")
+    }
 }
