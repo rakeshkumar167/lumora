@@ -1,4 +1,7 @@
 import XCTest
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import LumoraKit
 
 final class CannyEdgeDetectorTests: XCTestCase {
@@ -35,5 +38,41 @@ final class CannyEdgeDetectorTests: XCTestCase {
         let flat = GrayImage(width: 20, height: 20, pixels: [Float](repeating: 0.5, count: 400))
         let e = CannyEdgeDetector.detect(flat)
         XCTAssertFalse(e.edges.contains(true), "a flat image has no edges")
+    }
+
+    func testWritesCannyOverlayArtifactWhenRequested() throws {
+        guard ProcessInfo.processInfo.environment["CANNY_OVERLAY"] == "1" else {
+            throw XCTSkip("set CANNY_OVERLAY=1 to write the overlay artifact")
+        }
+        // Synthetic room: a wall over a floor band, plus a dark rectangular screen.
+        let w = 320, h = 240
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(red: 0.82, green: 0.80, blue: 0.76, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.setFillColor(CGColor(red: 0.55, green: 0.52, blue: 0.48, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h / 3)) // floor band
+        ctx.setFillColor(CGColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1)); ctx.fill(CGRect(x: 110, y: 120, width: 110, height: 70)) // screen
+        let room = ctx.makeImage()!
+
+        let gray = ImagePreprocessor.grayscale(from: room, maxDimension: 320)
+        let e = CannyEdgeDetector.detect(gray)
+
+        // Render edges as white-on-black into a PNG.
+        var bytes = [UInt8](repeating: 0, count: e.width * e.height * 4)
+        for i in 0..<(e.width * e.height) {
+            let v: UInt8 = e.edges[i] ? 255 : 0
+            bytes[i * 4] = v; bytes[i * 4 + 1] = v; bytes[i * 4 + 2] = v; bytes[i * 4 + 3] = 255
+        }
+        let outCtx = CGContext(data: &bytes, width: e.width, height: e.height, bitsPerComponent: 8,
+                               bytesPerRow: e.width * 4, space: cs,
+                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let outImg = outCtx.makeImage()!
+        let dir = ProcessInfo.processInfo.environment["CANNY_OVERLAY_DIR"] ?? NSTemporaryDirectory()
+        let url = URL(fileURLWithPath: dir).appendingPathComponent("canny_overlay.png")
+        let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, outImg, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        print("CANNY_OVERLAY written to: \(url.path)")
+        XCTAssertTrue(e.edges.contains(true))
     }
 }
