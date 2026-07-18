@@ -23,6 +23,10 @@ final class ProjectStore: ObservableObject {
     /// Whether the projection output window is currently open.
     @Published var projecting: Bool = false
 
+    /// True while the projector is showing the surface-detection calibration
+    /// pattern (a boundary + corner markers) instead of scene content.
+    @Published var calibrating: Bool = false
+
     let roomImage: NSImage
     let canvasSize: CGSize
 

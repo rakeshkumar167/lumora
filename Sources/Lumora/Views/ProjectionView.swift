@@ -14,6 +14,10 @@ struct ProjectionRootView: View {
             let scale = min(geo.size.width / size.width, geo.size.height / size.height)
             ZStack {
                 Color.black
+                if store.calibrating {
+                    CalibrationPatternView()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                } else {
                 TimelineView(.animation) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
                     // Which scene is playing now (auto-advance + loop by duration).
@@ -37,6 +41,7 @@ struct ProjectionRootView: View {
                     }
                     .frame(width: size.width, height: size.height)
                     .scaleEffect(scale)
+                }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
