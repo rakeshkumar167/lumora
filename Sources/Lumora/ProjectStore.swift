@@ -69,8 +69,16 @@ final class ProjectStore: ObservableObject {
     }
 
     /// Append a new empty scene and make it active.
-    func addScene() {
-        scenes.append(ProjectScene(name: "Scene \(scenes.count + 1)"))
+    /// Add a new scene. When `copyOutlinesFromActive` is true and the active
+    /// scene has surfaces, each is copied into the new scene with its outline
+    /// preserved and the effect reset to `grid` (see
+    /// `Surface.outlineCopyWithGrid()`); copies are independent (fresh ids).
+    func addScene(copyOutlinesFromActive: Bool = false) {
+        var newScene = ProjectScene(name: "Scene \(scenes.count + 1)")
+        if copyOutlinesFromActive, let source = activeScene {
+            newScene.surfaces = source.surfaces.map { $0.outlineCopyWithGrid() }
+        }
+        scenes.append(newScene)
         selectScene(scenes.count - 1)
     }
 
