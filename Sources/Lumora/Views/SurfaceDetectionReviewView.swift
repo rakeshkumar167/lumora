@@ -16,10 +16,12 @@ struct SurfaceDetectionReviewView: View {
     /// identically.
     private struct ReviewItem: Identifiable {
         let id = UUID()
-        var corners: [CGPoint]   // normalized, top-left origin, TL,TR,BR,BL
+        var corners: [CGPoint]        // normalized, top-left origin, TL,TR,BR,BL
+        var originalCorners: [CGPoint] // detected outline, for revert
         var keep: Bool
-        let label: String        // "62%" for detected, "Manual" for added
-        let systemImage: String
+        let label: String             // "62%" for detected, "Manual" for added
+        var systemImage: String
+        var isQuadified = false
     }
 
     @State private var items: [ReviewItem]
@@ -31,7 +33,7 @@ struct SurfaceDetectionReviewView: View {
         self.onAdd = onAdd
         self.onCancel = onCancel
         _items = State(initialValue: surfaces.map { s in
-            ReviewItem(corners: s.polygon, keep: true,
+            ReviewItem(corners: s.polygon, originalCorners: s.polygon, keep: true,
                        label: "\(Int(s.confidence * 100))%",
                        systemImage: s.isQuad ? "rectangle.dashed" : "hexagon")
         })
@@ -93,11 +95,21 @@ struct SurfaceDetectionReviewView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(items.indices, id: \.self) { i in
-                            Toggle(isOn: keepBinding(i)) {
-                                Label("\(i + 1) · \(items[i].label)", systemImage: items[i].systemImage)
+                            HStack(spacing: 4) {
+                                Toggle(isOn: keepBinding(i)) {
+                                    Label("\(i + 1) · \(items[i].label)", systemImage: items[i].systemImage)
+                                }
+                                .toggleStyle(.button)
+                                .tint(palette[i % palette.count])
+
+                                if items[i].originalCorners.count != 4 {
+                                    Button { toggleQuad(i) } label: {
+                                        Image(systemName: items[i].isQuadified ? "arrow.uturn.backward" : "square.on.square.dashed")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(items[i].isQuadified ? "Revert to polygon" : "Make quad")
+                                }
                             }
-                            .toggleStyle(.button)
-                            .tint(palette[i % palette.count])
                         }
                     }
                     .padding()
@@ -108,7 +120,8 @@ struct SurfaceDetectionReviewView: View {
             HStack {
                 Button("Cancel", role: .cancel) { onCancel() }
                 Button {
-                    items.append(ReviewItem(corners: Self.centeredRect(), keep: true,
+                    items.append(ReviewItem(corners: Self.centeredRect(),
+                                            originalCorners: Self.centeredRect(), keep: true,
                                             label: "Manual",
                                             systemImage: "plus.rectangle.on.rectangle"))
                 } label: {
@@ -154,6 +167,18 @@ struct SurfaceDetectionReviewView: View {
 
     private func keepBinding(_ i: Int) -> Binding<Bool> {
         Binding(get: { items[i].keep }, set: { items[i].keep = $0 })
+    }
+
+    private func toggleQuad(_ i: Int) {
+        if items[i].isQuadified {
+            items[i].corners = items[i].originalCorners
+            items[i].isQuadified = false
+            items[i].systemImage = "hexagon"
+        } else {
+            items[i].corners = PolygonToQuad.convert(items[i].originalCorners)
+            items[i].isQuadified = true
+            items[i].systemImage = "rectangle.dashed"
+        }
     }
 
     private func aspectFit(imageSize: CGSize, in container: CGSize) -> CGRect {
