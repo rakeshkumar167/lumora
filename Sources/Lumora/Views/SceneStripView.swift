@@ -9,6 +9,7 @@ struct SceneStripView: View {
     @EnvironmentObject var store: ProjectStore
     @State private var editingIndex: Int?
     @FocusState private var nameFocused: Bool
+    @State private var showCopyPrompt = false
     @State private var previewing = false
     @State private var previewElapsed: Double = 0
     /// Only alive while previewing, so nothing ticks when idle.
@@ -21,7 +22,13 @@ struct SceneStripView: View {
                     ForEach(Array(store.scenes.enumerated()), id: \.element.id) { index, scene in
                         chip(index: index, scene: scene)
                     }
-                    Button { store.addScene() } label: {
+                    Button {
+                        if store.activeScene?.surfaces.isEmpty == false {
+                            showCopyPrompt = true
+                        } else {
+                            store.addScene()
+                        }
+                    } label: {
                         Image(systemName: "plus").frame(width: 22, height: 22)
                     }
                     .buttonStyle(.bordered)
@@ -37,6 +44,15 @@ struct SceneStripView: View {
         .frame(height: 60)
         .background(.bar)
         .onDisappear { previewTimer = nil }
+        .confirmationDialog(
+            "Copy surface outlines from this scene into the new one?",
+            isPresented: $showCopyPrompt,
+            titleVisibility: .visible
+        ) {
+            Button("Copy Outlines") { store.addScene(copyOutlinesFromActive: true) }
+            Button("Empty Scene") { store.addScene() }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     // MARK: - Chip
