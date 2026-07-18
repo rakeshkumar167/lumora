@@ -74,6 +74,64 @@ public enum SurfaceDetector {
         return SurfaceRanker.filterMergeRank(candidates, config: options.ranker)
     }
 
+    // MARK: - Classical-CV surface pipeline (Stage 1–5) + region-growing source
+
+    /// Detect candidate surfaces as normalized quads-or-polygons using the
+    /// pure-Swift contour pipeline plus the region-growing plane pass. No Vision.
+    public static func detectSurfaces(in image: CGImage, options: Options = .init()) -> [DetectedSurface] {
+        let dim = options.maxVisionWidth
+        let gray = ImagePreprocessor.grayscale(from: image, maxDimension: dim)
+        let rgb = ImagePreprocessor.rgb(from: image, maxDimension: dim)
+
+        // Source 1: edge/contour pipeline.
+        let edges = CannyEdgeDetector.detect(gray)
+        let regions = RegionSegmenter.regions(from: edges)
+        let valid = regions.filter {
+            PolygonValidator.isValid($0.points, frameWidth: gray.width, frameHeight: gray.height)
+        }
+        var surfaces = SurfaceAssembler.assemble(valid.map { $0.points }, rgb: rgb,
+                                                 config: .init(maxResults: options.ranker.maxResults * 2))
+
+        // Source 2: region-growing plane pass (blank walls the edges miss).
+        if let seg = segment(resized(image, maxDimension: options.maxVisionWidth), options: options) {
+            for q in regionPlaneCandidates(seg, options: options) {
+                surfaces.append(surfaceFromQuad(q, rgb: rgb))
+            }
+        }
+
+        // De-duplicate overlapping candidates (keep higher confidence), rank, cap.
+        surfaces.sort { $0.confidence > $1.confidence }
+        var kept: [DetectedSurface] = []
+        for s in surfaces where !kept.contains(where: { bboxIoU($0.boundingBox, s.boundingBox) > 0.5 }) {
+            kept.append(s)
+        }
+        kept.sort { $0.area > $1.area }
+        if kept.count > options.ranker.maxResults { kept = Array(kept.prefix(options.ranker.maxResults)) }
+        return kept
+    }
+
+    static func surfaceFromQuad(_ q: DetectedQuad, rgb: RGBImage) -> DetectedSurface {
+        let px = q.corners.map { CGPoint(x: $0.x * CGFloat(rgb.width), y: $0.y * CGFloat(rgb.height)) }
+        let props = SurfaceAnalyzer.properties(of: px, in: rgb)
+        let conf = ConfidenceScorer.score(px, frameWidth: rgb.width, frameHeight: rgb.height)
+        let bb = props.boundingBox
+        return DetectedSurface(
+            polygon: q.corners, isQuad: true, area: q.areaFraction, perimeter: props.perimeter,
+            aspectRatio: props.aspectRatio, orientation: props.orientation, confidence: conf,
+            centroid: CGPoint(x: props.centroid.x / CGFloat(rgb.width), y: props.centroid.y / CGFloat(rgb.height)),
+            boundingBox: CGRect(x: bb.minX / CGFloat(rgb.width), y: bb.minY / CGFloat(rgb.height),
+                                width: bb.width / CGFloat(rgb.width), height: bb.height / CGFloat(rgb.height)),
+            averageColor: props.averageColor)
+    }
+
+    static func bboxIoU(_ a: CGRect, _ b: CGRect) -> Double {
+        let inter = a.intersection(b)
+        if inter.isNull { return 0 }
+        let i = Double(inter.width * inter.height)
+        let u = Double(a.width * a.height + b.width * b.height) - i
+        return u > 0 ? i / u : 0
+    }
+
     // MARK: - Region (plane) pass
 
     static func regionPlaneCandidates(_ seg: Segmentation, options: Options) -> [DetectedQuad] {
