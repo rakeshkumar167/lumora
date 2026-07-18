@@ -1,5 +1,7 @@
 import XCTest
 import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import LumoraKit
 
 final class HoughLineDetectorTests: XCTestCase {
@@ -70,5 +72,48 @@ final class HoughLineDetectorTests: XCTestCase {
             if abs(LineGeometry.angleDifference(lines[i].angle, lines[j].angle) - .pi / 2) < 0.1 { foundPerp = true }
         } }
         XCTAssertTrue(foundPerp, "expected a perpendicular pair")
+    }
+
+    func testWritesHoughOverlayArtifactWhenRequested() throws {
+        guard ProcessInfo.processInfo.environment["HOUGH_OVERLAY"] == "1" else {
+            throw XCTSkip("set HOUGH_OVERLAY=1 to write the overlay artifact")
+        }
+        let w = 320, h = 240
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(red: 0.82, green: 0.80, blue: 0.76, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.setFillColor(CGColor(red: 0.55, green: 0.52, blue: 0.48, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h / 3))
+        ctx.setFillColor(CGColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1)); ctx.fill(CGRect(x: 110, y: 120, width: 110, height: 70))
+        let room = ctx.makeImage()!
+
+        let gray = ImagePreprocessor.grayscale(from: room, maxDimension: 320)
+        let edges = CannyEdgeDetector.detect(gray)
+        let lines = LineMerger.merge(HoughLineDetector.detect(edges))
+        let corners = LineIntersector.intersections(lines, width: gray.width, height: gray.height)
+
+        // Draw the room dimmed, then lines (green) and intersections (red).
+        let out = CGContext(data: nil, width: gray.width, height: gray.height, bitsPerComponent: 8,
+                            bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        out.draw(room, in: CGRect(x: 0, y: 0, width: gray.width, height: gray.height))
+        out.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.45)); out.fill(CGRect(x: 0, y: 0, width: gray.width, height: gray.height))
+        out.setStrokeColor(CGColor(red: 0.2, green: 1, blue: 0.3, alpha: 1)); out.setLineWidth(1.5)
+        // CGContext is y-up; our pixel coords are y-down, so flip y when drawing.
+        let H = CGFloat(gray.height)
+        for l in lines {
+            out.move(to: CGPoint(x: l.p1.x, y: H - l.p1.y))
+            out.addLine(to: CGPoint(x: l.p2.x, y: H - l.p2.y))
+        }
+        out.strokePath()
+        out.setFillColor(CGColor(red: 1, green: 0.2, blue: 0.2, alpha: 1))
+        for c in corners { out.fillEllipse(in: CGRect(x: c.x - 3, y: H - c.y - 3, width: 6, height: 6)) }
+
+        let img = out.makeImage()!
+        let dir = ProcessInfo.processInfo.environment["HOUGH_OVERLAY_DIR"] ?? NSTemporaryDirectory()
+        let url = URL(fileURLWithPath: dir).appendingPathComponent("hough_overlay.png")
+        let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, img, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        print("HOUGH_OVERLAY written to: \(url.path) — lines: \(lines.count), corners: \(corners.count)")
     }
 }
