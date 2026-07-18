@@ -30,9 +30,15 @@ public enum PolygonMerger {
                 union(i, j)
             }
         }
-        var groups: [Int: [CGPoint]] = [:]
-        for i in 0..<n { groups[find(i), default: []].append(contentsOf: items[i].polygon) }
-        return groups.values.map { convexHull($0) }
+        // Group item indices by root; a lone item keeps its exact polygon
+        // (convex-hulling a singleton would needlessly drop its concavity),
+        // while a merged group of 2+ is unioned via convex hull.
+        var groups: [Int: [Int]] = [:]
+        for i in 0..<n { groups[find(i), default: []].append(i) }
+        return groups.values.map { members in
+            if members.count == 1 { return items[members[0]].polygon }
+            return convexHull(members.flatMap { items[$0].polygon })
+        }
     }
 
     static func colorClose(_ a: RGBAColor, _ b: RGBAColor, _ tol: Double) -> Bool {
