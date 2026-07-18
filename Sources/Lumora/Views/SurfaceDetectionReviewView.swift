@@ -33,9 +33,13 @@ struct SurfaceDetectionReviewView: View {
         self.onAdd = onAdd
         self.onCancel = onCancel
         _items = State(initialValue: surfaces.map { s in
-            ReviewItem(corners: s.polygon, originalCorners: s.polygon, keep: true,
-                       label: "\(Int(s.confidence * 100))%",
-                       systemImage: s.isQuad ? "rectangle.dashed" : "hexagon")
+            // Polygons are quadified by default (the user can revert per surface).
+            let quadify = !s.isQuad
+            return ReviewItem(corners: quadify ? PolygonToQuad.convert(s.polygon) : s.polygon,
+                              originalCorners: s.polygon, keep: true,
+                              label: "\(Int(s.confidence * 100))%",
+                              systemImage: "rectangle.dashed",
+                              isQuadified: quadify)
         })
     }
 
@@ -75,6 +79,17 @@ struct SurfaceDetectionReviewView: View {
                             path.move(to: pts[0]); for p in pts.dropFirst() { path.addLine(to: p) }; path.closeSubpath()
                             ctx.fill(path, with: .color(col.opacity(0.16)))
                             ctx.stroke(path, with: .color(col), lineWidth: 3)
+
+                            // Numbered badge at the surface centre so each overlay
+                            // maps to its chip number (colours repeat past 8).
+                            let cx = pts.map(\.x).reduce(0, +) / CGFloat(pts.count)
+                            let cy = pts.map(\.y).reduce(0, +) / CGFloat(pts.count)
+                            let badge = CGRect(x: cx - 13, y: cy - 13, width: 26, height: 26)
+                            ctx.fill(Path(ellipseIn: badge), with: .color(col))
+                            ctx.stroke(Path(ellipseIn: badge), with: .color(.white), lineWidth: 1.5)
+                            ctx.draw(Text("\(i + 1)").font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.white),
+                                     at: CGPoint(x: cx, y: cy))
                         }
                     }
                     ForEach(items.indices, id: \.self) { i in
@@ -103,8 +118,11 @@ struct SurfaceDetectionReviewView: View {
                                 .tint(palette[i % palette.count])
 
                                 if items[i].originalCorners.count != 4 {
+                                    // Icon shows the shape you'd switch TO: pentagon
+                                    // (→ polygon) while a quad, rectangle (→ quad)
+                                    // while a polygon.
                                     Button { toggleQuad(i) } label: {
-                                        Image(systemName: items[i].isQuadified ? "arrow.uturn.backward" : "square.on.square.dashed")
+                                        Image(systemName: items[i].isQuadified ? "pentagon" : "rectangle")
                                     }
                                     .buttonStyle(.borderless)
                                     .help(items[i].isQuadified ? "Revert to polygon" : "Make quad")
