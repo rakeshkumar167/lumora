@@ -27,6 +27,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var gameOfLife: GameOfLifeConfig?
     /// Customization for the Falling Leaves effect (nil = defaults).
     public var fallingLeaves: FallingLeavesConfig?
+
+    public var growingIvy: GrowingIvyConfig?
     /// Which bundled tree image the Christmas Tree effect uses (0-based).
     public var christmasTreeImage: Int
     /// Customization for the 3D effects (nil = defaults).
@@ -53,6 +55,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         christmasLights: ChristmasLightsConfig? = nil,
         gameOfLife: GameOfLifeConfig? = nil,
         fallingLeaves: FallingLeavesConfig? = nil,
+        growingIvy: GrowingIvyConfig? = nil,
         christmasTreeImage: Int = 0,
         threeD: ThreeDConfig? = nil,
         paintDrip: PaintDripConfig? = nil,
@@ -72,6 +75,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.christmasLights = christmasLights
         self.gameOfLife = gameOfLife
         self.fallingLeaves = fallingLeaves
+        self.growingIvy = growingIvy
         self.christmasTreeImage = christmasTreeImage
         self.threeD = threeD
         self.paintDrip = paintDrip
@@ -80,7 +84,7 @@ public struct Surface: Identifiable, Equatable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, christmasTreeImage, threeD, paintDrip, countdown, audioReactive
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, growingIvy, christmasTreeImage, threeD, paintDrip, countdown, audioReactive
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -100,6 +104,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         christmasLights = try c.decodeIfPresent(ChristmasLightsConfig.self, forKey: .christmasLights)
         gameOfLife = try c.decodeIfPresent(GameOfLifeConfig.self, forKey: .gameOfLife)
         fallingLeaves = try c.decodeIfPresent(FallingLeavesConfig.self, forKey: .fallingLeaves)
+        growingIvy = try c.decodeIfPresent(GrowingIvyConfig.self, forKey: .growingIvy)
         christmasTreeImage = try c.decodeIfPresent(Int.self, forKey: .christmasTreeImage) ?? 0
         threeD = try c.decodeIfPresent(ThreeDConfig.self, forKey: .threeD)
         paintDrip = try c.decodeIfPresent(PaintDripConfig.self, forKey: .paintDrip)

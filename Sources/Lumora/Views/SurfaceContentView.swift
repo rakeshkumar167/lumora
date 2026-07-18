@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, outline: effectOutline, audioReactive: surface.audioReactive)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, ivy: surface.growingIvy, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, outline: effectOutline, audioReactive: surface.audioReactive)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -262,41 +262,60 @@ private struct OutlineGlowView: View {
     }
 }
 
-/// Ivy that crawls along the surface's true outline, sprouting inward leafy
-/// side-branches, then turns autumn colors, drops its leaves, and regrows — a
-/// looping grow → hold → autumn/fall cycle. Uses primary (leaf green) + accent
-/// (autumn) color. Like `OutlineGlowView`, the cycle is anchored to a per-view
+/// Ivy that creeps across the surface from a chosen edge (top-down / bottom-up /
+/// left→right / right→left): vines start spread along the start edge and grow in
+/// the chosen direction, meandering laterally and sprouting leafy side-branches
+/// with occasional pastel flowers, then turns autumn, drops its leaves, and
+/// regrows — a looping grow → hold → autumn/fall cycle. Leaves are shades of
+/// green; accent drives the autumn tint. The cycle is anchored to a per-view
 /// `startRef` captured on appear (the effect clock is global; `time % period`
-/// would snap), and the outline is shared via the file-level `outlinePolyline`.
+/// would snap).
 private struct GrowingIvyView: View {
     let color: RGBAColor
     let accent: RGBAColor
     let time: Double
-    var outline: EffectOutline = .rect
+    var direction: IvyDirection = .topDown
 
     @State private var startRef: Double?
 
-    // Per-cycle precomputed branch layout, rebuilt only when the cycle index
-    // (or canvas size) changes — not every frame.
+    // Per-cycle precomputed vine layout, rebuilt only when the cycle index (or
+    // canvas size / direction) changes — not every frame.
     private final class Layout {
         var cycleIndex: Int = .min
         var size: CGSize = .zero
-        var branches: [Branch] = []
+        var direction: IvyDirection = .topDown
+        var vines: [Vine] = []
     }
-    private struct Branch {
-        var anchorArc: CGFloat      // arc length from the cycle's start point
-        var dir: CGVector           // unit growth direction (inward-ish)
-        var perp: CGVector          // unit perpendicular (for curl)
-        var length: CGFloat
+    private struct VineBranch {
+        var t: CGFloat        // position along the vine, 0…1
+        var side: CGFloat     // -1 / +1
+        var length: CGFloat   // px
         var curl: CGFloat
         var seed: Int
+        var hasFlower: Bool
+    }
+    private struct Vine {
+        var startFrac: CGFloat   // position along the start edge, 0…1
+        var amp: CGFloat         // lateral meander amplitude (px)
+        var freq: CGFloat        // meander frequency
+        var phase: CGFloat
+        var lengthFrac: CGFloat  // fraction of the span it grows across
+        var seed: Int
+        var branches: [VineBranch]
     }
     @State private var layout = Layout()
 
-    private let growDur = 14.0
-    private let holdDur = 4.0
-    private let autumnDur = 4.0
+    private let growDur = 28.0     // slower growth
+    private let holdDur = 6.0
+    private let autumnDur = 6.0
     private var period: Double { growDur + holdDur + autumnDur }
+
+    private static let pastels: [RGBAColor] = [
+        RGBAColor(r: 1.0, g: 1.0, b: 1.0),    // white
+        RGBAColor(r: 1.0, g: 0.80, b: 0.87),  // pale pink
+        RGBAColor(r: 0.85, g: 0.80, b: 1.0),  // pale violet
+        RGBAColor(r: 1.0, g: 0.95, b: 0.75),  // pale yellow
+    ]
 
     var body: some View {
         Canvas { ctx, size in
@@ -311,164 +330,216 @@ private struct GrowingIvyView: View {
         return CGFloat(v - floor(v))
     }
 
+    // MARK: - Directional vine geometry
+
+    private var growth: CGVector { direction.growth }
+    private var perp: CGVector { CGVector(dx: -growth.dy, dy: growth.dx) }
+
+    private func startPoint(_ frac: CGFloat, _ size: CGSize) -> CGPoint {
+        switch direction {
+        case .topDown:     return CGPoint(x: frac * size.width, y: 0)
+        case .bottomUp:    return CGPoint(x: frac * size.width, y: size.height)
+        case .leftToRight: return CGPoint(x: 0, y: frac * size.height)
+        case .rightToLeft: return CGPoint(x: size.width, y: frac * size.height)
+        }
+    }
+
+    /// Point on a vine at parameter `t` (0…1 along its full length).
+    private func vinePoint(_ v: Vine, _ t: CGFloat, _ size: CGSize) -> CGPoint {
+        let vertical = growth.dy != 0
+        let spanG = vertical ? size.height : size.width
+        let start = startPoint(v.startFrac, size)
+        let along = t * v.lengthFrac * spanG
+        let lateral = v.amp * sin(Double(t) * Double(v.freq) * .pi + Double(v.phase))
+        return CGPoint(x: start.x + growth.dx * along + perp.dx * lateral,
+                       y: start.y + growth.dy * along + perp.dy * lateral)
+    }
+
     private func draw(ctx: GraphicsContext, size: CGSize, elapsed: Double) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.02)))
-
-        let pts = outlinePolyline(outline, in: size)
-        guard pts.count >= 2 else { return }
-        let (cum, total) = closedLengths(pts)
-        guard total > 0 else { return }
+        guard size.width > 1, size.height > 1 else { return }
 
         let cycleIndex = Int(elapsed / period)
         let localT = elapsed.truncatingRemainder(dividingBy: period)
         let minDim = min(size.width, size.height)
 
-        // Each cycle starts the stem at a different point on the outline.
-        let startArc = hash01(cycleIndex, 7) * total
-
-        rebuildIfNeeded(cycleIndex: cycleIndex, size: size, pts: pts, cum: cum, total: total, minDim: minDim)
+        rebuildIfNeeded(cycleIndex: cycleIndex, size: size, minDim: minDim)
 
         // --- Phase timing -----------------------------------------------------
-        let growFrac = min(localT / growDur, 1.0)                     // 0…1 stem growth
-        let litLen = CGFloat(growFrac) * total
+        let growFrac = min(localT / growDur, 1.0)                     // 0…1 vine growth
         let inAutumn = localT >= growDur + holdDur
         let autumnT = inAutumn ? (localT - growDur - holdDur) / autumnDur : 0   // 0…1
-
-        // Leaf color: green (primary) → autumn (accent) over the first ~half of autumn.
-        let colorT = min(1, autumnT / 0.5)
-        let leafColor = lerp(color, accent, colorT)
-        // Leaves detach and fall in the back half of autumn; stems fade last.
-        let fallT = max(0, (autumnT - 0.35) / 0.65)                  // 0…1
+        let colorT = min(1, autumnT / 0.5)                           // green → accent
+        let fallT = max(0, (autumnT - 0.35) / 0.65)                  // leaves detach + fall
         let stemFade = 1 - max(0, (autumnT - 0.6) / 0.4)             // stems fade at the very end
+        let litT = CGFloat(growFrac)
 
-        func loopPoint(_ arc: CGFloat) -> CGPoint {
-            var a = arc.truncatingRemainder(dividingBy: total)
-            if a < 0 { a += total }
-            return pointAt(pts, cum, length: a)
-        }
-
-        // --- Build the grown stem path (main vine along the outline) ----------
+        struct LeafDraw { var center: CGPoint; var size: CGFloat; var angle: CGFloat
+                          var color: Color; var opacity: Double; var isFlower: Bool; var petal: Color }
         var stemPath = Path()
-        let step = max(4, total / 400)
-        var arc: CGFloat = 0
-        var first = true
-        while arc <= litLen {
-            let p = loopPoint(startArc + arc)
-            if first { stemPath.move(to: p); first = false } else { stemPath.addLine(to: p) }
-            arc += step
-        }
-        if !first {
-            stemPath.addLine(to: loopPoint(startArc + litLen))
-        }
-
-        // --- Build grown branch stems + collect leaves ------------------------
-        struct LeafDraw { var center: CGPoint; var size: CGFloat; var angle: CGFloat; var opacity: Double }
         var branchPath = Path()
         var leaves: [LeafDraw] = []
-        let leafParams: [CGFloat] = [0.34, 0.55, 0.74, 0.92]
 
-        for b in layout.branches {
-            // A branch extends only after the stem head passes its anchor.
-            var prog = max(0, min(1, (litLen - b.anchorArc) / 70))
-            if localT > growDur { prog = min(1, prog + CGFloat((localT - growDur) / 1.5)) }
-            if prog <= 0.001 { continue }
-
-            let base = loopPoint(startArc + b.anchorArc)
-            func branchPoint(_ t: CGFloat) -> CGPoint {
-                let d = b.length * t
-                let c = b.curl * sin(Double(t) * .pi)
-                return CGPoint(x: base.x + b.dir.dx * d + b.perp.dx * c,
-                               y: base.y + b.dir.dy * d + b.perp.dy * c)
-            }
-            // Draw branch stem as a short polyline up to its current progress.
-            branchPath.move(to: base)
-            let segs = 8
-            for s in 1...segs {
-                let t = CGFloat(s) / CGFloat(segs) * prog
-                branchPath.addLine(to: branchPoint(t))
+        for v in layout.vines {
+            // Grown vine polyline up to the current head position.
+            let segs = 40
+            var firstSeg = true
+            for s in 0...segs {
+                let t = CGFloat(s) / CGFloat(segs) * litT
+                let p = vinePoint(v, t, size)
+                if firstSeg { stemPath.move(to: p); firstSeg = false } else { stemPath.addLine(to: p) }
             }
 
-            // Leaves appear along the branch as it extends; sway while alive.
-            for (li, lt) in leafParams.enumerated() where lt <= prog + 0.02 {
-                let idx = b.seed &* 17 &+ li
-                let baseAngle = atan2(b.dir.dy, b.dir.dx)
-                let sidesign: CGFloat = (li % 2 == 0) ? 1 : -1
-                let sway = CGFloat(sin(time * 1.3 + Double(idx))) * 0.18
-                let angle = baseAngle + sidesign * (0.7 + 0.5 * hash01(idx, 3)) + sway
-                let lsz = (minDim * 0.028) * (0.7 + 0.7 * hash01(idx, 4))
-                var center = branchPoint(lt)
-                // While falling, detach and drift downward with horizontal sway.
-                var opacity = 1.0
-                if fallT > 0 {
-                    let personal = min(1, Double(fallT) * (0.7 + Double(hash01(idx, 6)) * 0.9))
-                    let drop = CGFloat(personal * personal) * minDim * 0.6
-                    let drift = CGFloat(sin(time * 1.7 + Double(idx))) * CGFloat(personal) * minDim * 0.05
-                    center.x += drift
-                    center.y += drop
-                    opacity = max(0, 1 - personal)
+            for b in v.branches where b.t <= litT + 0.001 {
+                // Branch extends after the vine head passes it; finishes filling
+                // in during the hold phase.
+                var prog = max(0, min(1, (litT - b.t) / 0.10))
+                if localT > growDur { prog = min(1, prog + CGFloat((localT - growDur) / 2.0)) }
+                if prog <= 0.001 { continue }
+
+                let base = vinePoint(v, b.t, size)
+                // Tangent of the vine here → branch grows sideways (perp) with a
+                // slight forward lean and a curl.
+                let tan = tangent(v, b.t, size)
+                let sidePerp = CGVector(dx: -tan.dy * b.side, dy: tan.dx * b.side)
+                let dir = normalize(CGVector(dx: sidePerp.dx + tan.dx * 0.35,
+                                             dy: sidePerp.dy + tan.dy * 0.35))
+                let cperp = CGVector(dx: -dir.dy, dy: dir.dx)
+                func branchPoint(_ t: CGFloat) -> CGPoint {
+                    let d = b.length * t
+                    let c = b.curl * sin(Double(t) * .pi)
+                    return CGPoint(x: base.x + dir.dx * d + cperp.dx * c,
+                                   y: base.y + dir.dy * d + cperp.dy * c)
                 }
-                leaves.append(LeafDraw(center: center, size: lsz, angle: angle, opacity: opacity))
+                branchPath.move(to: base)
+                let bsegs = 8
+                for s in 1...bsegs { branchPath.addLine(to: branchPoint(CGFloat(s) / CGFloat(bsegs) * prog)) }
+
+                let leafParams: [CGFloat] = [0.45, 0.75, 1.0]
+                for (li, lt) in leafParams.enumerated() where lt <= prog + 0.02 {
+                    let idx = b.seed &* 17 &+ li
+                    let baseAngle = atan2(dir.dy, dir.dx)
+                    let sidesign: CGFloat = (li % 2 == 0) ? 1 : -1
+                    let sway = CGFloat(sin(time * 0.9 + Double(idx))) * 0.16
+                    let angle = baseAngle + sidesign * (0.6 + 0.5 * hash01(idx, 3)) + sway
+                    let lsz = (minDim * 0.030) * (0.75 + 0.6 * hash01(idx, 4))
+                    var center = branchPoint(lt)
+                    var opacity = 1.0
+                    if fallT > 0 {
+                        let personal = min(1, Double(fallT) * (0.7 + Double(hash01(idx, 6)) * 0.9))
+                        center.x += CGFloat(sin(time * 1.5 + Double(idx))) * CGFloat(personal) * minDim * 0.05
+                        center.y += CGFloat(personal * personal) * minDim * 0.6   // gravity is always down
+                        opacity = max(0, 1 - personal)
+                    }
+                    let green = greenShade(idx)
+                    let leafC = lerp(green, accent, colorT)
+                    // The branch tip carries a flower on the flagged branches.
+                    let isFlower = b.hasFlower && li == leafParams.count - 1 && prog > 0.85
+                    let petal = Self.pastels[abs(b.seed) % Self.pastels.count].color
+                    leaves.append(LeafDraw(center: center, size: lsz, angle: angle,
+                                           color: leafC, opacity: opacity, isFlower: isFlower, petal: petal))
+                }
             }
         }
 
-        let leafC = leafColor
-        let stemC = color.color
-        let stemStyle = StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+        let stemC = RGBAColor(r: 0.20, g: 0.42, b: 0.18).color   // green vine
 
         // Soft green under-glow for stems + leaves (one batched blurred layer).
         ctx.drawLayer { layer in
-            layer.addFilter(.blur(radius: 8))
+            layer.addFilter(.blur(radius: 7))
             layer.blendMode = .plusLighter
             layer.opacity = stemFade
             layer.stroke(stemPath, with: .color(stemC.opacity(0.45)),
-                         style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                         style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
             layer.stroke(branchPath, with: .color(stemC.opacity(0.4)),
-                         style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            var glowLeaves = Path()
-            for lf in leaves where lf.opacity > 0.05 {
-                glowLeaves.addPath(leafPath(center: lf.center, size: lf.size, angle: lf.angle))
+                         style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+            for lf in leaves where lf.opacity > 0.05 && !lf.isFlower {
+                layer.fill(leafPath(center: lf.center, size: lf.size, angle: lf.angle),
+                           with: .color(lf.color.opacity(0.45)))
             }
-            layer.fill(glowLeaves, with: .color(leafC.opacity(0.5)))
         }
 
         // Crisp stems.
-        ctx.stroke(stemPath, with: .color(stemC.opacity(0.95 * stemFade)), style: stemStyle)
+        ctx.stroke(stemPath, with: .color(stemC.opacity(0.95 * stemFade)),
+                   style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         ctx.stroke(branchPath, with: .color(stemC.opacity(0.9 * stemFade)),
-                   style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                   style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
 
-        // Crisp leaves (per-leaf opacity for the stagger during fall).
+        // Crisp leaves + flowers.
         for lf in leaves where lf.opacity > 0.02 {
-            let p = leafPath(center: lf.center, size: lf.size, angle: lf.angle)
-            ctx.fill(p, with: .color(leafC.opacity(lf.opacity)))
-            // A small vein/highlight down the leaf.
-            ctx.fill(Path(ellipseIn: CGRect(x: lf.center.x - lf.size * 0.08,
-                                            y: lf.center.y - lf.size * 0.08,
-                                            width: lf.size * 0.16, height: lf.size * 0.16)),
-                     with: .color(.white.opacity(0.25 * lf.opacity)))
+            if lf.isFlower {
+                drawFlower(ctx: ctx, center: lf.center, size: lf.size * 1.05, petal: lf.petal, opacity: lf.opacity)
+            } else {
+                let p = leafPath(center: lf.center, size: lf.size, angle: lf.angle)
+                ctx.fill(p, with: .color(lf.color.opacity(lf.opacity)))
+                // Central vein highlight.
+                let vein = leafPath(center: lf.center, size: lf.size * 0.5, angle: lf.angle)
+                ctx.fill(vein, with: .color(.white.opacity(0.14 * lf.opacity)))
+            }
         }
 
-        // Bright running head while the stem is still growing.
-        if growFrac < 1.0 && !first {
-            let head = loopPoint(startArc + litLen)
-            let r: CGFloat = 7
-            ctx.drawLayer { layer in
-                layer.addFilter(.blur(radius: 6))
-                layer.blendMode = .plusLighter
-                layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
-                           with: .color(stemC))
+        // Bright running heads while vines are still growing.
+        if growFrac < 1.0 {
+            for v in layout.vines {
+                let head = vinePoint(v, litT, size)
+                let r: CGFloat = 6
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 6))
+                    layer.blendMode = .plusLighter
+                    layer.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                               with: .color(stemC))
+                }
+                ctx.fill(Path(ellipseIn: CGRect(x: head.x - 2, y: head.y - 2, width: 4, height: 4)),
+                         with: .color(.white))
             }
-            ctx.fill(Path(ellipseIn: CGRect(x: head.x - 2.5, y: head.y - 2.5, width: 5, height: 5)),
-                     with: .color(.white))
         }
     }
 
-    /// A teardrop-ish leaf path centered at `center`, rotated by `angle`.
+    /// A pointed leaf: two quad curves meeting at a sharp tip and base, centred
+    /// at `center` and rotated by `angle`. `size` is the half-length.
     private func leafPath(center: CGPoint, size: CGFloat, angle: CGFloat) -> Path {
-        let rect = CGRect(x: -size * 0.45, y: -size, width: size * 0.9, height: size * 2)
-        let p = Path(ellipseIn: rect)
+        var p = Path()
+        let w = size * 0.62
+        p.move(to: CGPoint(x: 0, y: size))                          // base point
+        p.addQuadCurve(to: CGPoint(x: 0, y: -size), control: CGPoint(x: w, y: 0))   // right side → tip
+        p.addQuadCurve(to: CGPoint(x: 0, y: size), control: CGPoint(x: -w, y: 0))   // left side → base
+        p.closeSubpath()
         var t = CGAffineTransform(translationX: center.x, y: center.y)
         t = t.rotated(by: angle)
         return p.applying(t)
+    }
+
+    /// A small 5-petal pastel flower with a soft yellow centre.
+    private func drawFlower(ctx: GraphicsContext, center: CGPoint, size: CGFloat, petal: Color, opacity: Double) {
+        let petalR = size * 0.8
+        let dist = size * 0.62
+        for k in 0..<5 {
+            let a = Double(k) / 5 * 2 * .pi
+            let c = CGPoint(x: center.x + CGFloat(cos(a)) * dist, y: center.y + CGFloat(sin(a)) * dist)
+            ctx.fill(Path(ellipseIn: CGRect(x: c.x - petalR / 2, y: c.y - petalR / 2, width: petalR, height: petalR)),
+                     with: .color(petal.opacity(0.95 * opacity)))
+        }
+        let cr = size * 0.55
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - cr / 2, y: center.y - cr / 2, width: cr, height: cr)),
+                 with: .color(Color(red: 1.0, green: 0.82, blue: 0.25).opacity(opacity)))
+    }
+
+    /// A per-leaf shade of green (varied hue/brightness).
+    private func greenShade(_ seed: Int) -> RGBAColor {
+        RGBAColor(r: 0.14 + 0.28 * hash01(seed, 11),
+                  g: min(1, 0.45 + 0.40 * hash01(seed, 12)),
+                  b: 0.12 + 0.20 * hash01(seed, 13))
+    }
+
+    private func tangent(_ v: Vine, _ t: CGFloat, _ size: CGSize) -> CGVector {
+        let a = vinePoint(v, max(0, t - 0.02), size)
+        let b = vinePoint(v, min(1, t + 0.02), size)
+        return normalize(CGVector(dx: b.x - a.x, dy: b.y - a.y))
+    }
+
+    private func normalize(_ v: CGVector) -> CGVector {
+        let l = max(0.0001, hypot(v.dx, v.dy))
+        return CGVector(dx: v.dx / l, dy: v.dy / l)
     }
 
     private func lerp(_ a: RGBAColor, _ b: RGBAColor, _ t: Double) -> Color {
@@ -480,55 +551,44 @@ private struct GrowingIvyView: View {
                      opacity: 1)
     }
 
-    /// Precompute this cycle's branch anchors/directions/seeds once.
-    private func rebuildIfNeeded(cycleIndex: Int, size: CGSize, pts: [CGPoint],
-                                 cum: [CGFloat], total: CGFloat, minDim: CGFloat) {
-        if layout.cycleIndex == cycleIndex && layout.size == size { return }
+    /// Precompute this cycle's vines (starts along the edge, meander, branches).
+    private func rebuildIfNeeded(cycleIndex: Int, size: CGSize, minDim: CGFloat) {
+        if layout.cycleIndex == cycleIndex && layout.size == size && layout.direction == direction { return }
         layout.cycleIndex = cycleIndex
         layout.size = size
+        layout.direction = direction
 
-        // Centroid (vertex average) — inward direction points toward it.
-        var cx: CGFloat = 0, cy: CGFloat = 0
-        for p in pts { cx += p.x; cy += p.y }
-        cx /= CGFloat(pts.count); cy /= CGFloat(pts.count)
-        let center = CGPoint(x: cx, y: cy)
+        let vertical = growth.dy != 0
+        let spanEdge = vertical ? size.width : size.height
+        let count = max(3, min(9, Int(spanEdge / 90)))
 
-        let startArc = hash01(cycleIndex, 7) * total
-        func loopPoint(_ arc: CGFloat) -> CGPoint {
-            var a = arc.truncatingRemainder(dividingBy: total)
-            if a < 0 { a += total }
-            return pointAt(pts, cum, length: a)
-        }
-
-        let spacing: CGFloat = 46
-        let count = max(4, min(60, Int(total / spacing)))
-        var branches: [Branch] = []
-        branches.reserveCapacity(count)
+        var vines: [Vine] = []
+        vines.reserveCapacity(count)
         for i in 0..<count {
-            let salt = cycleIndex &* 131 &+ i
-            let jitter = (hash01(salt, 1) - 0.5) * spacing * 0.6
-            let anchorArc = CGFloat(i) * spacing + jitter
-            let anchor = loopPoint(startArc + anchorArc)
+            let vseed = cycleIndex &* 911 &+ i
+            let slot = (CGFloat(i) + 0.5) / CGFloat(count)
+            let startFrac = min(0.98, max(0.02, slot + (hash01(vseed, 1) - 0.5) * (0.7 / CGFloat(count))))
+            let amp = minDim * (0.05 + 0.06 * hash01(vseed, 2))
+            let freq = 1.5 + 2.0 * hash01(vseed, 3)
+            let phase = hash01(vseed, 4) * .pi * 2
+            let lengthFrac = 0.82 + 0.22 * hash01(vseed, 5)
 
-            // Inward toward centroid, plus a tangential lean for variety.
-            var inx = center.x - anchor.x, iny = center.y - anchor.y
-            let ilen = max(0.0001, hypot(inx, iny)); inx /= ilen; iny /= ilen
-            let ahead = loopPoint(startArc + anchorArc + 6)
-            let behind = loopPoint(startArc + anchorArc - 6)
-            var tx = ahead.x - behind.x, ty = ahead.y - behind.y
-            let tlen = max(0.0001, hypot(tx, ty)); tx /= tlen; ty /= tlen
-            let lean = (hash01(salt, 2) - 0.5) * 1.1
-            var dx = inx + tx * lean, dy = iny + ty * lean
-            let dlen = max(0.0001, hypot(dx, dy)); dx /= dlen; dy /= dlen
-            let perp = CGVector(dx: -dy, dy: dx)
-
-            let length = minDim * (0.10 + 0.10 * hash01(salt, 3))
-            let curl = length * 0.22 * (hash01(salt, 4) - 0.5) * 2
-            branches.append(Branch(anchorArc: anchorArc,
-                                   dir: CGVector(dx: dx, dy: dy),
-                                   perp: perp, length: length, curl: curl, seed: salt))
+            // Branches spread along the vine.
+            var branches: [VineBranch] = []
+            let bcount = 5 + Int(hash01(vseed, 6) * 4)
+            for j in 0..<bcount {
+                let bseed = vseed &* 61 &+ j
+                let t = 0.12 + (0.86 * (CGFloat(j) + hash01(bseed, 1)) / CGFloat(bcount))
+                let side: CGFloat = (j % 2 == 0) ? 1 : -1
+                let length = minDim * (0.09 + 0.09 * hash01(bseed, 2))
+                let curl = length * 0.22 * (hash01(bseed, 3) - 0.5) * 2
+                let hasFlower = hash01(bseed, 7) < 0.17    // ~1 in 6 branches
+                branches.append(VineBranch(t: t, side: side, length: length, curl: curl, seed: bseed, hasFlower: hasFlower))
+            }
+            vines.append(Vine(startFrac: startFrac, amp: amp, freq: freq, phase: phase,
+                              lengthFrac: lengthFrac, seed: vseed, branches: branches))
         }
-        layout.branches = branches
+        layout.vines = vines
     }
 }
 
@@ -1102,6 +1162,7 @@ private struct EffectView: View {
     var christmas: ChristmasLightsConfig? = nil
     var game: GameOfLifeConfig? = nil
     var leaves: FallingLeavesConfig? = nil
+    var ivy: GrowingIvyConfig? = nil
     var treeImage: Int = 0
     var three: ThreeDConfig? = nil
     var paint: PaintDripConfig? = nil
@@ -2390,7 +2451,8 @@ private struct EffectView: View {
         case .outlineGlow:
             OutlineGlowView(color: color, accent: accent, time: time, outline: outline)
         case .growingIvy:
-            GrowingIvyView(color: color, accent: accent, time: time, outline: outline)
+            GrowingIvyView(color: color, accent: accent, time: time,
+                           direction: (ivy ?? GrowingIvyConfig()).direction)
 
         default: EmptyView()
         }

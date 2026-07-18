@@ -82,6 +82,7 @@ struct PropertiesPanelView: View {
                             christmas: surface.christmasLights,
                             game: surface.gameOfLife,
                             leaves: surface.fallingLeaves,
+                            ivy: surface.growingIvy,
                             treeImage: surface.christmasTreeImage,
                             three: surface.threeD,
                             paint: surface.paintDrip,
@@ -100,6 +101,7 @@ private struct MediaEditor: View {
     @Binding var christmas: ChristmasLightsConfig?
     @Binding var game: GameOfLifeConfig?
     @Binding var leaves: FallingLeavesConfig?
+    @Binding var ivy: GrowingIvyConfig?
     @Binding var treeImage: Int
     @Binding var three: ThreeDConfig?
     @Binding var paint: PaintDripConfig?
@@ -252,6 +254,17 @@ private struct MediaEditor: View {
                         ),
                         in: 0.4...4.0
                     )
+                }
+            }
+            if effectKind == .growingIvy {
+                let cfg = ivy ?? GrowingIvyConfig()
+                Picker("Growth direction", selection: Binding(
+                    get: { cfg.direction },
+                    set: { var c = cfg; c.direction = $0; ivy = c }
+                )) {
+                    ForEach(IvyDirection.allCases, id: \.self) { d in
+                        Text(d.displayName).tag(d)
+                    }
                 }
             }
             if effectKind.supportsAudio {
