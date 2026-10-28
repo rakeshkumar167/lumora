@@ -127,6 +127,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case webLiquid
     case webTubes
     case webGarden
+    // Astronomy (bundled WebGL pages, rendered via WebEffectContent)
+    case milkyWay
 
     public var id: String { rawValue }
 
@@ -144,7 +146,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard, .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons,
              .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
              .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
-             .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden:
+             .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden,
+             .milkyWay:
             return false
         default:
             return true
@@ -301,6 +304,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .webLiquid: return "Liquid"
         case .webTubes: return "Tubes"
         case .webGarden: return "Blooming Garden"
+        case .milkyWay: return "Milky Way"
         }
     }
 
@@ -349,6 +353,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
              .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden:
             return .webGL
+        case .milkyWay:
+            return .astronomy
         }
     }
 }
@@ -372,6 +378,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case halloween
     case bioluminescent
     case webGL
+    case astronomy
 
     public var id: String { rawValue }
 
@@ -393,6 +400,7 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .halloween: return "Halloween"
         case .bioluminescent: return "Bioluminescent"
         case .webGL: return "WebGL & Shaders"
+        case .astronomy: return "Astronomy"
         }
     }
 

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<!--
+  Milky Way — our galaxy as a slowly rotating barred spiral seen at a tilt,
+  built procedurally from ~230k point sprites in three.js (shared 0.167 ESM
+  build, no CDN, no textures on disk). Layers: a long warm central bar with
+  a compact bulge and an inner ring, the two major arms (Scutum–Centaurus,
+  Perseus), two minor arms (Norma, Sagittarius) and the Orion Spur as
+  tightly wound (14°) logarithmic spirals of blue-white stars with spurs,
+  pink HII star-forming knots and bright blue young clusters along the arms,
+  dark dust lanes hugging the inner (trailing) edge of each arm, a faint
+  exponential disk, a soft core halo and a distant twinkling starfield.
+  Dust uses a darkening-only blend.
+  The disk turns rigidly (density-wave style, so the arms never wind up) in
+  the trailing sense; the camera drifts gently. UnrealBloom adds the glow.
+  Colours are authored as display values with a linear output colour space,
+  so the bloom composer needs no output pass. Deterministic seed.
+  Debug query params (browser only): `fps`, `t=<seconds>`.
+  Bundled and loaded into a WKWebView by WebEffectContent.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Milky Way</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three/three.module.js",
+    "three/addons/": "./lib/three/addons/"
+} }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ---------------------------------------------------------------- helpers
+let seed = 1977;
+const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+const rr = (a, b) => a + (b - a) * rnd();
+const gauss = () => { let u = 0, v = 0; while (u === 0) u = rnd(); v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); };
+const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+const Q = new URLSearchParams(location.search);
+const PR = Math.min(window.devicePixelRatio, 1.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(PR);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.setClearColor(0x000000, 1);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
+
+// ---------------------------------------------------------------- star layers
+// A layer accumulates positions / colours / sizes / brightness, then becomes
+// one Points object with a soft round sprite shader.
+class Layer {
+  constructor() { this.p = []; this.c = []; this.s = []; this.b = []; }
+  add(x, y, z, col, size, bright) { this.p.push(x, y, z); this.c.push(...col); this.s.push(size); this.b.push(bright); }
+  build(mat) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    g.setAttribute('aSize', new THREE.Float32BufferAttribute(this.s, 1));
+    g.setAttribute('aBright', new THREE.Float32BufferAttribute(this.b, 1));
+    return new THREE.Points(g, mat);
+  }
+}
+
+const U = { uTime: { value: 0 }, uScale: { value: window.innerHeight * PR * 0.5 } };
+function starMaterial({ dust = false, twinkle = 0, sharp = 4.0 } = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...U, uTwinkle: { value: twinkle }, uSharp: { value: sharp } },
+    vertexShader: `
+      uniform float uTime, uScale, uTwinkle;
+      attribute vec3 color; attribute float aSize, aBright;
+      varying vec3 vColor; varying float vBright;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float tw = 1.0 + uTwinkle * sin(uTime * (1.3 + fract(aBright * 91.7) * 2.5) + position.x * 37.0 + position.z * 11.0);
+        vColor = color; vBright = aBright * tw;
+        gl_PointSize = max(1.0, aSize * uScale / -mv.z);
+      }`,
+    fragmentShader: dust ? `
+      varying vec3 vColor; varying float vBright;
+      void main() {
+        vec2 d = gl_PointCoord - 0.5; float r2 = dot(d, d) * 4.0;
+        float a = exp(-r2 * 3.0) * vBright;
+        if (a < 0.003) discard;
+        gl_FragColor = vec4(vColor, a);
+      }` : `
+      uniform float uSharp;
+      varying vec3 vColor; varying float vBright;
+      void main() {
+        vec2 d = gl_PointCoord - 0.5; float r2 = dot(d, d) * 4.0;
+        float a = exp(-r2 * uSharp) + 0.25 * exp(-r2 * 1.2);
+        a *= 1.0 - smoothstep(0.85, 1.0, r2);
+        gl_FragColor = vec4(vColor * a * vBright, 1.0);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: dust ? THREE.CustomBlending : THREE.AdditiveBlending,
+    // Dust only ever darkens what is behind it: dst * (1 - a).
+    ...(dust ? { blendSrc: THREE.ZeroFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation } : {}),
+  });
+}
+
+const galaxy = new THREE.Group();
+scene.add(galaxy);
+
+// Structure follows the modern picture of our galaxy: a long central bar
+// (~1/3 of the disk radius) wrapped by an inner ring, two major arms
+// (Scutum–Centaurus, Perseus) leaving the bar ends, two minor arms (Norma,
+// Sagittarius–Carina), the short Orion Spur, feathery spurs off the arms and
+// a diffuse disk that fills the space between them. Pitch ≈ 14°.
+const R_MAX = 6.4;
+const BAR_ANGLE = 0.45, BAR_LEN = 2.0;
+const PITCH = Math.tan(14 * Math.PI / 180);
+const TAU = Math.PI * 2;
+const ARMS = [ // start angle, start/end radius, weight, strength
+  { name: 'Scutum-Centaurus', a0: BAR_ANGLE, r0: 2.0, r1: 6.4, w: 0.3, k: 1.0 },
+  { name: 'Perseus', a0: BAR_ANGLE + Math.PI, r0: 2.0, r1: 6.4, w: 0.3, k: 1.0 },
+  { name: 'Norma', a0: BAR_ANGLE + Math.PI / 2 + 0.35, r0: 2.2, r1: 5.9, w: 0.17, k: 0.72 },
+  { name: 'Sagittarius', a0: BAR_ANGLE + Math.PI * 1.5 + 0.35, r0: 2.2, r1: 5.7, w: 0.17, k: 0.72 },
+];
+/** Arm centreline angle at radius r (log spiral from the arm's start). */
+const armTheta = (arm, r) => arm.a0 + Math.log(r / arm.r0) / PITCH;
+// Orion Spur: a short arm segment midway between Sagittarius and Perseus.
+{
+  const rs = 4.2, a = armTheta(ARMS[3], rs), b = armTheta(ARMS[1], rs);
+  let d = ((b - a) % TAU + TAU) % TAU;
+  ARMS.push({ name: 'Orion', a0: a + d / 2, r0: rs, r1: 5.4, w: 0.06, k: 0.5 });
+}
+const pickArm = () => { let u = rnd(); for (const a of ARMS) { if ((u -= a.w) <= 0) return a; } return ARMS[0]; };
+/** Taper so arms fade in from the bar and out at their tips. */
+const taper = (arm, r) => Math.min(1, (r - arm.r0) / 0.5 + 0.35) * Math.min(1, (arm.r1 - r) / 0.9 + 0.1);
+const WARM = hex(0xffd9a0), CORE = hex(0xfff1d6), GOLD = hex(0xffc477);
+const BLUE = hex(0x9cc0ff), BLUEW = hex(0xd8e4ff), WHITE = hex(0xfff8f0), PINK = hex(0xff5c9a), MAG = hex(0xff7fbf);
+const youngCol = () => { const t = rnd(); return t < 0.7 ? mix(BLUEW, BLUE, rnd()) : t < 0.9 ? WHITE : mix(WARM, WHITE, rnd()); };
+
+const stars = new Layer();
+const cb = Math.cos(BAR_ANGLE), sb = Math.sin(BAR_ANGLE);
+const barXZ = (u, v) => [u * cb - v * sb, u * sb + v * cb];
+
+// Bar + small bulge
+for (let i = 0; i < 50000; i++) {
+  let x, y, z;
+  if (rnd() < 0.72) { // long bar
+    const u = gauss() * 0.85, v = gauss() * 0.27 * (1 - 0.35 * Math.min(1, Math.abs(u) / 2));
+    if (Math.abs(u) > BAR_LEN * 1.05) { i--; continue; }
+    [x, z] = barXZ(u, v); y = gauss() * 0.13;
+  } else { // compact, slightly boxy bulge
+    const r = Math.abs(gauss()) * 0.32;
+    const th = rnd() * TAU, ph = Math.acos(rr(-1, 1));
+    x = r * Math.sin(ph) * Math.cos(th); z = r * Math.sin(ph) * Math.sin(th); y = r * Math.cos(ph) * 0.65;
+  }
+  const d = Math.hypot(x, y * 1.5, z);
+  const col = mix(CORE, mix(WARM, GOLD, rnd() * 0.6), Math.min(1, d / 1.2));
+  stars.add(x, y, z, col, rr(0.025, 0.05), 0.15 * Math.exp(-d * 0.8) + 0.05);
+}
+
+// Inner ring hugging the bar ends
+for (let i = 0; i < 12000; i++) {
+  const a = rnd() * TAU, w = gauss() * 0.11;
+  const [x, z] = barXZ(Math.cos(a) * (2.15 + w), Math.sin(a) * (1.7 + w));
+  stars.add(x, gauss() * 0.04, z, youngCol(), rr(0.025, 0.05), 0.2 + 0.18 * Math.exp(-w * w * 60));
+}
+
+// Spiral arms: narrow bright cores inside a soft envelope
+for (let i = 0; i < 105000; i++) {
+  const arm = pickArm();
+  const r = arm.r0 + Math.pow(rnd(), 1.1) * (arm.r1 - arm.r0);
+  const wide = rnd() < 0.28;
+  const spread = (0.11 + 0.032 * r) * (wide ? 2.6 : 1);
+  const off = gauss() * spread, along = gauss() * 0.12;
+  const clump = 0.55 + 0.45 * Math.sin(r * 4.1 + arm.a0 * 5) * Math.sin(r * 9.3 + arm.a0);
+  const th = armTheta(arm, r) + along / r;
+  const x = Math.cos(th) * (r + off), z = Math.sin(th) * (r + off);
+  const y = gauss() * (0.04 + 0.04 * (1 - r / R_MAX));
+  const near = Math.exp(-(off * off) / (2 * spread * spread * 0.35));
+  const fade = Math.exp(-(r - 2) / 4.6) * taper(arm, r);
+  stars.add(x, y, z, youngCol(), rr(0.022, 0.05) * (rnd() < 0.02 ? 2.2 : 1),
+    ((wide ? 0.16 : 0.32) + 0.8 * near * clump) * fade * arm.k + 0.03);
+}
+
+// Feathery spurs branching outward from the arms
+const SPURS = [];
+for (let k = 0; k < 22; k++) {
+  const arm = ARMS[k % 4], r = rr(arm.r0 + 0.8, arm.r1 - 0.4);
+  SPURS.push({ arm, r, th: armTheta(arm, r), len: rr(0.5, 1.1), dir: rnd() < 0.5 ? 1 : -1 });
+}
+for (const sp of SPURS) {
+  for (let i = 0; i < 700; i++) {
+    const t = Math.pow(rnd(), 0.8), rr0 = sp.r + t * sp.len;
+    const th = sp.th + sp.dir * 0.35 * t + gauss() * 0.02;
+    const off = gauss() * 0.06;
+    stars.add(Math.cos(th) * (rr0 + off), gauss() * 0.04, Math.sin(th) * (rr0 + off), youngCol(), rr(0.022, 0.045),
+      (0.32 * (1 - t) + 0.06) * sp.arm.k);
+  }
+}
+
+// Diffuse old-star disk: fills the space between arms with a soft glow
+for (let i = 0; i < 95000; i++) {
+  const r = -Math.log(1 - rnd() * 0.99) * 2.2 + 0.2;
+  if (r > R_MAX * 1.12) { i--; continue; }
+  const th = rnd() * TAU;
+  stars.add(Math.cos(th) * r, gauss() * 0.06, Math.sin(th) * r, mix(WARM, WHITE, rnd() * 0.7), rr(0.03, 0.06), 0.22 * Math.exp(-r / 3.0) + 0.025);
+}
+
+// HII regions and young blue clusters: compact bright knots along the arms
+const knots = new Layer();
+for (let k = 0; k < 280; k++) {
+  const ring = k < 30;
+  let cx, cz, arm = null;
+  if (ring) { const a = rnd() * TAU; [cx, cz] = barXZ(Math.cos(a) * 2.15, Math.sin(a) * 1.7); }
+  else { arm = pickArm(); const r = rr(arm.r0 + 0.2, arm.r1 - 0.2), th = armTheta(arm, r) + gauss() * 0.025; cx = Math.cos(th) * r; cz = Math.sin(th) * r; }
+  const pink = rnd() < 0.55;
+  const n = 6 + Math.floor(rnd() * 14);
+  for (let i = 0; i < n; i++) {
+    const s = 0.04 + 0.035 * rnd();
+    knots.add(cx + gauss() * s, gauss() * 0.02, cz + gauss() * s,
+      pink ? mix(PINK, MAG, rnd()) : mix(BLUEW, BLUE, rnd() * 0.5), rr(0.035, 0.1), (pink ? rr(0.25, 0.5) : rr(0.3, 0.6)) * (arm ? arm.k : 0.8));
+  }
+}
+
+// Dust: lanes on each arm's inner edge, the inner ring, and the two classic
+// straight lanes on the leading edges of the bar.
+const dust = new Layer();
+const DUST = hex(0x120a06), DUST2 = hex(0x26160c);
+for (let i = 0; i < 42000; i++) {
+  const arm = pickArm();
+  const r = arm.r0 + Math.pow(rnd(), 0.9) * (arm.r1 - arm.r0);
+  const th = armTheta(arm, r) - 0.09 - 0.012 * r;
+  const off = gauss() * (0.04 + 0.022 * r);
+  dust.add(Math.cos(th) * (r + off), gauss() * 0.02, Math.sin(th) * (r + off), rnd() < 0.5 ? DUST : DUST2,
+    rr(0.14, 0.3), 0.2 * arm.k * taper(arm, r));
+}
+for (let i = 0; i < 5000; i++) {
+  const a = rnd() * TAU, w = gauss() * 0.08;
+  const [x, z] = barXZ(Math.cos(a) * (2.05 + w), Math.sin(a) * (1.6 + w));
+  dust.add(x, gauss() * 0.02, z, DUST, rr(0.12, 0.24), 0.14);
+}
+for (let i = 0; i < 2500; i++) {
+  const side = rnd() < 0.5 ? 1 : -1, u = rr(0.5, 1.8) * side;
+  const [x, z] = barXZ(u, side * (0.24 + 0.05 * Math.abs(u)) + gauss() * 0.07);
+  dust.add(x, gauss() * 0.02, z, DUST, rr(0.14, 0.24), 0.1);
+}
+
+galaxy.add(stars.build(starMaterial()));
+const dustPoints = dust.build(starMaterial({ dust: true }));
+dustPoints.renderOrder = 1;
+galaxy.add(dustPoints);
+const knotPoints = knots.build(starMaterial({ sharp: 6.0 }));
+knotPoints.renderOrder = 2;
+galaxy.add(knotPoints);
+
+// Soft glows: a warm core halo and a faint disk sheen, as additive sprites.
+function glowTexture(stops) {
+  const S = 256, cvs = document.createElement('canvas'); cvs.width = cvs.height = S;
+  const g = cvs.getContext('2d'), gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  stops.forEach(([t, c]) => gr.addColorStop(t, c));
+  g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  return new THREE.CanvasTexture(cvs);
+}
+const sheen = new THREE.Mesh(new THREE.PlaneGeometry(R_MAX * 2.6, R_MAX * 2.6).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ map: glowTexture([[0, 'rgba(255,220,170,0.35)'], [0.18, 'rgba(255,205,150,0.16)'],
+    [0.45, 'rgba(150,170,230,0.07)'], [1, 'rgba(0,0,0,0)']]), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+galaxy.add(sheen);
+const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture([[0, 'rgba(255,246,225,0.75)'], [0.12, 'rgba(255,225,170,0.45)'],
+  [0.4, 'rgba(255,190,120,0.16)'], [1, 'rgba(0,0,0,0)']]), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+core.scale.set(1.1, 1.1, 1);
+galaxy.add(core);
+const barGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ map: glowTexture([[0, 'rgba(255,225,170,0.35)'], [0.3, 'rgba(255,205,140,0.16)'], [1, 'rgba(0,0,0,0)']]),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+barGlow.scale.set(4.6, 1, 1.5);
+barGlow.rotation.y = -BAR_ANGLE;
+galaxy.add(barGlow);
+
+// Distant starfield (does not rotate with the galaxy).
+const field = new Layer();
+for (let i = 0; i < 9000; i++) {
+  const v = new THREE.Vector3(gauss(), gauss(), gauss()).normalize().multiplyScalar(rr(80, 140));
+  const t = rnd();
+  const col = t < 0.2 ? hex(0xaec8ff) : t < 0.35 ? hex(0xffd9a8) : hex(0xfff7ee);
+  const big = rnd() < 0.03;
+  field.add(v.x, v.y, v.z, col, big ? rr(0.9, 1.5) : rr(0.35, 0.75), big ? rr(0.6, 0.9) : rr(0.15, 0.5));
+}
+scene.add(field.build(starMaterial({ twinkle: 0.35, sharp: 7.0 })));
+
+// ---------------------------------------------------------------- post
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(PR);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.7, 0.5, 0.2);
+composer.addPass(bloom);
+
+function resize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  U.uScale.value = window.innerHeight * PR * 0.5;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------------------------------------------------------------- loop
+const SPIN = 0.05; // rad/s — one full turn about every two minutes
+const t0 = performance.now() - (Number(Q.get('t')) || 0) * 1000;
+let fpsN = 0, fpsT = 0;
+function frame() {
+  const t = (performance.now() - t0) / 1000;
+  U.uTime.value = t;
+  // Positive rotation.y decreases atan2(z, x): the arms trail, as in a real disk.
+  galaxy.rotation.y = t * SPIN;
+  const el = 1.1 + 0.07 * Math.sin(t * 0.031), az = 0.25 * Math.sin(t * 0.019), dist = 14.5 + 0.5 * Math.sin(t * 0.023);
+  camera.position.set(Math.sin(az) * Math.cos(el) * dist, Math.sin(el) * dist, Math.cos(az) * Math.cos(el) * dist);
+  camera.lookAt(0, 0, 0);
+  composer.render();
+  if (Q.has('fps')) { fpsN++; if (t - fpsT > 2) { console.log('FPS ' + (fpsN / (t - fpsT)).toFixed(1)); fpsN = 0; fpsT = t; } }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
