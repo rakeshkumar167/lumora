@@ -1192,7 +1192,7 @@ private struct EffectView: View {
             patternEffects
         case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles, .butterflies, .aquarium:
             natureEffects
-        case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh, .pendulumPaint:
+        case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh, .pendulumPaint, .bouncingBall:
             motionEffects
         case .tvStatic, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
@@ -2093,6 +2093,9 @@ private struct EffectView: View {
 
         case .pendulumPaint:
             Canvas { ctx, size in drawPendulumPaint(ctx: ctx, size: size) }
+
+        case .bouncingBall:
+            BouncingBallView(time: time, color: color)
 
         default: EmptyView()
         }

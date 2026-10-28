@@ -44,6 +44,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case prismFalls
     case liquidSlosh
     case pendulumPaint
+    case bouncingBall
     case voronoi
     case metaballs
     case hexGrid
@@ -227,6 +228,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .prismFalls: return "Prism Falls"
         case .liquidSlosh: return "Liquid Slosh"
         case .pendulumPaint: return "Pendulum Paint"
+        case .bouncingBall: return "Bouncing Ball"
         case .voronoi: return "Voronoi Cells"
         case .metaballs: return "Metaballs"
         case .hexGrid: return "Hex Grid"
@@ -324,7 +326,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .particleSwarm, .audioParticles, .butterflies, .aquarium:
             return .nature
         case .waves, .equalizer, .tunnel, .kaleidoscope,
-             .prismFalls, .liquidSlosh, .pendulumPaint:
+             .prismFalls, .liquidSlosh, .pendulumPaint, .bouncingBall:
             return .motion
         case .tvStatic, .matrixRain, .pixelDissolve,
              .dvdBounce, .marqueeText:
