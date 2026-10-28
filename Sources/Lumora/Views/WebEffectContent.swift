@@ -94,6 +94,7 @@ enum WebEffect {
         case .webPacman: return "pacman"
         case .webLiquid: return "liquid"
         case .webTubes: return "tubes"
+        case .webGarden: return "garden"
         default: return nil
         }
     }
