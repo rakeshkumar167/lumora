@@ -79,6 +79,23 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case multiColorLights
     case twinklingLights
     case warmBulbs
+    // Diwali festival scenes (fixed warm palette; no color pickers).
+    case diyaLamps
+    case rangoliBloom
+    case skyLanterns
+    case sparklers
+    case diwaliSkyline
+    case marigoldToran
+    case deepawaliPlacard
+    // Halloween night scenes (fixed palette; no color pickers).
+    case jackOLanterns
+    case hauntedNight
+    case hauntedHouse
+    case witchCauldron
+    case witchRide
+    case graveyardParty
+    case spiderWebs
+    case dancingSkeletons
     /// Chladni plate resonance patterns. Renderer/category/displayName land in
     /// Task 7; this task only adds the case so `supportsAudio` is exhaustive.
     case chladni
@@ -123,6 +140,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
              .aquarium,
              .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver,
+             .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard, .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons,
              .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
              .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
              .webFlowers, .webPacman, .webLiquid, .webTubes:
@@ -240,6 +258,21 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .multiColorLights: return "Multi-Colored Lights"
         case .twinklingLights: return "Twinkling Lights"
         case .warmBulbs: return "Warm Round Bulbs"
+        case .diyaLamps: return "Diya Lamps"
+        case .rangoliBloom: return "Rangoli Bloom"
+        case .skyLanterns: return "Sky Lanterns"
+        case .sparklers: return "Sparklers & Anar"
+        case .diwaliSkyline: return "Diwali Skyline"
+        case .marigoldToran: return "Marigold Toran"
+        case .deepawaliPlacard: return "Happy Deepawali Placard"
+        case .jackOLanterns: return "Jack-o'-Lanterns"
+        case .hauntedNight: return "Haunted Night"
+        case .hauntedHouse: return "Haunted House"
+        case .witchCauldron: return "Witch's Cauldron"
+        case .witchRide: return "Witch Ride"
+        case .graveyardParty: return "Graveyard Party"
+        case .spiderWebs: return "Spider Webs"
+        case .dancingSkeletons: return "Dancing Skeletons"
         case .chladni: return "Chladni"
         case .hilbertCurve: return "Hilbert Curve"
         case .godRays: return "God Rays"
@@ -304,6 +337,10 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .clocks
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             return .christmas
+        case .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard:
+            return .diwali
+        case .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons:
+            return .halloween
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             return .bioluminescent
         case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
@@ -329,6 +366,8 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
     case edge
     case clocks
     case christmas
+    case diwali
+    case halloween
     case bioluminescent
     case webGL
 
@@ -348,6 +387,8 @@ public enum EffectCategory: String, Codable, CaseIterable, Identifiable {
         case .edge: return "Edge"
         case .clocks: return "Clocks & Info"
         case .christmas: return "Christmas Lights"
+        case .diwali: return "Diwali"
+        case .halloween: return "Halloween"
         case .bioluminescent: return "Bioluminescent"
         case .webGL: return "WebGL & Shaders"
         }

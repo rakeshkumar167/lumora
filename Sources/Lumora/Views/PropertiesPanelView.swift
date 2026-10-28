@@ -83,6 +83,7 @@ struct PropertiesPanelView: View {
                             game: surface.gameOfLife,
                             leaves: surface.fallingLeaves,
                             ivy: surface.growingIvy,
+                            rangoli: surface.rangoli,
                             treeImage: surface.christmasTreeImage,
                             three: surface.threeD,
                             paint: surface.paintDrip,
@@ -102,6 +103,7 @@ private struct MediaEditor: View {
     @Binding var game: GameOfLifeConfig?
     @Binding var leaves: FallingLeavesConfig?
     @Binding var ivy: GrowingIvyConfig?
+    @Binding var rangoli: RangoliConfig?
     @Binding var treeImage: Int
     @Binding var three: ThreeDConfig?
     @Binding var paint: PaintDripConfig?
@@ -267,6 +269,9 @@ private struct MediaEditor: View {
                     }
                 }
             }
+            if effectKind == .rangoliBloom {
+                rangoliControls
+            }
             if effectKind.supportsAudio {
                 Toggle("Audio Reactive", isOn: $audioReactive)
                 if AudioInputManager.shared.isDenied {
@@ -397,6 +402,54 @@ private struct MediaEditor: View {
             get: { cfg.finale },
             set: { var c = cfg; c.finale = $0; countdown = c }
         ))
+    }
+
+    /// Pattern, palette and extras for the Rangoli Bloom effect.
+    @ViewBuilder
+    private var rangoliControls: some View {
+        let cfg = rangoli ?? RangoliConfig()
+        Picker("Pattern", selection: Binding(
+            get: { cfg.style }, set: { var c = cfg; c.style = $0; rangoli = c }
+        )) {
+            ForEach(RangoliStyle.allCases, id: \.self) { Text($0.displayName).tag($0) }
+        }
+        Picker("Colors", selection: Binding(
+            get: { cfg.palette }, set: { var c = cfg; c.palette = $0; rangoli = c }
+        )) {
+            ForEach(RangoliPalette.allCases, id: \.self) { Text($0.displayName).tag($0) }
+        }
+        VStack(alignment: .leading) {
+            Text("Rings: \(cfg.rings)").font(.caption)
+            Slider(value: Binding(get: { Double(cfg.rings) },
+                                  set: { var c = cfg; c.rings = Int($0.rounded()); rangoli = c }),
+                   in: 3...12, step: 1)
+        }
+        VStack(alignment: .leading) {
+            Text("Symmetry: \(cfg.symmetry)-fold").font(.caption)
+            Slider(value: Binding(get: { Double(cfg.symmetry) },
+                                  set: { var c = cfg; c.symmetry = Int($0.rounded()); rangoli = c }),
+                   in: 6...24, step: 2)
+        }
+        VStack(alignment: .leading) {
+            Text("Speed: \(String(format: "%.1f", cfg.speed))×").font(.caption)
+            Slider(value: Binding(get: { cfg.speed },
+                                  set: { var c = cfg; c.speed = $0; rangoli = c }),
+                   in: 0.2...3)
+        }
+        VStack(alignment: .leading) {
+            Text("Glow: \(Int(cfg.glow * 100))%").font(.caption)
+            Slider(value: Binding(get: { cfg.glow },
+                                  set: { var c = cfg; c.glow = $0; rangoli = c }),
+                   in: 0...1)
+        }
+        Toggle("Build & fade loop", isOn: Binding(
+            get: { cfg.buildCycle }, set: { var c = cfg; c.buildCycle = $0; rangoli = c }))
+        Toggle("Diya ring", isOn: Binding(
+            get: { cfg.diyaRing }, set: { var c = cfg; c.diyaRing = $0; rangoli = c }))
+        Toggle("Powder sparkle", isOn: Binding(
+            get: { cfg.sparkle }, set: { var c = cfg; c.sparkle = $0; rangoli = c }))
+        Toggle("Falling petals", isOn: Binding(
+            get: { cfg.fallingPetals }, set: { var c = cfg; c.fallingPetals = $0; rangoli = c }))
     }
 
     /// Bulb-count and sag-count controls for the Christmas string-light effects.

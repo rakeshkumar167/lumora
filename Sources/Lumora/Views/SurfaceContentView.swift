@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, ivy: surface.growingIvy, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, outline: effectOutline, audioReactive: surface.audioReactive)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, ivy: surface.growingIvy, rangoli: surface.rangoli, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, outline: effectOutline, audioReactive: surface.audioReactive)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -1174,6 +1174,7 @@ private struct EffectView: View {
     var game: GameOfLifeConfig? = nil
     var leaves: FallingLeavesConfig? = nil
     var ivy: GrowingIvyConfig? = nil
+    var rangoli: RangoliConfig? = nil
     var treeImage: Int = 0
     var three: ThreeDConfig? = nil
     var paint: PaintDripConfig? = nil
@@ -1209,6 +1210,10 @@ private struct EffectView: View {
             clockEffects
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             christmasEffects
+        case .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard:
+            diwaliEffects
+        case .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons:
+            halloweenEffects
         case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
             bioluminescentEffects
         case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
@@ -1225,6 +1230,35 @@ private struct EffectView: View {
             WebEffectContent(resource: resource)
         } else {
             Color.clear
+        }
+    }
+
+    /// Halloween night scenes. Fixed `HalloweenPalette`; no color pickers.
+    @ViewBuilder private var halloweenEffects: some View {
+        switch kind {
+        case .jackOLanterns: JackOLanternsView(time: time)
+        case .hauntedNight: HauntedNightView(time: time)
+        case .hauntedHouse: HauntedHouseView(time: time)
+        case .witchCauldron: WitchCauldronView(time: time)
+        case .witchRide: WitchRideView(time: time)
+        case .graveyardParty: GraveyardPartyView(time: time)
+        case .spiderWebs: SpiderWebsView(time: time)
+        case .dancingSkeletons: DancingSkeletonsView(time: time)
+        default: EmptyView()
+        }
+    }
+
+    /// Diwali festival scenes. Fixed `DiwaliPalette`; no color pickers.
+    @ViewBuilder private var diwaliEffects: some View {
+        switch kind {
+        case .diyaLamps: DiyaLampsView(time: time)
+        case .skyLanterns: SkyLanternsView(time: time)
+        case .sparklers: SparklersView(time: time)
+        case .diwaliSkyline: DiwaliSkylineView(time: time)
+        case .marigoldToran: MarigoldToranView(time: time)
+        case .deepawaliPlacard: DeepawaliPlacardView(time: time)
+        case .rangoliBloom: RangoliBloomView(time: time, config: rangoli ?? RangoliConfig())
+        default: EmptyView()
         }
     }
 
