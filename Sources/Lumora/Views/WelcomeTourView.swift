@@ -193,7 +193,7 @@ private struct TourPage {
                  body: "Click Add Surface to drop a new shape on the canvas. Arrow: drag the corner handles to warp it onto a real object, or the knob to rotate. Hand: drag a surface to move it. Pen: click to draw glowing light lines. Add Line starts a new one.",
                  artwork: .screenshots(["tour-canvas"])),
         TourPage(icon: "viewfinder.rectangular", title: "Detect Surfaces",
-                 body: "Lumora projects four corner markers. Photograph your room with all of them visible, choose the photo, and keep the flat surfaces it finds. This is experimental and works best on large, well-lit surfaces.",
+                 body: "Choose a photo of your room and Lumora finds the flat surfaces in it. Keep the ones you want and they drop onto the canvas, ready to adjust. This is experimental and works best on large, well-lit surfaces.",
                  artwork: .screenshots(["tour-toolbar"])),
         TourPage(icon: "slider.horizontal.3", title: "Properties",
                  body: "The left panel edits whatever is selected: name, shape (quad, polygon or ellipse), rotation, visibility, opacity, and layer order. Below that, Media sets what plays: a solid color, an effect, an image, or a video.",

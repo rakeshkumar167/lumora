@@ -128,7 +128,7 @@ final class ProjectStore: ObservableObject {
                 CGPoint(x: 0.680, y: 0.650),
                 CGPoint(x: 0.400, y: 0.650),
             ],
-            media: .effect(.breathingGlow, .teal, .blue)
+            media: .effect(.kaleidoscope, .teal, .blue)
         )
 
         // Kept as a perspective (non-rectangular) quad to show corner warping.
@@ -140,7 +140,7 @@ final class ProjectStore: ObservableObject {
                 CGPoint(x: 0.320, y: 0.620),
                 CGPoint(x: 0.080, y: 0.780),
             ],
-            media: .effect(.gradientSweep, .magenta, .violet)
+            media: .effect(.tessellationMorph, .magenta, .violet)
         )
 
         return ProjectStore(surfaces: [surface1, surface2], roomImage: image, canvasSize: size)

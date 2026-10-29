@@ -14,7 +14,6 @@ struct WorkspaceView: View {
     @State private var showReview = false
     @State private var detecting = false
     @State private var showDetectDisclaimer = false
-    @State private var showCalibrationWarning = false
 
     private var lumoraType: UTType { UTType(filenameExtension: "lumora") ?? .json }
 
@@ -61,12 +60,6 @@ struct WorkspaceView: View {
             Button("Continue") { detectSurfaces() }
         } message: {
             Text("Automatic surface detection is experimental. It works best on large, flat, well-lit surfaces, and may miss some or need manual adjustment after import.")
-        }
-        .alert("Calibration markers not found", isPresented: $showCalibrationWarning) {
-            Button("Detect Anyway") { showReview = true }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Couldn't find the four projected markers in the photo. You can still detect surfaces on the original photo, but they may not align to the projection.")
         }
     }
 
@@ -145,7 +138,7 @@ struct WorkspaceView: View {
                 Label("Detect Surfaces", systemImage: "viewfinder.rectangular")
             }
             .disabled(detecting)
-            .help("Projects a calibration boundary, then detects surfaces from a photo of the scene aligned to the projection.")
+            .help("Detects flat surfaces in a photo of your scene.")
 
             Divider().frame(height: 16)
 
@@ -170,48 +163,27 @@ struct WorkspaceView: View {
         .padding(.vertical, 10)
     }
 
-    /// Project the calibration pattern, take an uploaded photo, rectify it to the
-    /// projected boundary, then detect surfaces (falling back to the raw photo if
-    /// the four markers aren't found).
+    /// Ask for a photo of the room, detect surfaces in it, then show the review.
     private func detectSurfaces() {
-        store.calibrating = true
-        let startedProjection = !store.projecting
-        if startedProjection { openWindow(id: "projection") }
-
         let panel = NSOpenPanel()
-        panel.message = "A magenta boundary is now projected. Photograph the scene with all four corner markers visible, then choose that photo."
+        panel.message = "Choose a photo of the scene you're projecting onto."
         panel.prompt = "Detect"
         panel.allowedContentTypes = [.jpeg, .png, .heic, .image]
         panel.allowsMultipleSelection = false
 
         guard panel.runModal() == .OK, let url = panel.url,
               let nsImage = NSImage(contentsOf: url),
-              let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            store.calibrating = false
-            if startedProjection { dismissWindow(id: "projection") }
-            return
-        }
+              let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
 
         detecting = true
         Task {
-            let corners = CalibrationMarkerDetector.detectCorners(in: cg)
-            let processed: CGImage
-            let calibrated: Bool
-            if let corners, let rect = PerspectiveRectifier.rectify(cg, corners: corners) {
-                processed = rect; calibrated = true
-            } else {
-                processed = cg; calibrated = false
-            }
-            let detected = SurfaceDetector.detectSurfaces(in: processed)
-            let processedImage = NSImage(cgImage: processed,
-                                         size: NSSize(width: processed.width, height: processed.height))
+            let detected = SurfaceDetector.detectSurfaces(in: cg)
+            let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
             await MainActor.run {
-                store.calibrating = false
-                if startedProjection { dismissWindow(id: "projection") }
-                reviewImage = processedImage
+                reviewImage = image
                 reviewSurfaces = detected
                 detecting = false
-                if calibrated { showReview = true } else { showCalibrationWarning = true }
+                showReview = true
             }
         }
     }
