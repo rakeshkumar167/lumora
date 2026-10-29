@@ -16,6 +16,7 @@ struct LumoraApp: App {
             // Replace the default (help-book) Help item with our in-app help.
             CommandGroup(replacing: .help) {
                 HelpMenuButton()
+                Button("Welcome Tour") { store.showingWelcomeTour = true }
             }
         }
 

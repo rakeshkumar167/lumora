@@ -1163,7 +1163,7 @@ private final class InkFlowState {
 
 /// The built-in generative animations. Effects that support a second color use
 /// `accent` (see `EffectKind.usesAccent`).
-private struct EffectView: View {
+struct EffectView: View {
     let kind: EffectKind
     let color: RGBAColor
     let accent: RGBAColor

@@ -33,6 +33,7 @@ struct SplashView: View {
 
 /// Wraps the workspace and shows the splash on launch.
 struct RootView: View {
+    @EnvironmentObject var store: ProjectStore
     @State private var showSplash = true
     @Environment(\.dismissWindow) private var dismissWindow
 
@@ -54,10 +55,19 @@ struct RootView: View {
                         }
                 }
             }
+            .sheet(isPresented: $store.showingWelcomeTour, onDismiss: {
+                UserDefaults.standard.set(true, forKey: WelcomeTourView.seenKey)
+            }) {
+                WelcomeTourView()
+            }
     }
 
     private func dismiss() {
         guard showSplash else { return }
         withAnimation(.easeOut(duration: 0.6)) { showSplash = false }
+        // First launch: open the welcome tour once the splash has faded.
+        if !UserDefaults.standard.bool(forKey: WelcomeTourView.seenKey) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { store.showingWelcomeTour = true }
+        }
     }
 }

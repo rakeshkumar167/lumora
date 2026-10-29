@@ -27,6 +27,9 @@ final class ProjectStore: ObservableObject {
     /// pattern (a boundary + corner markers) instead of scene content.
     @Published var calibrating: Bool = false
 
+    /// Shows the welcome tour sheet (first launch, or Help → Welcome Tour).
+    @Published var showingWelcomeTour: Bool = false
+
     let roomImage: NSImage
     let canvasSize: CGSize
 
