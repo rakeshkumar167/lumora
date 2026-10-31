@@ -2,7 +2,7 @@ import Foundation
 
 /// Ring motif family for the Rangoli Bloom effect.
 public enum RangoliStyle: String, Codable, CaseIterable, Equatable {
-    case grand, lotus, peacock, star, kolam
+    case grand, lotus, peacock, star, kolam, paisley, chakra, spiral, yantra
 
     public var displayName: String {
         switch self {
@@ -11,6 +11,10 @@ public enum RangoliStyle: String, Codable, CaseIterable, Equatable {
         case .peacock: return "Peacock Feathers"
         case .star: return "Star & Diamond"
         case .kolam: return "Kolam Line Work"
+        case .paisley: return "Paisley Garden"
+        case .chakra: return "Sun Chakra"
+        case .spiral: return "Swirling Vortex"
+        case .yantra: return "Sacred Yantra"
         }
     }
 }
@@ -50,6 +54,10 @@ public struct RangoliConfig: Equatable, Codable {
     public var fallingPetals: Bool
     /// Strength of the soft glow (0…1).
     public var glow: Double
+    /// Living motion — petals unfurling, ripples and shimmer waves (0…1).
+    public var motion: Double
+    /// Small rotating rosettes filling the surface corners.
+    public var cornerRosettes: Bool
 
     public init(style: RangoliStyle = .grand,
                 palette: RangoliPalette = .marigold,
@@ -60,7 +68,9 @@ public struct RangoliConfig: Equatable, Codable {
                 diyaRing: Bool = true,
                 sparkle: Bool = true,
                 fallingPetals: Bool = true,
-                glow: Double = 0.6) {
+                glow: Double = 0.6,
+                motion: Double = 0.7,
+                cornerRosettes: Bool = true) {
         self.style = style
         self.palette = palette
         self.rings = rings
@@ -71,10 +81,12 @@ public struct RangoliConfig: Equatable, Codable {
         self.sparkle = sparkle
         self.fallingPetals = fallingPetals
         self.glow = glow
+        self.motion = motion
+        self.cornerRosettes = cornerRosettes
     }
 
     private enum CodingKeys: String, CodingKey {
-        case style, palette, rings, symmetry, speed, buildCycle, diyaRing, sparkle, fallingPetals, glow
+        case style, palette, rings, symmetry, speed, buildCycle, diyaRing, sparkle, fallingPetals, glow, motion, cornerRosettes
     }
 
     public init(from decoder: Decoder) throws {
@@ -90,5 +102,7 @@ public struct RangoliConfig: Equatable, Codable {
         sparkle = try c.decodeIfPresent(Bool.self, forKey: .sparkle) ?? d.sparkle
         fallingPetals = try c.decodeIfPresent(Bool.self, forKey: .fallingPetals) ?? d.fallingPetals
         glow = min(1, max(0, try c.decodeIfPresent(Double.self, forKey: .glow) ?? d.glow))
+        motion = min(1, max(0, try c.decodeIfPresent(Double.self, forKey: .motion) ?? d.motion))
+        cornerRosettes = try c.decodeIfPresent(Bool.self, forKey: .cornerRosettes) ?? d.cornerRosettes
     }
 }

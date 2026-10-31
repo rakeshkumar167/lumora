@@ -66,7 +66,7 @@ struct SurfaceContentView: View {
         case .color(let c):
             c.color
         case .effect(let kind, let c, let accent):
-            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, ivy: surface.growingIvy, rangoli: surface.rangoli, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, outline: effectOutline, audioReactive: surface.audioReactive)
+            EffectView(kind: kind, color: c, accent: accent, time: time, name: surface.name, marquee: surface.marquee, christmas: surface.christmasLights, game: surface.gameOfLife, leaves: surface.fallingLeaves, ivy: surface.growingIvy, rangoli: surface.rangoli, treeImage: surface.christmasTreeImage, three: surface.threeD, paint: surface.paintDrip, countdown: surface.countdown, brick: surface.brickWall, outline: effectOutline, audioReactive: surface.audioReactive)
         case .image(let url):
             ImageContent(url: url)
         case .video(let url):
@@ -1179,6 +1179,7 @@ struct EffectView: View {
     var three: ThreeDConfig? = nil
     var paint: PaintDripConfig? = nil
     var countdown: CountdownConfig? = nil
+    var brick: BrickWallConfig? = nil
     var outline: EffectOutline = .rect
     var audioReactive: Bool = false
 
@@ -1219,8 +1220,21 @@ struct EffectView: View {
         case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
              .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
              .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden,
-             .milkyWay:
+             .milkyWay, .trappedSoul:
             webEffects
+        case .brickCascade, .brickMural:
+            brickWallEffects
+        }
+    }
+
+    /// Effects laid out on a running-bond brick grid (see `BrickWallConfig`),
+    /// meant to line up with a real brick wall.
+    @ViewBuilder private var brickWallEffects: some View {
+        let cfg = brick ?? BrickWallConfig()
+        switch kind {
+        case .brickCascade: BrickCascadeView(time: time, color: color, accent: accent, config: cfg)
+        case .brickMural: BrickMuralView(time: time, config: cfg)
+        default: EmptyView()
         }
     }
 

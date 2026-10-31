@@ -88,6 +88,7 @@ struct PropertiesPanelView: View {
                             three: surface.threeD,
                             paint: surface.paintDrip,
                             countdown: surface.countdown,
+                            brick: surface.brickWall,
                             audioReactive: surface.audioReactive)
             }
         }
@@ -108,6 +109,7 @@ private struct MediaEditor: View {
     @Binding var three: ThreeDConfig?
     @Binding var paint: PaintDripConfig?
     @Binding var countdown: CountdownConfig?
+    @Binding var brick: BrickWallConfig?
     @Binding var audioReactive: Bool
     @ObservedObject private var weather = WeatherStore.shared
 
@@ -218,6 +220,9 @@ private struct MediaEditor: View {
             }
             if effectKind == .gameOfLife {
                 gameOfLifeControls
+            }
+            if effectKind.category == .brickWall {
+                brickWallControls
             }
             if Self.threeDKinds.contains(effectKind) {
                 let cfg = three ?? ThreeDConfig()
@@ -442,10 +447,18 @@ private struct MediaEditor: View {
                                   set: { var c = cfg; c.glow = $0; rangoli = c }),
                    in: 0...1)
         }
+        VStack(alignment: .leading) {
+            Text("Motion: \(Int(cfg.motion * 100))%").font(.caption)
+            Slider(value: Binding(get: { cfg.motion },
+                                  set: { var c = cfg; c.motion = $0; rangoli = c }),
+                   in: 0...1)
+        }
         Toggle("Build & fade loop", isOn: Binding(
             get: { cfg.buildCycle }, set: { var c = cfg; c.buildCycle = $0; rangoli = c }))
         Toggle("Diya ring", isOn: Binding(
             get: { cfg.diyaRing }, set: { var c = cfg; c.diyaRing = $0; rangoli = c }))
+        Toggle("Corner rosettes", isOn: Binding(
+            get: { cfg.cornerRosettes }, set: { var c = cfg; c.cornerRosettes = $0; rangoli = c }))
         Toggle("Powder sparkle", isOn: Binding(
             get: { cfg.sparkle }, set: { var c = cfg; c.sparkle = $0; rangoli = c }))
         Toggle("Falling petals", isOn: Binding(
@@ -501,6 +514,29 @@ private struct MediaEditor: View {
                 ),
                 in: 0.5...15
             )
+        }
+    }
+
+    /// Brick layout shared by every Brick Wall effect: match the courses and
+    /// bricks the surface covers on the real wall.
+    @ViewBuilder
+    private var brickWallControls: some View {
+        let cfg = brick ?? BrickWallConfig()
+        Stepper(value: Binding(get: { cfg.rows }, set: { var c = cfg; c.rows = $0; brick = c }), in: 2...60) {
+            Text("Courses (rows): \(cfg.rows)")
+        }
+        Stepper(value: Binding(get: { cfg.columns }, set: { var c = cfg; c.columns = $0; brick = c }), in: 1...40) {
+            Text("Bricks per row: \(cfg.columns)")
+        }
+        VStack(alignment: .leading) {
+            Text("Mortar: \(Int(cfg.mortar * 100))%").font(.caption)
+            Slider(value: Binding(get: { cfg.mortar }, set: { var c = cfg; c.mortar = $0; brick = c }),
+                   in: 0.02...0.4)
+        }
+        VStack(alignment: .leading) {
+            Text("Row offset: \(Int(cfg.stagger * 100))%").font(.caption)
+            Slider(value: Binding(get: { cfg.stagger }, set: { var c = cfg; c.stagger = $0; brick = c }),
+                   in: 0...0.95)
         }
     }
 

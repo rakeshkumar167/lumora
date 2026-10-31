@@ -184,7 +184,7 @@ struct RangoliBloomView: View {
 
     // MARK: Motifs
 
-    private enum Motif { case pointed, lotus, feather, dots, beads, scallop, star, diamond, weave, rays
+    private enum Motif { case pointed, lotus, feather, dots, beads, scallop, star, diamond, weave, rays, paisley, chakra, bud, swirl, triangles
 
         var thin: Bool {
             switch self {
@@ -196,11 +196,25 @@ struct RangoliBloomView: View {
 
     private var motifPlan: [Motif] {
         switch config.style {
-        case .grand:   return [.lotus, .dots, .feather, .scallop, .star, .diamond, .pointed, .weave, .beads, .lotus, .feather, .rays]
+        case .grand:   return [.lotus, .dots, .paisley, .scallop, .feather, .chakra, .star, .bud, .diamond, .beads, .lotus, .feather]
         case .lotus:   return [.lotus, .dots, .pointed, .scallop, .lotus, .beads]
         case .peacock: return [.feather, .dots, .scallop, .feather, .weave, .beads]
         case .star:    return [.star, .diamond, .rays, .star, .dots, .diamond]
         case .kolam:   return [.weave, .beads, .weave, .scallop, .weave, .dots]
+        case .paisley: return [.paisley, .dots, .bud, .scallop, .paisley, .beads, .lotus, .weave]
+        case .chakra:  return [.chakra, .rays, .bud, .diamond, .chakra, .dots, .star, .beads]
+        case .spiral:  return [.swirl, .dots, .swirl, .beads, .pointed, .swirl, .scallop, .weave]
+        case .yantra:  return [.triangles, .lotus, .beads, .triangles, .diamond, .dots, .triangles, .scallop]
+        }
+    }
+
+    private var centreMotif: (Motif, Int) {
+        switch config.style {
+        case .paisley: return (.bud, 6)
+        case .chakra:  return (.chakra, 8)
+        case .spiral:  return (.swirl, 6)
+        case .yantra:  return (.triangles, 6)
+        default:       return (.lotus, 8)
         }
     }
 
@@ -252,7 +266,9 @@ struct RangoliBloomView: View {
         let breathe = 1 + 0.012 * sin(t * 1.1)
         let Rb = R * CGFloat(breathe)
 
-        let specs = ringSpecs(pal: pal)
+        let motion = config.motion
+        let cycle = config.buildCycle ? Int(floor(t / period)) : 0
+        let specs = ringSpecs(pal: pal, shift: cycle)
         let slots = specs.count + 1                    // + centrepiece, revealed first
         func reveal(_ slot: Int) -> CGFloat {
             let raw = min(max(build * Double(slots) - Double(slot), 0), 1)
@@ -261,15 +277,19 @@ struct RangoliBloomView: View {
 
         // Pre-build ring paths once per frame.
         var rings: [(RingPaths, RingSpec, CGFloat)] = []
-        let cen = RingSpec(motif: .lotus, r0: 0.012, r1: 0.1, count: 8, ca: pal.colors[4 % pal.colors.count], cb: pal.colors[0], fixedGold: false)
+        let cen = RingSpec(motif: centreMotif.0, r0: 0.012, r1: 0.1, count: centreMotif.1, ca: pal.colors[4 % pal.colors.count], cb: pal.colors[0], fixedGold: false)
         let centerReveal = reveal(0)
         rings.append((buildRing(cen, center: center, R: Rb, rot: t * 0.05, reveal: centerReveal, detail: true), cen, centerReveal))
         for (k, sp) in specs.enumerated() {
             let rv = reveal(k + 1)
             if rv < 0.001 { continue }
             let dir: Double = (k % 2 == 0) ? 1 : -1
-            let rot = t * (0.035 + 0.004 * Double(k)) * dir + Double(k) * 0.23 + Double(1 - rv) * dir * 1.3
-            rings.append((buildRing(sp, center: center, R: Rb, rot: rot, reveal: rv, detail: true), sp, rv))
+            let spin = config.style == .spiral ? 2.4 : 1.0
+            let rot = t * (0.035 + 0.004 * Double(k)) * dir * spin + Double(k) * 0.23 + Double(1 - rv) * dir * 1.3
+            // Living motion: petals open/close and rings ripple in a wave travelling outward.
+            let unfurl = CGFloat(1 + motion * 0.16 * sin(t * 1.6 - Double(k) * 0.7))
+            let ripple = CGFloat(1 + motion * 0.012 * sin(t * 1.3 - Double(k) * 0.5))
+            rings.append((buildRing(sp, center: center, R: Rb * ripple, rot: rot, reveal: rv, detail: true, widthScale: unfurl), sp, rv))
         }
 
         // Soft glow pass first (fills only), then the crisp pass.
@@ -295,6 +315,24 @@ struct RangoliBloomView: View {
             ctx.stroke(rp.strokeA, with: .color(sp.ca.opacity(al)), style: StrokeStyle(lineWidth: max(1.6, Rb * 0.008), lineCap: .round))
             ctx.stroke(rp.strokeB, with: .color(sp.cb.opacity(al)), style: StrokeStyle(lineWidth: max(1.6, Rb * 0.008), lineCap: .round))
             ctx.stroke(rp.line, with: .color(DiwaliPalette.gold.opacity(0.85 * al)), lineWidth: max(0.8, Rb * 0.0035))
+        }
+
+        // Shimmer: a bright wave of light rolling outward through the rings.
+        if motion > 0.01 {
+            ctx.drawLayer { l in
+                l.blendMode = .plusLighter
+                for (idx, (rp, _, rv)) in rings.enumerated() {
+                    let pulse = pow(max(0, sin(t * 1.1 - Double(idx) * 0.55)), 6) * motion * Double(rv) * fade
+                    if pulse < 0.02 { continue }
+                    l.fill(rp.a, with: .color(Color.white.opacity(0.3 * pulse)))
+                    l.fill(rp.b, with: .color(Color.white.opacity(0.22 * pulse)))
+                    l.stroke(rp.line, with: .color(DiwaliPalette.gold.opacity(0.8 * pulse)), lineWidth: max(1.2, Rb * 0.007))
+                }
+            }
+        }
+
+        if config.cornerRosettes {
+            drawRosettes(ctx: ctx, size: size, R: Rb, pal: pal, build: build, fade: fade, t: t, shift: cycle)
         }
 
         // Pulsing sun at the very centre.
@@ -378,12 +416,63 @@ struct RangoliBloomView: View {
         }
     }
 
+    // MARK: Corner rosettes
+
+    /// Small counter-rotating mandalas tucked into the surface corners, sized
+    /// to stay clear of the main pattern and its diya ring. They bloom late in
+    /// the build so the eye follows centre → edge → corners.
+    private func drawRosettes(ctx: GraphicsContext, size: CGSize, R: CGFloat, pal: Palette, build: Double, fade: Double, t: Double, shift: Int) {
+        let w = size.width, h = size.height
+        let diag = hypot(w / 2, h / 2)
+        let rr = min(min(w, h) * 0.16, (diag - R * 1.24) / 2.6)
+        guard rr > min(w, h) * 0.045 else { return }
+        let rv = CGFloat(min(max((build - 0.55) / 0.35, 0), 1))
+        guard rv > 0.001 else { return }
+        let cols = pal.colors
+        let specs = [
+            RingSpec(motif: .lotus, r0: 0.06, r1: 0.42, count: 8, ca: cols[(1 + shift) % cols.count], cb: cols[(3 + shift) % cols.count], fixedGold: false),
+            RingSpec(motif: .dots, r0: 0.44, r1: 0.56, count: 16, ca: cols[(2 + shift) % cols.count], cb: DiwaliPalette.gold, fixedGold: false),
+            RingSpec(motif: .pointed, r0: 0.58, r1: 0.92, count: 12, ca: cols[(shift) % cols.count], cb: DiwaliPalette.gold, fixedGold: false),
+            RingSpec(motif: .beads, r0: 0.93, r1: 1.02, count: 24, ca: DiwaliPalette.gold, cb: cols[(4 + shift) % cols.count], fixedGold: true),
+        ]
+        let inset = rr * 1.1
+        let corners = [CGPoint(x: inset, y: inset), CGPoint(x: w - inset, y: inset),
+                       CGPoint(x: w - inset, y: h - inset), CGPoint(x: inset, y: h - inset)]
+        for (ci, cc) in corners.enumerated() {
+            let dir: Double = ci % 2 == 0 ? 1 : -1
+            let pulse = CGFloat(1 + config.motion * 0.04 * sin(t * 1.4 + Double(ci) * 1.57))
+            let paths = specs.enumerated().map { (k, sp) in
+                buildRing(sp, center: cc, R: rr * rv * pulse, rot: t * 0.12 * dir * (k % 2 == 0 ? 1 : -1.3), reveal: rv, detail: true,
+                          widthScale: CGFloat(1 + config.motion * 0.15 * sin(t * 1.8 - Double(k) * 0.8 + Double(ci))))
+            }
+            let al = Double(rv) * fade
+            if config.glow > 0.01 {
+                ctx.drawLayer { l in
+                    l.addFilter(.blur(radius: rr * 0.08))
+                    l.blendMode = .plusLighter
+                    for (rp, sp) in zip(paths, specs) {
+                        l.fill(rp.a, with: .color(sp.ca.opacity(0.5 * al * config.glow)))
+                        l.fill(rp.b, with: .color(sp.cb.opacity(0.5 * al * config.glow)))
+                    }
+                }
+            }
+            for (rp, sp) in zip(paths, specs) {
+                ctx.fill(rp.a, with: .color(sp.ca.opacity(0.88 * al)))
+                ctx.fill(rp.b, with: .color(sp.cb.opacity(0.92 * al)))
+                ctx.fill(rp.gold, with: .color(DiwaliPalette.gold.opacity(al)))
+                ctx.stroke(rp.line, with: .color(DiwaliPalette.gold.opacity(0.85 * al)), lineWidth: max(0.7, rr * 0.012))
+            }
+            let dr = rr * 0.07 * rv
+            ctx.fill(Path(ellipseIn: CGRect(x: cc.x - dr, y: cc.y - dr, width: dr * 2, height: dr * 2)), with: .color(Color.white.opacity(0.9 * al)))
+        }
+    }
+
     // MARK: Ring layout
 
     /// Concentric ring specs from the config: motif sequence, band widths
     /// (thin motifs get thinner bands), symmetry growth and palette colours,
     /// followed by the fixed gold border rings.
-    private func ringSpecs(pal: Palette) -> [RingSpec] {
+    private func ringSpecs(pal: Palette, shift: Int = 0) -> [RingSpec] {
         let n = config.rings
         let plan = motifPlan
         let motifs = (0..<n).map { plan[$0 % plan.count] }
@@ -399,7 +488,7 @@ struct RangoliBloomView: View {
             let count = min(64, max(6, (growth / 2) * 2))
             let cols = pal.colors
             out.append(RingSpec(motif: m, r0: r, r1: r + band, count: count,
-                                ca: cols[k % cols.count], cb: cols[(k + 2) % cols.count], fixedGold: false))
+                                ca: cols[(k + shift) % cols.count], cb: cols[(k + shift + 2) % cols.count], fixedGold: false))
             r += band
         }
         let gold = DiwaliPalette.gold
@@ -420,7 +509,7 @@ struct RangoliBloomView: View {
                 y: c.y + CGFloat(sin(ang)) * rad + CGFloat(cos(ang)) * side)
     }
 
-    private func buildRing(_ sp: RingSpec, center c: CGPoint, R: CGFloat, rot: Double, reveal: CGFloat, detail: Bool) -> RingPaths {
+    private func buildRing(_ sp: RingSpec, center c: CGPoint, R: CGFloat, rot: Double, reveal: CGFloat, detail: Bool, widthScale: CGFloat = 1) -> RingPaths {
         var rp = RingPaths()
         let r0 = sp.r0 * R
         let fullL = (sp.r1 - sp.r0) * R
@@ -429,7 +518,7 @@ struct RangoliBloomView: View {
         let rm = (r0 + r1) / 2
         let count = sp.count
         let step = 2 * Double.pi / Double(count)
-        let hw = max(1, min(L * 0.42, rm * CGFloat(step) * 0.5))
+        let hw = max(1, min(L * 0.42, rm * CGFloat(step) * 0.5)) * widthScale
 
         switch sp.motif {
         case .pointed:
@@ -559,6 +648,127 @@ struct RangoliBloomView: View {
             for j in 0..<(count * 2) {
                 let pc = polar(c, rot + Double(j) * step / 2, rm)
                 rp.gold.addEllipse(in: CGRect(x: pc.x - dr, y: pc.y - dr, width: dr * 2, height: dr * 2))
+            }
+        case .paisley:
+            // Mango-shaped kairi: round bulb at the base, tip curling sideways;
+            // alternate neighbours are mirrored so pairs face each other.
+            func pt(_ u: CGFloat, _ v: CGFloat) -> CGPoint { CGPoint(x: u * L, y: v * hw) }
+            var shape = Path()
+            shape.move(to: pt(0, 0))
+            shape.addCurve(to: pt(0.32, 1.0), control1: pt(0, 0.6), control2: pt(0.12, 1.0))
+            shape.addCurve(to: pt(1.0, -0.45), control1: pt(0.62, 1.0), control2: pt(0.95, 0.4))
+            shape.addCurve(to: pt(0.62, -0.62), control1: pt(0.98, -0.75), control2: pt(0.78, -0.75))
+            shape.addCurve(to: pt(0.3, -0.95), control1: pt(0.5, -0.55), control2: pt(0.45, -0.95))
+            shape.addCurve(to: pt(0, 0), control1: pt(0.12, -0.95), control2: pt(0, -0.6))
+            shape.closeSubpath()
+            let bulb = pt(0.34, 0)
+            let innerXf = CGAffineTransform(translationX: bulb.x, y: bulb.y).scaledBy(x: 0.6, y: 0.6).translatedBy(x: -bulb.x, y: -bulb.y)
+            let dr = max(1, min(L * 0.1, hw * 0.3))
+            for j in 0..<count {
+                let a = rot + Double(j) * step
+                var xf = CGAffineTransform(translationX: c.x, y: c.y).rotated(by: a).translatedBy(x: r0, y: 0)
+                if j % 2 == 1 { xf = xf.scaledBy(x: 1, y: -1) }
+                rp.a.addPath(shape.applying(xf)); rp.line.addPath(shape.applying(xf))
+                rp.b.addPath(shape.applying(innerXf.concatenating(xf)))
+                let e = bulb.applying(xf)
+                rp.gold.addEllipse(in: CGRect(x: e.x - dr * 1.6, y: e.y - dr * 1.6, width: dr * 3.2, height: dr * 3.2))
+                rp.dark.addEllipse(in: CGRect(x: e.x - dr * 0.7, y: e.y - dr * 0.7, width: dr * 1.4, height: dr * 1.4))
+            }
+        case .chakra:
+            // Spoked wheel: twin rims, gold spokes, petals between spokes and
+            // knobs where spokes meet the outer rim.
+            let rIn = r0 + L * 0.1, rOut = r1 - L * 0.1
+            rp.strokeA.addEllipse(in: CGRect(x: c.x - rIn, y: c.y - rIn, width: rIn * 2, height: rIn * 2))
+            rp.strokeA.addEllipse(in: CGRect(x: c.x - rOut, y: c.y - rOut, width: rOut * 2, height: rOut * 2))
+            let kr = max(1.2, min(L * 0.1, rOut * CGFloat(step) * 0.22))
+            for j in 0..<count {
+                let a = rot + Double(j) * step
+                rp.line.move(to: polar(c, a, rIn)); rp.line.addLine(to: polar(c, a, rOut))
+                let k = polar(c, a, rOut)
+                rp.gold.addEllipse(in: CGRect(x: k.x - kr, y: k.y - kr, width: kr * 2, height: kr * 2))
+                var d = Path()
+                let mid = (rIn + rOut) / 2
+                d.move(to: polar(c, a, mid - L * 0.12)); d.addLine(to: offset(c, a, mid, hw * 0.25))
+                d.addLine(to: polar(c, a, mid + L * 0.12)); d.addLine(to: offset(c, a, mid, -hw * 0.25))
+                d.closeSubpath()
+                rp.a.addPath(d)
+                let b = a + step / 2
+                var p = Path()
+                p.move(to: polar(c, b, rIn + L * 0.06))
+                p.addQuadCurve(to: polar(c, b, rOut - L * 0.06), control: offset(c, b, mid, hw * 1.3))
+                p.addQuadCurve(to: polar(c, b, rIn + L * 0.06), control: offset(c, b, mid, -hw * 1.3))
+                rp.b.addPath(p); rp.line.addPath(p)
+            }
+        case .bud:
+            // Tulip / trident: a tall centre petal flanked by two curling lobes.
+            func pt(_ u: CGFloat, _ v: CGFloat) -> CGPoint { CGPoint(x: u * L, y: v * hw) }
+            var centre = Path()
+            centre.move(to: pt(0, 0))
+            centre.addCurve(to: pt(1, 0), control1: pt(0.35, 0.75), control2: pt(0.8, 0.35))
+            centre.addCurve(to: pt(0, 0), control1: pt(0.8, -0.35), control2: pt(0.35, -0.75))
+            var lobes = Path()
+            for side: CGFloat in [1, -1] {
+                lobes.move(to: pt(0.05, 0.1 * side))
+                lobes.addCurve(to: pt(0.72, 1.15 * side), control1: pt(0.1, 0.9 * side), control2: pt(0.4, 1.3 * side))
+                lobes.addCurve(to: pt(0.28, 0.25 * side), control1: pt(0.6, 0.7 * side), control2: pt(0.45, 0.3 * side))
+                lobes.closeSubpath()
+            }
+            let dr = max(1, min(L * 0.09, hw * 0.35))
+            for j in 0..<count {
+                let a = rot + Double(j) * step
+                let xf = CGAffineTransform(translationX: c.x, y: c.y).rotated(by: a).translatedBy(x: r0, y: 0)
+                rp.a.addPath(centre.applying(xf)); rp.line.addPath(centre.applying(xf))
+                rp.b.addPath(lobes.applying(xf)); rp.line.addPath(lobes.applying(xf))
+                let d = pt(0.12, 0).applying(xf)
+                rp.gold.addEllipse(in: CGRect(x: d.x - dr, y: d.y - dr, width: dr * 2, height: dr * 2))
+            }
+        case .swirl:
+            // Comma-shaped arms sweeping around the ring like a vortex.
+            let n = 14
+            let sweep = step * 1.4
+            for j in 0..<count {
+                let a = rot + Double(j) * step
+                var p = Path()
+                for i in 0...n {
+                    let u = CGFloat(i) / CGFloat(n)
+                    let wv = hw * 0.62 * pow(sin(.pi * min(u * 1.15, 1)), 0.7)
+                    let pt = offset(c, a + Double(u) * sweep, r0 + u * L, wv)
+                    if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+                }
+                for i in stride(from: n, through: 0, by: -1) {
+                    let u = CGFloat(i) / CGFloat(n)
+                    let wv = hw * 0.62 * pow(sin(.pi * min(u * 1.15, 1)), 0.7)
+                    p.addLine(to: offset(c, a + Double(u) * sweep, r0 + u * L, -wv))
+                }
+                p.closeSubpath()
+                if j % 2 == 0 { rp.a.addPath(p) } else { rp.b.addPath(p) }
+                rp.line.addPath(p)
+                let tip = polar(c, a + sweep * 0.55, r0 + L * 0.55)
+                let dr = max(1, hw * 0.22)
+                rp.gold.addEllipse(in: CGRect(x: tip.x - dr, y: tip.y - dr, width: dr * 2, height: dr * 2))
+            }
+        case .triangles:
+            // Interlocking up/down triangles (yantra lattice).
+            let span = step * 0.5
+            for j in 0..<count {
+                let a = rot + Double(j) * step
+                var up = Path()
+                up.move(to: polar(c, a, r1)); up.addLine(to: polar(c, a - span, r0)); up.addLine(to: polar(c, a + span, r0))
+                up.closeSubpath()
+                rp.a.addPath(up); rp.line.addPath(up)
+                let b = a + step / 2
+                var down = Path()
+                down.move(to: polar(c, b, r0)); down.addLine(to: polar(c, b - span, r1)); down.addLine(to: polar(c, b + span, r1))
+                down.closeSubpath()
+                rp.strokeB.addPath(down)
+                var core = Path()
+                core.move(to: polar(c, a, r0 + L * 0.62)); core.addLine(to: polar(c, a - step * 0.14, r0 + L * 0.2))
+                core.addLine(to: polar(c, a + step * 0.14, r0 + L * 0.2))
+                core.closeSubpath()
+                rp.gold.addPath(core)
+                let k = polar(c, b, r1)
+                let dr = max(1, hw * 0.18)
+                rp.b.addEllipse(in: CGRect(x: k.x - dr, y: k.y - dr, width: dr * 2, height: dr * 2))
             }
         case .rays:
             for j in 0..<count {

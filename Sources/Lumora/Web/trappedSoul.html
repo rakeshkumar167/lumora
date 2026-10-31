@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<!--
+  Trapped Soul — Halloween. A dark elastic membrane stretched over the surface;
+  something behind it presses a face and two hands into it, straining to get
+  out. Self-contained GLSL fragment shader (no library): the membrane is a
+  height field (face relief + hand silhouettes + tension "tents" and stretch
+  webbing between them), lit by a low raking moonlight with soft self-shadows
+  and a latex sheen. Black = unlit, so on a real wall only the pushed-out forms
+  catch the light.
+
+  Debug: append `#t=<seconds>` to the URL to freeze time (offscreen checks).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<script>
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', { premultipliedAlpha: false, alpha: false, antialias: false });
+
+const vsSource = `
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+const fsSource = `
+precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+// ---- choreography state (computed once per pixel in main) ----
+vec2  faceC;  float faceS;  float faceRot; float facePush; float faceYaw; float mouthOpen;
+vec2  h1C;    float h1Rot;  float h1Push;  float h1Curl;
+vec2  h2C;    float h2Rot;  float h2Push;  float h2Curl;
+float handS;
+
+float hash(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+float g2(vec2 q, vec2 c, vec2 r) { vec2 d = (q - c) / r; return exp(-dot(d, d)); }
+
+mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+
+float sdSeg(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+// ---- face: relief in face units (head ~1 tall), membrane-smoothed ----
+float faceHeight(vec2 p) {
+  if (facePush < 0.001) return 0.0;
+  vec2 q = rot(faceRot) * (p - faceC) / faceS;
+  // Narrower jaw toward the chin.
+  float jaw = 1.0 - 0.28 * smoothstep(0.0, -0.5, q.y);
+  vec2 e = vec2(q.x / (0.36 * jaw), (q.y - 0.02) / 0.5);
+  float r = length(e);
+  // Sheet draped over the skull: a spherical cap that hands over (value and
+  // slope continuous at r = 0.8) to an exponential tension skirt.
+  float dome = r < 0.8 ? sqrt(1.0 - r * r) : 0.6 * exp(-(r - 0.8) * 2.22);
+  dome *= 0.30 * smoothstep(4.5, 2.5, r);
+  if (r > 1.2) return facePush * faceS * dome;
+
+  // Features shift sideways as the head turns.
+  vec2 f = q + vec2(faceYaw * 0.09 * (1.0 - q.y * q.y), 0.0);
+  float s = sign(f.x); vec2 m = vec2(abs(f.x), f.y);
+  float feat = 0.0;
+  feat += 0.080 * g2(m, vec2(0.13, 0.13), vec2(0.13, 0.05));             // brow ridge
+  feat += 0.030 * g2(f, vec2(0.0, 0.30), vec2(0.25, 0.12));              // forehead
+  feat -= 0.090 * g2(m, vec2(0.13, 0.035), vec2(0.07, 0.055));           // eye sockets (bridged)
+  feat += 0.030 * g2(m, vec2(0.13, 0.03), vec2(0.04, 0.03));             // eyeballs under the sheet
+  feat += 0.090 * g2(f, vec2(0.0, -0.02), vec2(0.035, 0.11));            // nose bridge
+  feat += 0.085 * g2(f, vec2(0.0, -0.13), vec2(0.05, 0.045));            // nose tip
+  feat += 0.030 * g2(m, vec2(0.05, -0.15), vec2(0.032, 0.026));          // nostril wings
+  feat += 0.060 * g2(m, vec2(0.18, -0.08), vec2(0.075, 0.07));           // cheekbones
+  feat -= 0.070 * g2(m, vec2(0.13, -0.22), vec2(0.055, 0.09));           // hollow, gaunt cheeks
+  feat -= 0.030 * g2(m, vec2(0.30, 0.10), vec2(0.04, 0.10));             // temples
+  float mo = mouthOpen;
+  feat += 0.045 * g2(f, vec2(0.0, -0.215), vec2(0.08 + 0.015 * mo, 0.022));          // upper lip
+  feat += 0.040 * g2(f, vec2(0.0, -0.29 - 0.08 * mo), vec2(0.075, 0.024));           // lower lip
+  feat -= 0.16 * mo * g2(f, vec2(0.0, -0.255 - 0.04 * mo), vec2(0.06 + 0.012 * mo, 0.02 + 0.05 * mo)); // gaping mouth
+  feat += 0.060 * g2(f, vec2(0.0, -0.44 - 0.06 * mo), vec2(0.09, 0.05));             // chin
+  feat *= smoothstep(1.1, 0.75, r);
+  // Skull pressed hardest at the brow and nose; the sheet can't follow every hollow.
+  float relief = dome + feat * (0.6 + 0.4 * facePush);
+  return facePush * faceS * relief;
+}
+
+// ---- hand: signed distance of a splayed hand in hand units ----
+float handSD(vec2 q, float curl, out float tips) {
+  float k = 1.0 - 0.38 * curl;                 // fingers foreshorten as they claw
+  vec2 e = q / vec2(0.115, 0.125);
+  float d = (length(e) - 1.0) * 0.115;         // palm
+  tips = 0.0;
+  vec2 base[4]; float ang[4]; float len[4];
+  base[0] = vec2(-0.080, 0.090); ang[0] =  0.30; len[0] = 0.150;
+  base[1] = vec2(-0.028, 0.115); ang[1] =  0.09; len[1] = 0.190;
+  base[2] = vec2( 0.025, 0.115); ang[2] = -0.07; len[2] = 0.200;
+  base[3] = vec2( 0.077, 0.095); ang[3] = -0.26; len[3] = 0.175;
+  for (int i = 0; i < 4; i++) {
+    vec2 dir = vec2(-sin(ang[i]), cos(ang[i]));
+    vec2 tip = base[i] + dir * len[i] * k;
+    d = smin(d, sdSeg(q, base[i] - dir * 0.03, tip) - 0.024, 0.025);
+    tips += exp(-dot(q - tip, q - tip) / 0.0006);
+  }
+  // Thumb, angled out from the heel of the palm.
+  vec2 tb = vec2(0.095, -0.03), tt = tb + vec2(0.11, 0.075) * (1.0 - 0.25 * curl);
+  d = smin(d, sdSeg(q, tb, tt) - 0.028, 0.03);
+  tips += exp(-dot(q - tt, q - tt) / 0.0007);
+  return d;
+}
+
+float handHeight(vec2 p, vec2 c, float ang, float push, float curl) {
+  if (push < 0.001) return 0.0;
+  vec2 q = rot(ang) * (p - c) / handS;
+  float far = smoothstep(1.3, 0.9, length(q));
+  if (far <= 0.0) return 0.0;
+  float tips;
+  float sd = handSD(q, curl, tips);
+  float D = 0.12;
+  float body = pow(smoothstep(0.06, -0.012, sd), 1.6);
+  float skirt = exp(-max(sd, 0.0) * 7.0) * far;
+  float knuckles = (0.012 + 0.02 * curl) * tips;
+  // Rounded fingers and a domed palm under the sheet.
+  float inner = 0.022 * sqrt(clamp(-sd / 0.024, 0.0, 1.0)) + 0.02 * smoothstep(0.0, 0.1, -sd);
+  return push * handS * (D * (0.7 * body + 0.3 * skirt) + inner + knuckles);
+}
+
+// Membrane stretched taut between two pushing points forms a ridge.
+float web(vec2 p, vec2 a, vec2 b, float amt) {
+  if (amt < 0.001) return 0.0;
+  float d = sdSeg(p, a, b);
+  return amt * 0.05 * exp(-d * d / 0.004);
+}
+
+float H(vec2 p) {
+  float h = 0.004 * sin(p.x * 3.1 + iTime * 0.5) * sin(p.y * 2.3 - iTime * 0.4);   // slack sheet breathing
+  float f = faceHeight(p);
+  float a = handHeight(p, h1C, h1Rot, h1Push, h1Curl);
+  float b = handHeight(p, h2C, h2Rot, h2Push, h2Curl);
+  float w = web(p, faceC, h1C, min(facePush, h1Push) * faceS)
+          + web(p, faceC, h2C, min(facePush, h2Push) * faceS);
+  float m = smax(f, a, 0.04);
+  m = smax(m, b, 0.04);
+  m = smax(m, w, 0.05);
+  return h + m;
+}
+
+void setup(float t, float aspect) {
+  float T = 22.0;
+  float cyc = floor(t / T);
+  float lt = t - cyc * T;
+  float r1 = hash(cyc + 1.0), r2 = hash(cyc + 7.3), r3 = hash(cyc + 13.1);
+
+  faceS = 0.56;
+  float xr = max(0.0, aspect * 0.5 - 0.42);
+  faceC = vec2(mix(-xr, xr, r1), mix(-0.06, 0.06, r2)) + 0.025 * vec2(sin(lt * 0.41), cos(lt * 0.33));
+  float side = r3 < 0.5 ? 1.0 : -1.0;          // which hand claws first
+
+  // Face: surfaces, strains in jerks, screams, sinks back.
+  float env = smoothstep(1.0, 4.5, lt) * (1.0 - smoothstep(14.5, 18.0, lt));
+  float jerk = pow(max(0.0, sin(lt * 2.3)), 14.0) * smoothstep(5.0, 7.0, lt);
+  facePush = env * (0.82 + 0.1 * sin(lt * 1.7) * sin(lt * 0.9) + 0.18 * jerk);
+  faceYaw = 0.75 * sin(lt * 0.45 + r2 * 6.0) * env;
+  faceRot = 0.12 * sin(lt * 0.37 + r1 * 4.0);
+  mouthOpen = smoothstep(6.5, 8.5, lt) * (1.0 - smoothstep(12.0, 14.0, lt)) * (0.75 + 0.25 * sin(lt * 6.0));
+
+  handS = faceS * 1.05;
+  // Hand 1: claws in beside the head and drags slowly down.
+  float e1 = smoothstep(3.0, 4.5, lt) * (1.0 - smoothstep(13.0, 15.0, lt));
+  float drag = smoothstep(4.5, 13.0, lt);
+  h1C = faceC + vec2(-side * 0.40, mix(0.22, -0.12, drag)) * faceS / 0.56;
+  h1Rot = side * 0.35 + 0.08 * sin(lt * 1.3);
+  h1Curl = 0.45 + 0.4 * sin(lt * 1.9) * sin(lt * 0.7 + 1.0) + 0.15 * pow(max(0.0, sin(lt * 3.1)), 8.0);
+  h1Push = e1 * (0.85 + 0.15 * h1Curl);
+  // Hand 2: slams flat on the other side, slides up, fingers twitching.
+  float e2 = smoothstep(7.0, 7.4, lt) * (1.0 - smoothstep(15.0, 17.5, lt));
+  h2C = faceC + vec2(side * 0.44, mix(-0.05, 0.08, smoothstep(7.4, 15.0, lt))) * faceS / 0.56;
+  h2Rot = -side * 0.25;
+  h2Curl = 0.1 + 0.25 * pow(max(0.0, sin(lt * 2.7 + 1.0)), 6.0);
+  h2Push = e2 * (1.0 + 0.25 * exp(-(lt - 7.3) * 4.0) * step(7.0, lt));
+}
+
+void main() {
+  vec2 res = iResolution;
+  vec2 p = (gl_FragCoord.xy - 0.5 * res) / res.y;
+  float aspect = res.x / res.y;
+  setup(iTime, aspect);
+
+  float eps = 1.5 / res.y;
+  float h0 = H(p);
+  float hx = H(p + vec2(eps, 0.0));
+  float hy = H(p + vec2(0.0, eps));
+  vec3 n = normalize(vec3(-(hx - h0) / eps, -(hy - h0) / eps, 1.0));
+
+  // Low raking moonlight from the upper left, with a faint cold fill from below.
+  vec3 L = normalize(vec3(-0.60, 0.55, 0.40));
+  vec3 V = vec3(0.0, 0.0, 1.0);
+
+  // Soft self-shadow: march toward the light over the height field.
+  float sh = 1.0;
+  float tt = 0.012;
+  for (int i = 0; i < 18; i++) {
+    vec3 sp = vec3(p, h0) + L * tt;
+    float dh = sp.z - H(sp.xy);
+    sh = min(sh, clamp(8.0 * dh / tt, 0.0, 1.0));
+    tt += 0.012 + tt * 0.2;
+    if (sh < 0.02 || sp.z > 0.25) break;
+  }
+  sh = smoothstep(0.0, 1.0, sh);
+
+  float flicker = 0.93 + 0.07 * sin(iTime * 13.0) * sin(iTime * 7.3 + 1.0);
+  vec3 albedo = vec3(0.22, 0.24, 0.23);
+  float diff = max(dot(n, L), 0.0);
+  vec3 hv = normalize(L + V);
+  float ndh = max(dot(n, hv), 0.0);
+  float spec = pow(ndh, 70.0) * 0.9 + pow(ndh, 12.0) * 0.12;          // latex sheen
+  float fres = pow(1.0 - max(n.z, 0.0), 3.0);
+
+  vec3 moon = vec3(0.70, 0.85, 1.00) * 1.6 * flicker;
+  vec3 col = albedo * moon * diff * sh + moon * spec * sh * 0.6;
+  col += albedo * vec3(0.35, 0.45, 0.55) * max(dot(n, normalize(vec3(0.7, -0.2, 0.5))), 0.0) * 0.35; // faint fill from the right
+  col += vec3(0.12, 0.30, 0.25) * max(dot(n, normalize(vec3(0.3, -0.8, 0.5))), 0.0) * 0.10; // cold under-fill
+  col += vec3(0.25, 0.35, 0.40) * fres * 0.25 * smoothstep(0.0, 0.02, h0);
+
+  // Flat, unstretched sheet stays near black; vignette.
+  col *= smoothstep(0.0, 0.06, h0) * 0.8 + 0.2;
+  col *= 1.0 - 0.35 * dot(p / vec2(aspect * 0.5, 0.5), p / vec2(aspect * 0.5, 0.5)) * 0.5;
+  // Subtle grain so the dark reads like fabric rather than a flat fill.
+  col += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)) + iTime) * 43758.5453) - 0.5) * 0.012;
+
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
+`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSource));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSource));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uRes = gl.getUniformLocation(prog, 'iResolution');
+const uTime = gl.getUniformLocation(prog, 'iTime');
+
+// The height field is evaluated ~17× per pixel; cap the backing scale so a
+// full-screen projector output stays smooth.
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+  const w = Math.floor(canvas.clientWidth * dpr);
+  const h = Math.floor(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+}
+
+const frozen = (location.hash.match(/t=([\d.]+)/) || [])[1];
+const start = performance.now();
+function frame() {
+  resize();
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, frozen !== undefined ? parseFloat(frozen) : (performance.now() - start) / 1000.0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

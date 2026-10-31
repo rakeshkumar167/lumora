@@ -39,6 +39,8 @@ public struct Surface: Identifiable, Equatable, Codable {
     public var paintDrip: PaintDripConfig?
     /// Customization for the Countdown Timer effect (nil = defaults).
     public var countdown: CountdownConfig?
+    /// Brick layout shared by the Brick Wall effects (nil = defaults).
+    public var brickWall: BrickWallConfig?
     /// Whether this surface's effect reacts to live microphone audio (only
     /// meaningful when `EffectKind.supportsAudio` is true for its effect).
     public var audioReactive: Bool
@@ -63,6 +65,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         threeD: ThreeDConfig? = nil,
         paintDrip: PaintDripConfig? = nil,
         countdown: CountdownConfig? = nil,
+        brickWall: BrickWallConfig? = nil,
         audioReactive: Bool = false
     ) {
         self.id = id
@@ -84,11 +87,12 @@ public struct Surface: Identifiable, Equatable, Codable {
         self.threeD = threeD
         self.paintDrip = paintDrip
         self.countdown = countdown
+        self.brickWall = brickWall
         self.audioReactive = audioReactive
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, growingIvy, rangoli, christmasTreeImage, threeD, paintDrip, countdown, audioReactive
+        case id, name, points, shape, rotation, media, isVisible, opacity, zIndex, marquee, christmasLights, gameOfLife, fallingLeaves, growingIvy, rangoli, christmasTreeImage, threeD, paintDrip, countdown, brickWall, audioReactive
     }
 
     // Custom decode so older `.lumora` files (saved before `shape`/`rotation`
@@ -114,6 +118,7 @@ public struct Surface: Identifiable, Equatable, Codable {
         threeD = try c.decodeIfPresent(ThreeDConfig.self, forKey: .threeD)
         paintDrip = try c.decodeIfPresent(PaintDripConfig.self, forKey: .paintDrip)
         countdown = try c.decodeIfPresent(CountdownConfig.self, forKey: .countdown)
+        brickWall = try c.decodeIfPresent(BrickWallConfig.self, forKey: .brickWall)
         audioReactive = try c.decodeIfPresent(Bool.self, forKey: .audioReactive) ?? false
     }
 
