@@ -39,6 +39,17 @@ struct RoomCanvasView: View {
                         }
                     }
 
+                    // Click a surface to select it; right-click for Drag/Delete.
+                    // Topmost surface wins (same order as compositing). Off in
+                    // pen mode so clicks drop light-line joints instead.
+                    if store.tool != .pen {
+                        ForEach(store.surfacesInDrawOrder) { surface in
+                            if surface.isVisible {
+                                SurfaceHitArea(surface: surface, canvasSize: size)
+                            }
+                        }
+                    }
+
                     if let selectedLine = store.selectedLine {
                         LightLineHandlesOverlay(line: selectedLine, canvasSize: size)
                             .id(selectedLine.id)
@@ -53,6 +64,50 @@ struct RoomCanvasView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
+    }
+}
+
+/// An invisible, surface-shaped click target: a click selects the surface and
+/// a right-click offers Drag (select + switch to the hand tool), Bring to
+/// Front, Send to Back, or Delete.
+private struct SurfaceHitArea: View {
+    @EnvironmentObject var store: ProjectStore
+    let surface: Surface
+    let canvasSize: CGSize
+
+    var body: some View {
+        let shape = Path { p in
+            p.addLines(surface.displayQuadPoints(in: canvasSize))
+            p.closeSubpath()
+        }
+        shape
+            .fill(Color.clear)
+            .contentShape(shape)
+            .onTapGesture { store.selectSurface(surface.id) }
+            .contextMenu {
+                Button {
+                    store.selectSurface(surface.id)
+                    store.tool = .hand
+                } label: {
+                    Label("Drag", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
+                }
+                Button {
+                    store.bringToFront(surface.id)
+                } label: {
+                    Label("Bring to Front", systemImage: "square.3.layers.3d.top.filled")
+                }
+                Button {
+                    store.sendToBack(surface.id)
+                } label: {
+                    Label("Send to Back", systemImage: "square.3.layers.3d.bottom.filled")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    store.delete(surface.id)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
     }
 }
 

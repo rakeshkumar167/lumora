@@ -114,36 +114,52 @@ final class ProjectStore: ObservableObject {
         scenes[index].duration = max(1, seconds)
     }
 
-    /// A ready-to-demo project: a generated room with two animated surfaces
-    /// already mapped onto the back wall and the (perspective) left wall.
+    /// A ready-to-demo project: a generated room with three animated surfaces
+    /// arranged as the visible faces of an isometric cube (top, left, right).
     static func sample() -> ProjectStore {
         let size = CGSize(width: 960, height: 600)
         let image = SampleContent.roomImage(size: size)
 
-        let surface1 = Surface(
-            name: "Surface 1",
-            points: [
-                CGPoint(x: 0.400, y: 0.250),
-                CGPoint(x: 0.680, y: 0.250),
-                CGPoint(x: 0.680, y: 0.650),
-                CGPoint(x: 0.400, y: 0.650),
-            ],
+        // Cube geometry in canvas pixels: `c` is the near vertex where the
+        // three faces meet; edges run up, down-left and down-right from it.
+        let edge: CGFloat = 170
+        let dx = edge * cos(.pi / 6), dy = edge / 2
+        let c = CGPoint(x: size.width / 2, y: size.height * 0.53)
+        let top = CGPoint(x: c.x, y: c.y - edge)
+        let left = CGPoint(x: c.x - dx, y: c.y - dy)
+        let right = CGPoint(x: c.x + dx, y: c.y - dy)
+        let bottom = CGPoint(x: c.x, y: c.y + edge)
+        let leftLow = CGPoint(x: left.x, y: left.y + edge)
+        let rightLow = CGPoint(x: right.x, y: right.y + edge)
+
+        // Each face is pulled slightly toward its centre so a thin seam of
+        // darkness separates the three surfaces, then normalized.
+        func face(_ pts: [CGPoint]) -> [CGPoint] {
+            let mx = pts.map(\.x).reduce(0, +) / 4, my = pts.map(\.y).reduce(0, +) / 4
+            let k: CGFloat = 0.965
+            return pts.map {
+                CGPoint(x: (mx + ($0.x - mx) * k) / size.width,
+                        y: (my + ($0.y - my) * k) / size.height)
+            }
+        }
+
+        let topFace = Surface(
+            name: "Cube Top",
+            points: face([left, top, right, c]),
             media: .effect(.kaleidoscope, .teal, .blue)
         )
-
-        // Kept as a perspective (non-rectangular) quad to show corner warping.
-        let surface2 = Surface(
-            name: "Surface 2",
-            points: [
-                CGPoint(x: 0.080, y: 0.230),
-                CGPoint(x: 0.320, y: 0.300),
-                CGPoint(x: 0.320, y: 0.620),
-                CGPoint(x: 0.080, y: 0.780),
-            ],
+        let leftFace = Surface(
+            name: "Cube Left",
+            points: face([left, c, bottom, leftLow]),
             media: .effect(.tessellationMorph, .magenta, .violet)
         )
+        let rightFace = Surface(
+            name: "Cube Right",
+            points: face([c, right, rightLow, bottom]),
+            media: .effect(.plasma, .orange, .amber)
+        )
 
-        return ProjectStore(surfaces: [surface1, surface2], roomImage: image, canvasSize: size)
+        return ProjectStore(surfaces: [topFace, leftFace, rightFace], roomImage: image, canvasSize: size)
     }
 
     var selected: Surface? { surfaces.first { $0.id == selectedID } }
@@ -218,6 +234,18 @@ final class ProjectStore: ObservableObject {
             let b = Surface.bounds(of: s.points)
             s.points = Surface.polygonCorners(b, sides: min(max(sides, 3), 12))
         }
+    }
+
+    /// Draw `id` above every other surface in the active scene.
+    func bringToFront(_ id: Surface.ID) {
+        let top = surfaces.filter { $0.id != id }.map(\.zIndex).max() ?? 9
+        update(id) { $0.zIndex = top + 1 }
+    }
+
+    /// Draw `id` beneath every other surface in the active scene.
+    func sendToBack(_ id: Surface.ID) {
+        let bottom = surfaces.filter { $0.id != id }.map(\.zIndex).min() ?? 11
+        update(id) { $0.zIndex = bottom - 1 }
     }
 
     func delete(_ id: Surface.ID) {

@@ -2,7 +2,7 @@ import Foundation
 
 /// Ring motif family for the Rangoli Bloom effect.
 public enum RangoliStyle: String, Codable, CaseIterable, Equatable {
-    case grand, lotus, peacock, star, kolam, paisley, chakra, spiral, yantra
+    case grand, lotus, peacock, star, kolam, paisley, chakra, spiral, yantra, royalPeacock, diyaLamp
 
     public var displayName: String {
         switch self {
@@ -15,6 +15,17 @@ public enum RangoliStyle: String, Codable, CaseIterable, Equatable {
         case .chakra: return "Sun Chakra"
         case .spiral: return "Swirling Vortex"
         case .yantra: return "Sacred Yantra"
+        case .royalPeacock: return "Royal Peacock"
+        case .diyaLamp: return "Glowing Diya"
+        }
+    }
+
+    /// Figure styles draw a single large motif inside a decorative border
+    /// instead of concentric mandala rings.
+    public var isFigure: Bool {
+        switch self {
+        case .royalPeacock, .diyaLamp: return true
+        default: return false
         }
     }
 }

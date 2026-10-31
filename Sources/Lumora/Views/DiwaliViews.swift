@@ -205,6 +205,7 @@ struct RangoliBloomView: View {
         case .chakra:  return [.chakra, .rays, .bud, .diamond, .chakra, .dots, .star, .beads]
         case .spiral:  return [.swirl, .dots, .swirl, .beads, .pointed, .swirl, .scallop, .weave]
         case .yantra:  return [.triangles, .lotus, .beads, .triangles, .diamond, .dots, .triangles, .scallop]
+        case .royalPeacock, .diyaLamp: return [.dots]
         }
     }
 
@@ -268,10 +269,14 @@ struct RangoliBloomView: View {
 
         let motion = config.motion
         let cycle = config.buildCycle ? Int(floor(t / period)) : 0
-        let specs = ringSpecs(pal: pal, shift: cycle)
+        let figure = config.style.isFigure
+        let specs = figure ? borderSpecs(pal: pal, shift: cycle) : ringSpecs(pal: pal, shift: cycle)
         let slots = specs.count + 1                    // + centrepiece, revealed first
         func reveal(_ slot: Int) -> CGFloat {
-            let raw = min(max(build * Double(slots) - Double(slot), 0), 1)
+            // Figures draw first (0…0.62 of the build), then the border rings.
+            let raw = figure
+                ? (slot == 0 ? 0 : min(max((build - 0.6) / 0.4 * Double(specs.count) - Double(slot - 1), 0), 1))
+                : min(max(build * Double(slots) - Double(slot), 0), 1)
             return CGFloat(raw * raw * (3 - 2 * raw))
         }
 
@@ -279,7 +284,9 @@ struct RangoliBloomView: View {
         var rings: [(RingPaths, RingSpec, CGFloat)] = []
         let cen = RingSpec(motif: centreMotif.0, r0: 0.012, r1: 0.1, count: centreMotif.1, ca: pal.colors[4 % pal.colors.count], cb: pal.colors[0], fixedGold: false)
         let centerReveal = reveal(0)
-        rings.append((buildRing(cen, center: center, R: Rb, rot: t * 0.05, reveal: centerReveal, detail: true), cen, centerReveal))
+        if !figure {
+            rings.append((buildRing(cen, center: center, R: Rb, rot: t * 0.05, reveal: centerReveal, detail: true), cen, centerReveal))
+        }
         for (k, sp) in specs.enumerated() {
             let rv = reveal(k + 1)
             if rv < 0.001 { continue }
@@ -331,13 +338,36 @@ struct RangoliBloomView: View {
             }
         }
 
+        if figure {
+            let fr = min(build / 0.62, 1)
+            let cols = (0..<pal.colors.count).map { pal.colors[($0 + cycle) % pal.colors.count] }
+            let paint: (GraphicsContext) -> Void = { g in
+                switch config.style {
+                case .royalPeacock: RangoliFigures.peacock(ctx: g, center: center, R: Rb, colors: cols, reveal: fr, t: t, motion: motion)
+                default: RangoliFigures.diya(ctx: g, center: center, R: Rb, colors: cols, reveal: fr, t: t, motion: motion)
+                }
+            }
+            if config.glow > 0.01 {
+                ctx.drawLayer { l in
+                    l.addFilter(.blur(radius: Rb * 0.035))
+                    l.blendMode = .plusLighter
+                    l.opacity = config.glow * 0.55 * fade
+                    paint(l)
+                }
+            }
+            ctx.drawLayer { l in
+                l.opacity = fade
+                paint(l)
+            }
+        }
+
         if config.cornerRosettes {
             drawRosettes(ctx: ctx, size: size, R: Rb, pal: pal, build: build, fade: fade, t: t, shift: cycle)
         }
 
         // Pulsing sun at the very centre.
         let cp = 0.8 + 0.2 * sin(t * 2.2)
-        let cr = Rb * 0.03 * CGFloat(cp) * centerReveal
+        let cr = figure ? 0 : Rb * 0.03 * CGFloat(cp) * centerReveal
         ctx.drawLayer { l in
             l.addFilter(.blur(radius: Rb * 0.02))
             l.blendMode = .plusLighter
@@ -496,6 +526,19 @@ struct RangoliBloomView: View {
         out.append(RingSpec(motif: .scallop, r0: 0.875, r1: 0.965, count: outerCount, ca: pal.colors[0], cb: gold, fixedGold: true))
         out.append(RingSpec(motif: .beads, r0: 0.97, r1: 1.04, count: outerCount * 2, ca: gold, cb: pal.colors[1 % pal.colors.count], fixedGold: true))
         return out
+    }
+
+    /// The decorative frame around a figure style: a dotted band, a petal
+    /// band, then the usual gold scallop + bead edge.
+    private func borderSpecs(pal: Palette, shift: Int) -> [RingSpec] {
+        let cols = pal.colors, gold = DiwaliPalette.gold
+        let n = min(64, max(config.symmetry * 2, 24))
+        return [
+            RingSpec(motif: .dots, r0: 0.76, r1: 0.80, count: n * 2, ca: cols[(1 + shift) % cols.count], cb: gold, fixedGold: false),
+            RingSpec(motif: .pointed, r0: 0.80, r1: 0.875, count: n, ca: cols[(shift) % cols.count], cb: cols[(2 + shift) % cols.count], fixedGold: false),
+            RingSpec(motif: .scallop, r0: 0.875, r1: 0.965, count: n, ca: cols[0], cb: gold, fixedGold: true),
+            RingSpec(motif: .beads, r0: 0.97, r1: 1.04, count: n * 2, ca: gold, cb: cols[1 % cols.count], fixedGold: true),
+        ]
     }
 
     // MARK: Ring geometry
