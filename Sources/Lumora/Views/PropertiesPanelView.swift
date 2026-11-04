@@ -114,7 +114,7 @@ private struct MediaEditor: View {
     @ObservedObject private var weather = WeatherStore.shared
 
     /// The 3D effects that take a speed (and, for the cloud, colour) config.
-    private static let threeDKinds: Set<EffectKind> = [.torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix]
+    private static let threeDKinds: Set<EffectKind> = [.torus3D, .pointCloud3D, .strangeAttractor, .dnaHelix]
 
     /// String-light effects that take a bulb/sag config (the tree does not).
     private static let stringLightKinds: Set<EffectKind> =

@@ -1187,13 +1187,13 @@ struct EffectView: View {
         switch kind {
         case .grid, .colorWash, .gradientSweep, .breathingGlow, .rainbowSweep, .radialPulse, .aurora, .plasma, .strobe:
             gradientEffects
-        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet, .concentricPolygons,
-             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
+        case .checkerboard, .barberStripes, .colorBars, .halftoneDots, .truchet,
+             .infiniteKaleidoscope, .mandalaExpansion, .tessellationMorph,
              .chladni, .hilbertCurve, .mazeSolve:
             patternEffects
-        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles, .butterflies, .aquarium:
+        case .sparkle, .starfieldWarp, .fireflies, .snow, .fire, .rain, .lightning, .bubbles, .fallingLeaves, .fireworks, .particleSwarm, .audioParticles, .butterflies:
             natureEffects
-        case .waves, .equalizer, .tunnel, .kaleidoscope, .prismFalls, .liquidSlosh, .pendulumPaint, .bouncingBall:
+        case .equalizer, .kaleidoscope, .prismFalls, .pendulumPaint, .bouncingBall:
             motionEffects
         case .tvStatic, .matrixRain, .pixelDissolve, .dvdBounce, .marqueeText:
             retroEffects
@@ -1203,7 +1203,7 @@ struct EffectView: View {
             geometryEffects
         case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics, .godRays, .inkFlow:
             ambientEffects
-        case .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix:
+        case .torus3D, .pointCloud3D, .strangeAttractor, .dnaHelix:
             threeDEffects
         case .outlineGlow, .growingIvy:
             edgeEffects
@@ -1211,18 +1211,18 @@ struct EffectView: View {
             clockEffects
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             christmasEffects
-        case .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard:
+        case .diyaLamps, .rangoliBloom, .skyLanterns, .diwaliSkyline, .marigoldToran, .deepawaliPlacard:
             diwaliEffects
-        case .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons:
+        case .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .dancingSkeletons:
             halloweenEffects
-        case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
+        case .mistyPeaks, .glowingFlora, .bioRiver:
             bioluminescentEffects
-        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
-             .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
-             .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden,
+        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
+             .webLiveClouds, .webBlackHole,
+             .webFlowers, .webLiquid, .webTubes, .webGarden,
              .milkyWay, .trappedSoul:
             webEffects
-        case .brickCascade, .brickMural:
+        case .brickMural:
             brickWallEffects
         }
     }
@@ -1232,7 +1232,6 @@ struct EffectView: View {
     @ViewBuilder private var brickWallEffects: some View {
         let cfg = brick ?? BrickWallConfig()
         switch kind {
-        case .brickCascade: BrickCascadeView(time: time, color: color, accent: accent, config: cfg)
         case .brickMural: BrickMuralView(time: time, config: cfg)
         default: EmptyView()
         }
@@ -1257,7 +1256,6 @@ struct EffectView: View {
         case .witchCauldron: WitchCauldronView(time: time)
         case .witchRide: WitchRideView(time: time)
         case .graveyardParty: GraveyardPartyView(time: time)
-        case .spiderWebs: SpiderWebsView(time: time)
         case .dancingSkeletons: DancingSkeletonsView(time: time)
         default: EmptyView()
         }
@@ -1268,7 +1266,6 @@ struct EffectView: View {
         switch kind {
         case .diyaLamps: DiyaLampsView(time: time)
         case .skyLanterns: SkyLanternsView(time: time)
-        case .sparklers: SparklersView(time: time)
         case .diwaliSkyline: DiwaliSkylineView(time: time)
         case .marigoldToran: MarigoldToranView(time: time)
         case .deepawaliPlacard: DeepawaliPlacardView(time: time)
@@ -1283,8 +1280,6 @@ struct EffectView: View {
         switch kind {
         case .mistyPeaks:
             MistyPeaksView(time: time)
-        case .driftingSpores:
-            DriftingSporesView(time: time)
         case .glowingFlora:
             GlowingFloraView(time: time)
         case .bioRiver:
@@ -1767,28 +1762,10 @@ struct EffectView: View {
                 }
             }
 
-        case .concentricPolygons:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let rings = 6
-                for i in 0..<rings {
-                    let radius = 30.0 + Double(i) * 34.0
-                    let speed = 0.3 + Double(i) * 0.15
-                    let rotation = time * speed * (i % 2 == 0 ? 1 : -1)
-                    let path = polygonPath(center: center, radius: CGFloat(radius), sides: 6, rotation: rotation)
-                    let c = i % 2 == 0 ? color.color : accent.color
-                    ctx.stroke(path, with: .color(c), lineWidth: 3)
-                }
-            }
         case .infiniteKaleidoscope:
             Canvas { ctx, size in drawInfiniteKaleidoscope(ctx: ctx, size: size) }
         case .mandalaExpansion:
             Canvas { ctx, size in drawMandala(ctx: ctx, size: size) }
-        case .sacredGeometry:
-            Canvas { ctx, size in drawSacredGeometry(ctx: ctx, size: size) }
-        case .fractalZoom:
-            Canvas { ctx, size in drawFractalZoom(ctx: ctx, size: size) }
         case .tessellationMorph:
             Canvas { ctx, size in drawTessellation(ctx: ctx, size: size) }
         case .hilbertCurve:
@@ -1807,9 +1784,6 @@ struct EffectView: View {
             ParticleSwarmView(mode: .audio, color: color, accent: accent, time: time)
         case .butterflies:
             ButterfliesView(color: color, accent: accent, time: time)
-        case .aquarium:
-            AquariumView(time: time)
-
         case .sparkle:
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
@@ -1871,21 +1845,6 @@ struct EffectView: View {
                 }
             }
 
-        case .lava:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.03)))
-                ctx.addFilter(.alphaThreshold(min: 0.5, color: color.color))
-                ctx.addFilter(.blur(radius: 22))
-                ctx.drawLayer { layer in
-                    for i in 0..<6 {
-                        let x = (0.5 + 0.42 * sin(time * 0.5 + Double(i) * 1.1)) * Double(size.width)
-                        let y = (0.5 + 0.42 * cos(time * 0.4 + Double(i) * 1.7)) * Double(size.height)
-                        let r = 55.0 + 22.0 * sin(time + Double(i))
-                        let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
-                        layer.fill(Path(ellipseIn: rect), with: .color(.white))
-                    }
-                }
-            }
         case .fire:
             Canvas { ctx, size in drawFire(ctx: ctx, size: size) }
         case .rain:
@@ -1960,44 +1919,11 @@ struct EffectView: View {
 
     @ViewBuilder private var motionEffects: some View {
         switch kind {
-        case .waves:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color.opacity(0.20)))
-                let bands = 5
-                for b in 0..<bands {
-                    var path = Path()
-                    let baseY = size.height * CGFloat(b) / CGFloat(bands - 1)
-                    path.move(to: CGPoint(x: 0, y: baseY))
-                    var x: CGFloat = 0
-                    while x <= size.width {
-                        let y = baseY + CGFloat(sin(Double(x) / 40 + time * 2 + Double(b)) * 16)
-                        path.addLine(to: CGPoint(x: x, y: y))
-                        x += 8
-                    }
-                    ctx.stroke(path, with: .color(color.color), lineWidth: 5)
-                }
-            }
-
         case .equalizer:
             AudioReactiveEffect(active: audioReactive) { levels in
                 EqualizerView(color: color, accent: accent, time: time, levels: levels)
             }
 
-        case .tunnel:
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black))
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let maxR = Double(hypot(size.width, size.height)) / 2
-                let rings = 14
-                let speed = 0.5
-                for i in 0..<rings {
-                    let f = fract(Double(i) / Double(rings) + time * speed)
-                    let r = f * maxR
-                    let rect = CGRect(x: center.x - CGFloat(r), y: center.y - CGFloat(r), width: CGFloat(r * 2), height: CGFloat(r * 2))
-                    let c = i % 2 == 0 ? color.color : accent.color
-                    ctx.stroke(Path(ellipseIn: rect), with: .color(c.opacity(0.2 + 0.8 * f)), lineWidth: CGFloat(4 + f * 10))
-                }
-            }
         case .kaleidoscope:
             Canvas { ctx, size in drawKaleidoscope(ctx: ctx, size: size) }
 
@@ -2048,61 +1974,6 @@ struct EffectView: View {
                     while x <= size.width { edge.addLine(to: CGPoint(x: x, y: edgeY(x, topBase, phaseTop))); x += dx }
                     ctx.stroke(edge, with: .color(.white.opacity(0.15)), lineWidth: 2)
                 }
-            }
-
-        case .liquidSlosh:
-            // Liquid ~60%-filling a box with a gently sloshing surface. Motion is the
-            // physical tank-slosh mode `cos(π·u)` (liquid piles at one wall while it dips
-            // at the other, level at the centre) plus a smaller 2nd mode and a tiny
-            // travelling ripple. Body is lit near the surface and darkens with depth.
-            Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(accent.color))
-                let w = size.width, h = size.height
-                let baseLevel = h * 0.42
-                let dx = max(w / 80, 2)
-                func surfaceY(_ x: CGFloat) -> CGFloat {
-                    let u = Double(x / max(w, 1))
-                    let s1 = 0.055 * Double(h) * cos(.pi * u) * sin(time * 1.1)          // fundamental slosh
-                    let s2 = 0.022 * Double(h) * cos(2 * .pi * u) * sin(time * 1.7 + 0.6) // 2nd mode
-                    let ripple = 0.010 * Double(h) * sin(5 * .pi * u - time * 2.2)        // fine ripple
-                    return baseLevel + CGFloat(s1 + s2 + ripple)
-                }
-                // Sample the surface once and reuse for every layer.
-                var pts: [CGPoint] = []
-                var x: CGFloat = 0
-                while x <= w { pts.append(CGPoint(x: x, y: surfaceY(x))); x += dx }
-                if (pts.last?.x ?? 0) < w { pts.append(CGPoint(x: w, y: surfaceY(w))) }
-
-                // Liquid body.
-                var body = Path()
-                body.move(to: pts[0])
-                for p in pts { body.addLine(to: p) }
-                body.addLine(to: CGPoint(x: w, y: h))
-                body.addLine(to: CGPoint(x: 0, y: h))
-                body.closeSubpath()
-                ctx.fill(body, with: .color(color.color))
-                // Depth shading: lit just under the surface, darker toward the bottom.
-                ctx.fill(body, with: .linearGradient(
-                    Gradient(stops: [
-                        .init(color: .white.opacity(0.22), location: 0.0),
-                        .init(color: .clear,               location: 0.22),
-                        .init(color: .black.opacity(0.05), location: 0.55),
-                        .init(color: .black.opacity(0.42), location: 1.0),
-                    ]),
-                    startPoint: CGPoint(x: 0, y: baseLevel - 0.06 * h),
-                    endPoint: CGPoint(x: 0, y: h)))
-                // Sunlit near-surface layer (thin lighter ribbon hugging the surface).
-                var ribbon = Path()
-                ribbon.move(to: pts[0])
-                for p in pts { ribbon.addLine(to: p) }
-                for p in pts.reversed() { ribbon.addLine(to: CGPoint(x: p.x, y: p.y + 10)) }
-                ribbon.closeSubpath()
-                ctx.fill(ribbon, with: .color(.white.opacity(0.14)))
-                // Bright specular waterline.
-                var surf = Path()
-                surf.move(to: pts[0])
-                for p in pts { surf.addLine(to: p) }
-                ctx.stroke(surf, with: .color(.white.opacity(0.55)), lineWidth: 1.5)
             }
 
         case .pendulumPaint:
@@ -2497,8 +2368,6 @@ struct EffectView: View {
         switch kind {
         case .torus3D:
             Canvas { ctx, size in drawTorus3D(ctx: ctx, size: size) }
-        case .sphere3D:
-            Canvas { ctx, size in drawSphere3D(ctx: ctx, size: size) }
         case .pointCloud3D:
             Canvas { ctx, size in drawPointCloud3D(ctx: ctx, size: size) }
         case .strangeAttractor:
@@ -3466,19 +3335,6 @@ struct EffectView: View {
         }
     }
 
-    private func drawSphere3D(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-        let sp = three?.speed ?? 1.0
-        let nu = 52, nv = 30
-        render3DSurface(ctx, size, nu: nu, nv: nv, ax: time * 0.3 * sp, ay: time * 0.6 * sp, scaleF: 0.16) { iu, iv in
-            let u = Double(iu) / Double(nu) * 2 * .pi
-            let v = Double(iv) / Double(nv) * .pi
-            let rad = 1.5 + 0.18 * sin(v * 6 + time * 2 * sp)   // travelling ripple
-            return (Vec3(x: rad * sin(v) * cos(u), y: rad * cos(v), z: rad * sin(v) * sin(u)),
-                    fract(v / .pi + time * 0.04))
-        }
-    }
-
     private func drawPointCloud3D(ctx: GraphicsContext, size: CGSize) {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
         let n = 1400
@@ -3718,70 +3574,6 @@ struct EffectView: View {
         }
     }
 
-    /// Radius of a regular polygon (apothem 1) at angle `theta` for a
-    /// continuous side count — morphs smoothly triangle→hexagon→circle.
-    private func polyRadius(_ theta: Double, sides: Double) -> Double {
-        let a = 2 * Double.pi / max(sides, 3)
-        var m = theta.truncatingRemainder(dividingBy: a)
-        if m < 0 { m += a }
-        return cos(a / 2) / cos(m - a / 2)
-    }
-
-    /// Concentric outlines whose side count morphs between triangle, hexagon,
-    /// and circle, rotating in alternating directions.
-    private func drawSacredGeometry(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let maxR = Double(min(size.width, size.height)) / 2
-        let sides = 3 + 4.5 * (1 + sin(time * 0.4))    // 3 … 12
-        let layers = 5
-        ctx.drawLayer { layer in
-            layer.blendMode = .plusLighter
-            for li in 0..<layers {
-                let rr: Double = maxR * (0.2 + 0.16 * Double(li))
-                let rot: Double = time * 0.15 * (li % 2 == 0 ? 1 : -1) + Double(li) * 0.3
-                let hue = fract(Double(li) / Double(layers) + time * 0.06)
-                let col = Color(hue: hue, saturation: 0.9, brightness: 1)
-                var path = Path()
-                let steps = 140
-                for s in 0...steps {
-                    let th: Double = Double(s) / Double(steps) * 2 * .pi
-                    let r: Double = rr * polyRadius(th - rot, sides: sides)
-                    let pt = CGPoint(x: center.x + CGFloat(cos(th) * r), y: center.y + CGFloat(sin(th) * r))
-                    if s == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
-                }
-                layer.stroke(path, with: .color(col.opacity(0.85)), lineWidth: 2.5)
-            }
-        }
-    }
-
-    /// Nested rotating polygons scaled log-periodically so it appears to zoom
-    /// into itself forever (self-similar).
-    private func drawFractalZoom(ctx: GraphicsContext, size: CGSize) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let maxR = Double(min(size.width, size.height)) / 2
-        let factor = 1.7
-        let zoom = pow(factor, fract(time * 0.15))     // cycles in [1, factor)
-        ctx.drawLayer { layer in
-            layer.blendMode = .plusLighter
-            for k in 0..<16 {
-                let scale = zoom * pow(factor, Double(k) - 7)
-                let r = maxR * 1.5 * scale
-                if r < 2 || r > maxR * 3 { continue }
-                let rot = Double(k) * 0.5 + time * 0.12
-                let hue = fract(Double(k) * 0.08 + time * 0.05)
-                let col = Color(hue: hue, saturation: 0.9, brightness: 1)
-                let fadeIn = min(1.0, r / (maxR * 0.2))
-                let fadeOut = min(1.0, (maxR * 3 - r) / (maxR * 1.2))
-                let alpha = max(0.0, min(fadeIn, fadeOut))
-                let path = polygonPath(center: center, radius: CGFloat(r), sides: 6, rotation: rot)
-                layer.stroke(path, with: .color(col.opacity(0.9 * alpha)),
-                             style: StrokeStyle(lineWidth: max(1, CGFloat(2 * scale)), lineJoin: .round))
-            }
-        }
-    }
-
     /// A grid of squares that rotate and pulse in a travelling wave, coloured by
     /// position + time — a tessellation that smoothly morphs shape and colour.
     private func drawTessellation(ctx: GraphicsContext, size: CGSize) {
@@ -3959,16 +3751,6 @@ struct EffectView: View {
             }
         }
     }
-    private func polygonPath(center: CGPoint, radius: CGFloat, sides: Int, rotation: Double) -> Path {
-        var path = Path()
-        for i in 0...sides {
-            let angle = rotation + Double(i) / Double(sides) * 2 * .pi
-            let pt = point(center, angle, Double(radius))
-            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
-        }
-        return path
-    }
-
     private func unitPoint(_ radians: Double) -> UnitPoint {
         UnitPoint(x: 0.5 + 0.5 * cos(radians), y: 0.5 + 0.5 * sin(radians))
     }

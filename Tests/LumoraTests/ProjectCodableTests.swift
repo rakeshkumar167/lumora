@@ -62,7 +62,7 @@ final class ProjectCodableTests: XCTestCase {
     }
 
     func testSupportsAudioMatchesSpec() {
-        let yes: [EffectKind] = [.equalizer, .strobe, .liquidSlosh, .aurora, .plasma, .chladni]
+        let yes: [EffectKind] = [.equalizer, .strobe, .aurora, .plasma, .chladni]
         for k in yes { XCTAssertTrue(k.supportsAudio, "\(k) should support audio") }
         XCTAssertFalse(EffectKind.grid.supportsAudio)
         XCTAssertFalse(EffectKind.audioParticles.supportsAudio) // inherently audio; no toggle

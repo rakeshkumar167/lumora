@@ -9,7 +9,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case rainbowSweep
     case radialPulse
     case checkerboard
-    case waves
     case plasma
     case strobe
     case sparkle
@@ -20,10 +19,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case aurora
     case fireflies
     case snow
-    case lava
     case halftoneDots
     case truchet
-    case concentricPolygons
     case fire
     case rain
     case lightning
@@ -33,16 +30,13 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case particleSwarm
     case audioParticles
     case butterflies
-    case aquarium
     case tvStatic
     case matrixRain
     case pixelDissolve
-    case tunnel
     case dvdBounce
     case kaleidoscope
     case marqueeText
     case prismFalls
-    case liquidSlosh
     case pendulumPaint
     case bouncingBall
     case voronoi
@@ -61,11 +55,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case caustics
     case infiniteKaleidoscope
     case mandalaExpansion
-    case sacredGeometry
-    case fractalZoom
     case tessellationMorph
     case torus3D
-    case sphere3D
     case pointCloud3D
     case strangeAttractor
     case dnaHelix
@@ -84,7 +75,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case diyaLamps
     case rangoliBloom
     case skyLanterns
-    case sparklers
     case diwaliSkyline
     case marigoldToran
     case deepawaliPlacard
@@ -95,7 +85,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case witchCauldron
     case witchRide
     case graveyardParty
-    case spiderWebs
     case dancingSkeletons
     case trappedSoul
     /// Chladni plate resonance patterns. Renderer/category/displayName land in
@@ -107,7 +96,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case mazeSolve
     // Bioluminescent night scenes (fixed Pandora palette; no color pickers).
     case mistyPeaks
-    case driftingSpores
     case glowingFlora
     case bioRiver
     // WebGL / JS effects rendered in a WKWebView (curated bundled pages).
@@ -115,24 +103,19 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     case webParticles3D
     case webFlow
     case webZoomingSpiral
-    case webSpaceGlobe
     case webSnowfall
     case webStarfall
     case webCoralBlooms
     case webStorm
-    case webMorphingBall
     case webLiveClouds
-    case webDiscoBalls
     case webBlackHole
     case webFlowers
-    case webPacman
     case webLiquid
     case webTubes
     case webGarden
     // Astronomy (bundled WebGL pages, rendered via WebEffectContent)
     case milkyWay
     // Brick Wall (drawn on a running-bond grid; see BrickWallConfig)
-    case brickCascade
     case brickMural
 
     public var id: String { rawValue }
@@ -144,14 +127,13 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .voronoi, .vectorGrid, .livingTexture, .gameOfLife, .flowingPlasma, .fire, .bubbles, .fireworks,
              .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs,
              .weatherWidget,
-             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
-             .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
-             .aquarium,
-             .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver,
-             .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard, .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons, .trappedSoul,
-             .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
-             .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
-             .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden,
+             .infiniteKaleidoscope, .mandalaExpansion, .tessellationMorph,
+             .torus3D, .pointCloud3D, .strangeAttractor, .dnaHelix, .pendulumPaint, .hilbertCurve, .stainedGlass,
+             .mistyPeaks, .glowingFlora, .bioRiver,
+             .diyaLamps, .rangoliBloom, .skyLanterns, .diwaliSkyline, .marigoldToran, .deepawaliPlacard, .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .dancingSkeletons, .trappedSoul,
+             .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
+             .webLiveClouds, .webBlackHole,
+             .webFlowers, .webLiquid, .webTubes, .webGarden,
              .milkyWay, .brickMural:
             return false
         default:
@@ -162,15 +144,14 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     /// Whether the effect uses a second (accent) color.
     public var usesAccent: Bool {
         switch self {
-        case .grid, .gradientSweep, .breathingGlow, .radialPulse, .checkerboard, .waves,
+        case .grid, .gradientSweep, .breathingGlow, .radialPulse, .checkerboard,
              .plasma, .strobe, .barberStripes, .equalizer,
-             .halftoneDots, .truchet, .concentricPolygons, .lightning,
-             .fallingLeaves, .matrixRain, .pixelDissolve, .tunnel, .dvdBounce,
-             .kaleidoscope, .marqueeText, .liquidSlosh, .metaballs, .hexGrid, .particleMesh,
+             .halftoneDots, .truchet, .lightning,
+             .fallingLeaves, .matrixRain, .pixelDissolve, .dvdBounce,
+             .kaleidoscope, .marqueeText, .metaballs, .hexGrid, .particleMesh,
              .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics,
              .particleSwarm, .audioParticles, .butterflies,
-             .outlineGlow, .growingIvy, .analogClock, .digitalClock, .countdown, .inkFlow, .mazeSolve,
-             .brickCascade:
+             .outlineGlow, .growingIvy, .analogClock, .digitalClock, .countdown, .inkFlow, .mazeSolve:
             return true
         default:
             return false
@@ -182,7 +163,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
     /// audio and is excluded — it has no toggle.)
     public var supportsAudio: Bool {
         switch self {
-        case .equalizer, .strobe, .liquidSlosh, .aurora, .plasma, .chladni:
+        case .equalizer, .strobe, .aurora, .plasma, .chladni:
             return true
         default:
             return false
@@ -198,7 +179,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .rainbowSweep: return "Rainbow Sweep"
         case .radialPulse: return "Radial Pulse"
         case .checkerboard: return "Checkerboard"
-        case .waves: return "Waves"
         case .plasma: return "Plasma"
         case .strobe: return "Strobe"
         case .sparkle: return "Sparkle"
@@ -209,10 +189,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .aurora: return "Aurora"
         case .fireflies: return "Fireflies"
         case .snow: return "Snow"
-        case .lava: return "Lava Lamp"
         case .halftoneDots: return "Halftone Dots"
         case .truchet: return "Truchet Tiles"
-        case .concentricPolygons: return "Concentric Polygons"
         case .fire: return "Fire"
         case .rain: return "Rain"
         case .lightning: return "Lightning"
@@ -222,16 +200,13 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .particleSwarm: return "Particle Swarm"
         case .audioParticles: return "Audio Reactive Particles"
         case .butterflies: return "Butterflies"
-        case .aquarium: return "Aquarium"
         case .tvStatic: return "TV Static"
         case .matrixRain: return "Matrix Rain"
         case .pixelDissolve: return "Pixel Dissolve"
-        case .tunnel: return "Tunnel"
         case .dvdBounce: return "DVD Bounce"
         case .kaleidoscope: return "Kaleidoscope"
         case .marqueeText: return "Marquee Text"
         case .prismFalls: return "Prism Falls"
-        case .liquidSlosh: return "Liquid Slosh"
         case .pendulumPaint: return "Pendulum Paint"
         case .bouncingBall: return "Bouncing Ball"
         case .voronoi: return "Voronoi Cells"
@@ -250,11 +225,8 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .caustics: return "Water Caustics"
         case .infiniteKaleidoscope: return "Infinite Kaleidoscope"
         case .mandalaExpansion: return "Mandala Expansion"
-        case .sacredGeometry: return "Sacred Geometry"
-        case .fractalZoom: return "Recursive Fractal Zoom"
         case .tessellationMorph: return "Tessellation Morph"
         case .torus3D: return "3D Torus"
-        case .sphere3D: return "3D Sphere"
         case .pointCloud3D: return "3D Point Cloud"
         case .strangeAttractor: return "Strange Attractor"
         case .dnaHelix: return "DNA Helix"
@@ -272,7 +244,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .diyaLamps: return "Diya Lamps"
         case .rangoliBloom: return "Rangoli Bloom"
         case .skyLanterns: return "Sky Lanterns"
-        case .sparklers: return "Sparklers & Anar"
         case .diwaliSkyline: return "Diwali Skyline"
         case .marigoldToran: return "Marigold Toran"
         case .deepawaliPlacard: return "Happy Deepawali Placard"
@@ -282,7 +253,6 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .witchCauldron: return "Witch's Cauldron"
         case .witchRide: return "Witch Ride"
         case .graveyardParty: return "Graveyard Party"
-        case .spiderWebs: return "Spider Webs"
         case .dancingSkeletons: return "Dancing Skeletons"
         case .trappedSoul: return "Trapped Soul"
         case .chladni: return "Chladni"
@@ -291,29 +261,23 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
         case .inkFlow: return "Ink in Water"
         case .mazeSolve: return "Maze Solve"
         case .mistyPeaks: return "Misty Peaks"
-        case .driftingSpores: return "Drifting Spores"
         case .glowingFlora: return "Glowing Flora"
         case .bioRiver: return "Bioluminescent River"
         case .webPlasma: return "WebGL Plasma"
         case .webParticles3D: return "3D Particles (WebGL)"
         case .webFlow: return "Flow Field (p5)"
-        case .webSpaceGlobe: return "Space Globe"
         case .webZoomingSpiral: return "Zooming Spiral"
         case .webSnowfall: return "Snowfall"
         case .webStarfall: return "Starfall"
         case .webCoralBlooms: return "Coral Blooms"
         case .webStorm: return "Storm"
-        case .webMorphingBall: return "Morphing Ball"
         case .webLiveClouds: return "Live Clouds"
-        case .webDiscoBalls: return "Disco Balls"
         case .webBlackHole: return "Black Hole"
         case .webFlowers: return "Draw Flowers"
-        case .webPacman: return "Pacman"
         case .webLiquid: return "Liquid"
         case .webTubes: return "Tubes"
         case .webGarden: return "Blooming Garden"
         case .milkyWay: return "Milky Way"
-        case .brickCascade: return "Brick Cascade"
         case .brickMural: return "Pixel-Art Mural"
         }
     }
@@ -325,16 +289,16 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
              .radialPulse, .aurora, .plasma, .strobe:
             return .gradients
         case .checkerboard, .barberStripes, .colorBars, .halftoneDots,
-             .truchet, .concentricPolygons,
-             .infiniteKaleidoscope, .mandalaExpansion, .sacredGeometry, .fractalZoom, .tessellationMorph,
+             .truchet,
+             .infiniteKaleidoscope, .mandalaExpansion, .tessellationMorph,
              .chladni, .hilbertCurve, .mazeSolve:
             return .patterns
-        case .sparkle, .starfieldWarp, .fireflies, .snow, .lava, .fire, .rain,
+        case .sparkle, .starfieldWarp, .fireflies, .snow, .fire, .rain,
              .lightning, .bubbles, .fallingLeaves, .fireworks,
-             .particleSwarm, .audioParticles, .butterflies, .aquarium:
+             .particleSwarm, .audioParticles, .butterflies:
             return .nature
-        case .waves, .equalizer, .tunnel, .kaleidoscope,
-             .prismFalls, .liquidSlosh, .pendulumPaint, .bouncingBall:
+        case .equalizer, .kaleidoscope,
+             .prismFalls, .pendulumPaint, .bouncingBall:
             return .motion
         case .tvStatic, .matrixRain, .pixelDissolve,
              .dvdBounce, .marqueeText:
@@ -345,7 +309,7 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .curvesGrids
         case .livingTexture, .gameOfLife, .flowingPlasma, .reactionDiffusion, .driftingNebula, .perlinFlow, .circuitTrace, .caustics, .godRays, .inkFlow:
             return .ambient
-        case .torus3D, .sphere3D, .pointCloud3D, .strangeAttractor, .dnaHelix:
+        case .torus3D, .pointCloud3D, .strangeAttractor, .dnaHelix:
             return .threeD
         case .outlineGlow, .growingIvy:
             return .edge
@@ -353,19 +317,19 @@ public enum EffectKind: String, Codable, CaseIterable, Identifiable {
             return .clocks
         case .christmasTree, .chasingLights, .multiColorLights, .twinklingLights, .warmBulbs:
             return .christmas
-        case .diyaLamps, .rangoliBloom, .skyLanterns, .sparklers, .diwaliSkyline, .marigoldToran, .deepawaliPlacard:
+        case .diyaLamps, .rangoliBloom, .skyLanterns, .diwaliSkyline, .marigoldToran, .deepawaliPlacard:
             return .diwali
-        case .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .spiderWebs, .dancingSkeletons, .trappedSoul:
+        case .jackOLanterns, .hauntedNight, .hauntedHouse, .witchCauldron, .witchRide, .graveyardParty, .dancingSkeletons, .trappedSoul:
             return .halloween
-        case .mistyPeaks, .driftingSpores, .glowingFlora, .bioRiver:
+        case .mistyPeaks, .glowingFlora, .bioRiver:
             return .bioluminescent
-        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSpaceGlobe, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
-             .webMorphingBall, .webLiveClouds, .webDiscoBalls, .webBlackHole,
-             .webFlowers, .webPacman, .webLiquid, .webTubes, .webGarden:
+        case .webPlasma, .webParticles3D, .webFlow, .webZoomingSpiral, .webSnowfall, .webStarfall, .webCoralBlooms, .webStorm,
+             .webLiveClouds, .webBlackHole,
+             .webFlowers, .webLiquid, .webTubes, .webGarden:
             return .webGL
         case .milkyWay:
             return .astronomy
-        case .brickCascade, .brickMural:
+        case .brickMural:
             return .brickWall
         }
     }
